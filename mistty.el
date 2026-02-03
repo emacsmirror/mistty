@@ -1041,6 +1041,7 @@ buffer and `mistty-proc' to that buffer's process."
       (let ((accum (process-filter proc)))
         (mistty--accum-reset accum)
         (mistty--add-prompt-detection accum)
+        (mistty--add-da1 accum)
         (mistty--add-osc-detection accum)
         (mistty--add-skip-unsupported accum)
         (mistty--add-toggle-cursor accum work-buffer)
@@ -3693,6 +3694,7 @@ Width and height are limited to `mistty-min-terminal-width' and
 
     (let ((accum (process-filter proc)))
       (mistty--accum-reset accum)
+      (mistty--add-da1 accum)
       (mistty--add-osc-detection accum)
       (mistty--add-skip-unsupported accum)
       (mistty--add-toggle-cursor accum mistty-term-buffer)

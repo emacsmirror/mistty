@@ -684,6 +684,19 @@ ecoed by term.el."
    accum
    '(seq ESC (char "=>")) #'ignore))
 
+(defun mistty--add-da1 (accum)
+  "Handle DA1 Primary Device Detection code.
+
+This implementation detects and answers primary device detection
+requests from the application attached to the terminal. This is
+here mostly to keep fish 4.1 and later happy."
+  (mistty--accum-add-processor
+   accum
+   '(seq CSI (or "0c" "c"))
+   (lambda (_ _)
+     (process-send-string (get-buffer-process (current-buffer))
+                          "\e[?64;1;18;21;22c"))))
+
 (defun mistty--add-osc-detection (accum)
   "Handle OSC code in ACCUM.
 
