@@ -3674,12 +3674,6 @@ Width and height are limited to `mistty-min-terminal-width' and
   "Enter fullscreen mode for PROC."
   (mistty--with-live-buffer (process-get proc 'mistty-work-buffer)
     (mistty--detach)
-    (let ((msg (mistty--fullscreen-message)))
-      (save-excursion
-        (goto-char (point-max))
-        (insert msg)
-        (message msg)))
-
     (let ((bufname (buffer-name)))
       (rename-buffer (generate-new-buffer-name (concat bufname " scrollback")))
       (with-current-buffer mistty-term-buffer
@@ -3691,6 +3685,10 @@ Width and height are limited to `mistty-min-terminal-width' and
     (setq mistty-fullscreen t)
     (mistty--with-live-buffer mistty-term-buffer
       (setq mistty-fullscreen t))
+
+    (let ((msg (mistty--fullscreen-message)))
+      (overlay-put mistty--sync-ov 'after-string (concat "\n" msg "\n"))
+      (run-with-idle-timer 0.1 nil #'mistty--report-fullscreen (current-buffer) msg))
 
     (let ((accum (process-filter proc)))
       (mistty--accum-reset accum)
@@ -3710,6 +3708,16 @@ Width and height are limited to `mistty-min-terminal-width' and
     (mistty--set-process-window-size-from-windows)
     (run-hooks 'mistty-entered-fullscreen-hook)
     (mistty-log "Entered fullscreen mode")))
+
+(defun mistty--report-fullscreen (buf msg)
+  "Display a message about having entered fullscreen.
+
+The message is displayed in an idle timer and only if the terminal is
+still in fullscreen mode at that time. This avoid confusing users with
+messages when an app enters fullscreen mode and leaves it immediately."
+  (mistty--with-live-buffer buf
+    (when mistty-fullscreen
+      (message msg))))
 
 (defun mistty--fullscreen-message ()
   "Build a user message when entering fullscreen mode.
@@ -3745,6 +3753,7 @@ This function looks into the maps to find the key bindings for
       (setq mistty-fullscreen nil)
       (mistty--with-live-buffer mistty-term-buffer
         (setq mistty-fullscreen nil))
+      (overlay-put mistty--sync-ov 'after-string nil)
 
       (mistty--attach (process-buffer proc))
       (mistty--refresh)
