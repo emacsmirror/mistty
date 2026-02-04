@@ -379,7 +379,8 @@ mistty--accum whose slots can be accessed."
                (while (not (string-empty-p data))
                  (update-processor-regexps)
                  (if (and overall-processor-regexp
-                          (string-match overall-processor-regexp data))
+                          (let ((case-fold-search nil))
+                            (string-match overall-processor-regexp data)))
                      (let* ((before (substring data 0 (match-beginning 0)))
                             (matching (substring
                                        data (match-beginning 0) (match-end 0)))
@@ -405,7 +406,8 @@ mistty--accum whose slots can be accessed."
                             matching))))
 
                    (if (and overall-hold-back-regexp
-                            (string-match overall-hold-back-regexp data))
+                            (let ((case-fold-search nil))
+                              (string-match overall-hold-back-regexp data)))
                        (setq incomplete (match-string 0 data)
                              data (substring data 0 (match-beginning 0)))
                      (pcase-setq `(,data . ,incomplete)

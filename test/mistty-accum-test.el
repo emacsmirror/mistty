@@ -46,6 +46,18 @@
       (should (equal "foobar"
                      (mistty-test-proc-buffer-string proc))))))
 
+(ert-deftest mistty-accum-processor-case-sensitive ()
+  (mistty-with-test-process (proc)
+    (let ((accum (mistty--make-accumulator (process-filter proc))))
+      (set-process-filter proc accum)
+
+      (mistty--accum-add-processor
+       accum '(seq "FoO") #'ignore)
+
+      (funcall accum proc "fooFoObar")
+      (should (equal "foobar"
+                     (mistty-test-proc-buffer-string proc))))))
+
 (ert-deftest mistty-accum-processor-forward-data ()
   (mistty-with-test-process (proc)
     (let ((accum (mistty--make-accumulator (process-filter proc))))
