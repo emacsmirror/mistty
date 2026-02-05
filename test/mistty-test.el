@@ -5825,31 +5825,27 @@ function prompt {
      (should-not (mistty-live-buffer-p (get-buffer "*mistty*")))
      (should (mistty-live-buffer-p (get-buffer "*mistty*<3>"))))))
 
-(turtles-ert-deftest mistty-test-zsh-no-nl-before-prompt (:instance 'mistty)
+(ert-deftest mistty-test-zsh-no-nl-before-prompt ()
   (mistty-with-test-buffer (:shell zsh :selected t)
     (mistty-send-text "echo ok")
     (should (equal "ok" (mistty-send-and-capture-command-output)))
     (mistty-send-text "echo -n ok")
     (should (equal "ok%" (mistty-send-and-capture-command-output)))
 
-    (turtles-with-grab-buffer ()
-      (should (equal
-               "$ echo ok\nok\n$ echo -n ok\nok%\n$"
-               (buffer-string))))))
+    (should (equal
+             "$ echo ok\nok\n$ echo -n ok\nok%\n$"
+             (mistty-test-content)))))
 
-(turtles-ert-deftest mistty-test-fish-no-nl-before-prompt (:instance 'mistty)
+(ert-deftest mistty-test-fish-no-nl-before-prompt-1 ()
   (mistty-with-test-buffer (:shell fish :selected t)
     (mistty-send-text "echo ok")
     (should (equal "ok" (mistty-send-and-capture-command-output)))
     (mistty-send-text "echo -n ok")
     (should (equal "ok⏎" (mistty-send-and-capture-command-output)))
 
-    (turtles-with-grab-buffer ()
-      (should (equal
-               "$ echo ok\nok\n$ echo -n ok\nok⏎\n$"
-               (buffer-string))))))
+    (should (equal "$ echo ok\nok\n$ echo -n ok\nok⏎\n$" (mistty-test-content)))))
 
-(turtles-ert-deftest mistty-test-bash-no-nl-before-prompt (:instance 'mistty)
+(ert-deftest mistty-test-bash-no-nl-before-prompt ()
   (mistty-with-test-buffer (:shell bash :selected t)
     (mistty-send-text "echo ok")
     (should (equal "ok" (mistty-send-and-capture-command-output)))
@@ -5857,10 +5853,9 @@ function prompt {
     (mistty-send-command)
     (mistty-wait-for-output :str "ok$")
 
-    (turtles-with-grab-buffer ()
-      (should (equal
-               "$ echo ok\nok\n$ echo -n ok\nok$"
-               (buffer-string))))
+    (should (equal
+             "$ echo ok\nok\n$ echo -n ok\nok$"
+             (mistty-test-content)))
 
     ;; The prompt doesn't start at a NL. It should have been detected
     ;; nevertheless, so replay works.
