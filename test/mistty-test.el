@@ -121,7 +121,7 @@
 
 (ert-deftest mistty-test-fish-reconcile-large-multiline-delete ()
   (mistty-with-test-buffer (:shell fish)
-    (mistty-send-text "for i in (seq 10)\necho this is a very long string to be deleted $i\nend")
+    (mistty-send-text "for idx in (seq 10)\necho this is a very long string to be deleted $idx\nend")
 
     (mistty-run-command
      (goto-char (point-min))
@@ -131,8 +131,8 @@
      (insert "foo"))
     (mistty-wait-for-output :str "foo")
 
-    (should (equal (concat "$ for i in (seq 10)\n"
-                           "      echo foo $i\n"
+    (should (equal (concat "$ for idx in (seq 10)\n"
+                           "      echo foo $idx\n"
                            "  end")
                    (mistty-test-content)))))
 
@@ -2686,13 +2686,13 @@
 (ert-deftest mistty-test-fish-multiline-indented ()
   (mistty-with-test-buffer (:shell fish)
     (should mistty-bracketed-paste)
-    (mistty-send-text "while i in (seq 10)\necho line $i\nend")
+    (mistty-send-text "for idx in (seq 10)\necho line $idx\nend")
 
     (mistty-run-command
      (mistty-test-goto "line")
      (insert ":::"))
     (mistty-wait-for-output :str ":::" :start (point-min))
-    (should (equal "$ while i in (seq 10)\n      echo :::line $i\n  end"
+    (should (equal "$ for idx in (seq 10)\n      echo :::line $idx\n  end"
                    (mistty-test-content)))))
 
 (ert-deftest mistty-test-bash-multiline ()
