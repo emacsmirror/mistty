@@ -1571,7 +1571,7 @@
   (let ((work-buffer mistty-work-buffer)
         (proc mistty-proc))
 
-    (mistty-send-text
+    (mistty--send-string proc
      (format "printf '\\e%sPress ENTER: ' && read && printf '\\e%sfullscreen off'"
              on-seq off-seq))
     (mistty-send-command)
