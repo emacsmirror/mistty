@@ -3682,15 +3682,12 @@ Width and height are limited to `mistty-min-terminal-width' and
         (turn-on-font-lock)))
     (mistty--swap-buffer-in-windows mistty-work-buffer mistty-term-buffer)
 
-    (setq mistty-fullscreen t)
-    (mistty--with-live-buffer mistty-term-buffer
-      (setq mistty-fullscreen t))
-
     (let ((msg (mistty--fullscreen-message)))
       (overlay-put mistty--sync-ov 'after-string (concat "\n" msg "\n"))
       (run-with-idle-timer 0.1 nil #'mistty--report-fullscreen (current-buffer) msg))
 
-    (let ((accum (process-filter proc)))
+    (let ((accum (process-filter proc))
+          (end (copy-marker (point-max))))
       (mistty--accum-reset accum)
       (mistty--add-da1 accum)
       (mistty--add-osc-detection accum)
@@ -3702,10 +3699,24 @@ Width and height are limited to `mistty-min-terminal-width' and
        (lambda (ctx _str)
          (mistty--accum-ctx-push-down ctx "\e[47l")
          (mistty--accum-ctx-flush ctx)
+         ;; When handling CSI 47 h, term.el sometimes add a newline
+         ;; that is not removed after handling CSI 47 l. This
+         ;; manifests as extra newlines, especially visible when
+         ;; launching recent versions of fish. This code works around
+         ;; the problem by deleting anything after the position that
+         ;; was end-of-buffer just before CSI 47 h was handled.
+         (when (and end (< end (point-max))
+                    (eq ?\n (char-after end)))
+           (let ((inhibit-read-only t))
+             (delete-region end (point-max))))
+         (move-marker end nil)
          (mistty--leave-fullscreen proc))))
     (set-process-sentinel proc #'mistty--fs-process-sentinel)
     (mistty--update-mode-lines proc)
     (mistty--set-process-window-size-from-windows)
+    (setq mistty-fullscreen t)
+    (mistty--with-live-buffer mistty-term-buffer
+      (setq mistty-fullscreen t))
     (run-hooks 'mistty-entered-fullscreen-hook)
     (mistty-log "Entered fullscreen mode")))
 
@@ -3750,9 +3761,6 @@ This function looks into the maps to find the key bindings for
   (mistty--with-live-buffer (process-get proc 'mistty-work-buffer)
     (save-restriction
       (widen)
-      (setq mistty-fullscreen nil)
-      (mistty--with-live-buffer mistty-term-buffer
-        (setq mistty-fullscreen nil))
       (overlay-put mistty--sync-ov 'after-string nil)
 
       (mistty--attach (process-buffer proc))
@@ -3771,6 +3779,9 @@ This function looks into the maps to find the key bindings for
         (jit-lock-mode nil))
 
       (mistty--update-mode-lines proc)
+      (setq mistty-fullscreen nil)
+      (mistty--with-live-buffer mistty-term-buffer
+        (setq mistty-fullscreen nil))
       (run-hooks 'mistty-left-fullscreen-hook)
       (mistty-log "Left fullscreen mode"))))
 
