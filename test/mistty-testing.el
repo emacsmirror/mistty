@@ -115,7 +115,7 @@ terminal size, detached from window size, as (cons WIDTH HEIGHT).
 Defaults to 80x24"
   (declare (indent 1))
   (let ((exec-var (intern (concat "mistty-test-" (symbol-name shell) "-exe"))))
-    `(progn
+    `(prog1 nil
        ,(if (memq shell '(bash))
             `(should ,exec-var)
           `(skip-unless ,exec-var))

@@ -436,10 +436,10 @@
       (should (equal '((start t t t) (end t t t t t)) (nreverse calls))))))
 
 (ert-deftest mistty-test-kill-term-buffer-when-work-buffer-is-killed ()
-  (let* ((buffer-and-proc (mistty-with-test-buffer ()
-                            (cons mistty-term-buffer mistty-proc)))
-         (term-buffer (car buffer-and-proc))
-         (term-proc (cdr buffer-and-proc)))
+  (let (term-buffer term-proc)
+    (mistty-with-test-buffer ()
+      (setq term-buffer mistty-term-buffer)
+      (setq term-proc mistty-proc))
     (mistty-wait-for-term-buffer-and-proc-to-die term-buffer term-proc)))
 
 (ert-deftest mistty-test-kill-term-buffer-but-keep-work-buffer ()
