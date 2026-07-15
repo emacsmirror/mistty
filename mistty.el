@@ -1540,7 +1540,7 @@ This should be called just before reseting the terminal."
       (mistty--refresh)
       (mistty--prepare-end-for-reset)
       (setq reset-scrolline (mistty--scrolline (point-max)))
-      (setq home-pos (point)))
+      (setq home-pos (point-max)))
     (mistty--with-live-buffer mistty-term-buffer
       (mistty--term-reset-scrolline reset-scrolline)
       (setq mistty-bracketed-paste nil))
@@ -1565,10 +1565,17 @@ This should be called just before reseting the terminal."
 This function might erase whitespaces at the end of the buffer."
   (mistty--require-work-buffer)
   (save-excursion
-    (goto-char (mistty--last-non-ws))
     (let ((inhibit-modification-hooks t))
-      (insert "\n")
-      (delete-region (point) (point-max)))))
+      ;; If there's a current prompt, clear it. This allows the shell
+      ;; to send reset to clear a prompt, as recent versions of fish
+      ;; do.
+      (when-let* ((prompt mistty--active-prompt)
+                  (pos (mistty--scrolline-pos (mistty--prompt-start prompt))))
+        (delete-region pos (point-max)))
+      (goto-char (mistty--last-non-ws))
+      (delete-region (point) (point-max))
+      (unless (memq (char-before (point-max)) '(nil ?\n))
+        (insert "\n")))))
 
 (defun mistty--clear-scrollback ()
   "Clear the work buffer above `mistty-sync-marker'."
