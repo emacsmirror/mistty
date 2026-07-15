@@ -4818,8 +4818,8 @@
       (should (equal 4 mistty-min-terminal-height))
 
       (mistty-set-terminal-size 8 4)
-      (mistty--send-string mistty-proc "echo $(tput cols)x$(tput lines)")
-      (should (equal "8x4" (mistty-send-and-capture-command-output))))))
+      (mistty--send-string mistty-proc "echo $(tput cols)x$(tput lines)\n")
+      (mistty-wait-for-output :str "8x4"))))
 
 (turtles-ert-deftest mistty-test-min-terminal-size ()
   (mistty-with-test-buffer (:selected t :term-size 'window)
@@ -4838,7 +4838,12 @@
         (should (equal "$ for i in $(seq 0 10); do echo hello, world; done"
                        (buffer-string))))
 
-      (mistty-send-and-wait-for-prompt)
+      ;; make sure the prompt has moved past the end (the normal
+      ;; mistty-send-and-wait-for-prompt is unreliable in this
+      ;; situation)
+      (mistty--send-string mistty-proc "\nprintf '\\157\\153\\n'\n")
+      (mistty-wait-for-output :str "ok")
+
 
       ;; Only the correct newlines are left when leaving the terminal area
       (should (equal (concat
@@ -4853,9 +4858,8 @@
                       "hello, world\n"
                       "hello, world\n"
                       "hello, world\n"
-                      "hello, world\n"
-                      "$")
-                     (mistty-test-content))))))
+                      "hello, world")
+                     (mistty-test-content :end (mistty-test-pos "$ printf")))))))
 
 (ert-deftest mistty-test-detect-foreign-overlays-labelled ()
   (let ((mistty-detect-foreign-overlays t))
