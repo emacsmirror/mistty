@@ -17,5 +17,14 @@
 (require 'ert)
 (require 'mistty-mod)
 
-(ert-deftest mistty-mod-smoke ()
-  (should (equal "Hello world" (mistty-mod-hello "world"))))
+(ert-deftest mistty-mod-terminal ()
+  (let ((term (mistty-mod-make-term 80 10)))
+    ;; fill the screen
+    (mistty-mod-process-bytes term (vconcat "\r0"))
+    (dotimes (i 9)
+      (mistty-mod-process-bytes term (vconcat (format "\r\n%d" (1+ i)))))
+    (should (equal "0\n1\n2\n3\n4\n5\n6\n7\n8\n9" (mistty-mod-display-string term)))
+
+    ;; scroll
+    (mistty-mod-process-bytes term (vconcat "\r\n10"))
+    (should (equal "1\n2\n3\n4\n5\n6\n7\n8\n9\n10" (mistty-mod-display-string term)))))
