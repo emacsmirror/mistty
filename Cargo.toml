@@ -1,0 +1,12 @@
+[package]
+name = "mistty-mod"
+version = "0.1.0"
+edition = "2018"
+authors = ["Stephane Zermatten <szermatt@gmx.net>"]
+publish = false
+
+[dependencies]
+emacs = "0.21"
+
+[lib]
+crate-type = ["cdylib"]

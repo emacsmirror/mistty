@@ -8,3 +8,5 @@ mistty.info
 .cask
 *-autoloads.el*
 *.elc
+/mistty-mod.so
+/target
