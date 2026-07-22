@@ -16,9 +16,10 @@
 
 (require 'ert)
 (require 'mistty-mod)
+(require 'mistty-testing)
 
-(ert-deftest mistty-mod-terminal ()
-  (let ((term (mistty-mod-make-term 80 10)))
+(ert-deftest mistty-mod-process-bytes ()
+  (let ((term (mistty-mod-make-vterm 80 10)))
     ;; fill the screen
     (mistty-mod-process-bytes term (vconcat "\r0"))
     (dotimes (i 9)
@@ -28,3 +29,78 @@
     ;; scroll
     (mistty-mod-process-bytes term (vconcat "\r\n10"))
     (should (equal "1\n2\n3\n4\n5\n6\n7\n8\n9\n10" (mistty-mod-display-string term)))))
+
+(ert-deftest mistty-mod-render ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    ;; fill the screen
+    (mistty-mod-process-bytes term (vconcat "\r0"))
+    (dotimes (i 9)
+      (mistty-mod-process-bytes term (vconcat (format "\r\n%d" (1+ i)))))
+    (ert-with-test-buffer ()
+      (insert "terminal:\n")
+      (let ((term-start (copy-marker (point)))
+            (term-end nil))
+        (insert "---")
+        (setq term-end (copy-marker (point)))
+        (insert "\nend.")
+
+        (mistty-mod-render term term-start term-end)
+        (should
+         (equal
+          (concat
+           "terminal:\n"
+           "0                   \n"
+           "1                   \n"
+           "2                   \n"
+           "3                   \n"
+           "4                   \n"
+           "5                   \n"
+           "6                   \n"
+           "7                   \n"
+           "8                   \n"
+           "9                   \n"
+           "\n"
+           "end.")
+          (buffer-string)))))))
+
+(ert-deftest mistty-mod-set-cursor ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    ;; fill the screen
+    (mistty-mod-process-bytes term (vconcat "\r0"))
+    (dotimes (i 9)
+      (mistty-mod-process-bytes term (vconcat (format "\r\n%d" (1+ i)))))
+    (goto-char (point-min))
+    (ert-with-test-buffer ()
+        (mistty-mod-render term (point-min) (point-max))
+        (should
+         (equal
+          (concat
+           "0\n"
+           "1\n"
+           "2\n"
+           "3\n"
+           "4\n"
+           "5\n"
+           "6\n"
+           "7\n"
+           "8\n"
+           "9<>")
+          (mistty-test-content :show (point))))
+
+        ;; move cursor 3 lines up, 2 columns right
+        (mistty-mod-process-bytes term (vconcat "\e[3A\e[2C"))
+        (mistty-mod-render term (point-min) (point-max))
+        (should
+         (equal
+          (concat
+           "0\n"
+           "1\n"
+           "2\n"
+           "3\n"
+           "4\n"
+           "5\n"
+           "6  <>\n"
+           "7\n"
+           "8\n"
+           "9")
+          (mistty-test-content :show (point)))))))

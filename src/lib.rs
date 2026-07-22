@@ -1,3 +1,4 @@
+mod render;
 mod vterm;
 
 use emacs::{Env, IntoLisp, Result, Value, Vector, defun};
@@ -6,21 +7,23 @@ use crate::vterm::VTerm;
 
 emacs::plugin_is_GPL_compatible!();
 
-#[emacs::module(name = "mistty-mod", defun_prefix = "mistty-mod", separator = "-")]
+#[emacs::module(
+    name = "mistty-mod",
+    defun_prefix = "mistty-mod",
+    separator = "-",
+    mod_in_name = false
+)]
 fn init(env: &Env) -> Result<Value<'_>> {
-    env.message("loaded")
+    env.provide("mistty-mod")
 }
 
-#[defun]
-fn hello(env: &Env, name: String) -> Result<Value<'_>> {
-    format!("Hello {name}").into_lisp(env)
-}
-
+/// Create a virtual terminal wit the given dimensions WIDTH x HEIGHT.
 #[defun(user_ptr)]
-fn make_term(_env: &Env, width: usize, height: usize) -> Result<VTerm> {
+fn make_vterm(_env: &Env, width: usize, height: usize) -> Result<VTerm> {
     Ok(VTerm::new(width, height))
 }
 
+/// Process BYTES coming from a pty and update the virtual terminal.
 #[defun]
 fn process_bytes(_env: &Env, term: &mut VTerm, bytes: Vector) -> Result<()> {
     let mut v: Vec<u8> = Vec::with_capacity(bytes.len());
@@ -33,6 +36,7 @@ fn process_bytes(_env: &Env, term: &mut VTerm, bytes: Vector) -> Result<()> {
     Ok(())
 }
 
+/// Return the content of the virtual terminal as a string.
 #[defun]
 fn display_string<'a>(env: &'a Env, term: &VTerm) -> Result<Value<'a>> {
     let str = term.display_string();

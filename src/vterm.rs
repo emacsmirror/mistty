@@ -5,7 +5,7 @@ use alacritty_terminal::{
     event::EventListener,
     grid::Dimensions,
     index::{Column, Line, Point},
-    term::Config,
+    term::{Config, RenderableContent},
     vte::ansi::Processor,
 };
 
@@ -24,6 +24,18 @@ impl VTerm {
         let processor = Processor::new();
 
         Self { inner, processor }
+    }
+
+    pub fn inner(&self) -> &Term<EventAccumulator> {
+        &self.inner
+    }
+
+    pub fn inner_mut(&mut self) -> &mut Term<EventAccumulator> {
+        &mut self.inner
+    }
+
+    pub fn renderable_content(&self) -> RenderableContent<'_> {
+        self.inner.renderable_content()
     }
 
     /// Parse terminal data and update internal state
@@ -70,7 +82,7 @@ impl Dimensions for VTermDimensions {
 }
 
 /// Accumulate terminal events and return when needed.
-struct EventAccumulator {}
+pub struct EventAccumulator {}
 
 impl EventAccumulator {
     fn new() -> Self {
