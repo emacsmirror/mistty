@@ -139,6 +139,24 @@
        (equal (mistty-colors-at-point)
               (mistty-face-colors 'ansi-color-blue 'default)))))))
 
+(turtles-ert-deftest mistty-mod-set-24bit-color (:instance 'mistty)
+ (ert-with-test-buffer ()
+   (let ((term (mistty-mod-make-vterm 20 10)))
+    (mistty-mod-process-bytes
+     term (vconcat "\e[38;2;237;237;216m\e[48;2;97;35;196mcolorful\e[0m!"))
+    (mistty-mod-render term (point-min) (point-max))
+    (turtles-with-grab-buffer ()
+      (goto-char (point-min))
+      (should
+       (equal
+        "colorful!"
+        (buffer-substring-no-properties (pos-bol) (pos-eol))))
+
+      (mistty-test-goto "colorful")
+      (should
+       (equal (mistty-colors-at-point)
+              '("#ededd8" "#6123c4")))))))
+
 
 (ert-deftest mistty-mod-set-face ()
  (ert-with-test-buffer ()
@@ -163,6 +181,3 @@
 
     (mistty-test-goto "inverse")
     (should (equal 'ansi-color-inverse (get-text-property (point) 'face))))))
-
-;; TODO:
-;;  - 24bit colors
