@@ -22,6 +22,7 @@
 (eval-when-compile
   (require 'cl-lib))
 (require 'turtles)
+(require 'color)
 
 (require 'mistty-changeset)
 (require 'mistty-log)
@@ -812,5 +813,28 @@ Kill the process and its buffer once BODY returns."
   "Return the content of PROC's buffer."
   (with-current-buffer (process-buffer proc)
     (buffer-string)))
+
+(defun mistty-color-hex (c)
+  "Transform color name to hexadecimal representation.
+
+Lets unspecified-fg and unspecified-bg through."
+  (if (and (stringp c) (string-prefix-p "unspecified-" c))
+      ;; let unspecified-fg and unspecified-bg through
+      c
+    (let ((c (color-name-to-rgb c)))
+      (color-rgb-to-hex (nth 0 c) (nth 1 c) (nth 2 c) 2))))
+
+(defun mistty-colors-at-point ()
+  "Return the foreground and background color at point, in hex."
+  (list (mistty-color-hex (foreground-color-at-point))
+        (mistty-color-hex (background-color-at-point))))
+
+(defun mistty-face-colors (fg &optional bg)
+  "Get the foreground and background of the two given faces.
+
+This is meant to be compared with the output of `mistty-color-at-point'."
+  (list (mistty-color-hex (face-foreground fg))
+        (mistty-color-hex (face-background (or bg fg)))))
+
 
 (provide 'mistty-testing)

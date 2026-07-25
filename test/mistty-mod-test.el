@@ -17,6 +17,7 @@
 (require 'ert)
 (require 'mistty-mod)
 (require 'mistty-testing)
+(require 'turtles)
 
 (ert-deftest mistty-mod-process-bytes ()
   (let ((term (mistty-mod-make-vterm 80 10)))
@@ -104,3 +105,41 @@
            "8\n"
            "9")
           (mistty-test-content :show (point)))))))
+
+(turtles-ert-deftest mistty-mod-set-color (:instance 'mistty)
+ (ert-with-test-buffer ()
+   (let ((term (mistty-mod-make-vterm 20 10)))
+    (mistty-mod-process-bytes term (vconcat "\e[31mred\e[0m, \e[37m\e[42mgreen\e[0m, \e[34mblue\e[0m."))
+    (mistty-mod-render term (point-min) (point-max))
+    (turtles-with-grab-buffer ()
+      (goto-char (point-min))
+      (should
+       (equal
+        "red, green, blue."
+        (buffer-substring-no-properties (pos-bol) (pos-eol))))
+
+      (mistty-test-goto "red")
+      (should
+       (equal (mistty-colors-at-point)
+              (mistty-face-colors 'ansi-color-red 'default)
+              ))
+
+      (mistty-test-goto ",")
+      (should
+       (equal (mistty-colors-at-point)
+              (mistty-face-colors 'default)))
+
+      (mistty-test-goto "green")
+      (should
+       (equal (mistty-colors-at-point)
+              (mistty-face-colors 'ansi-color-white 'ansi-color-green)))
+
+      (mistty-test-goto "blue")
+      (should
+       (equal (mistty-colors-at-point)
+              (mistty-face-colors 'ansi-color-blue 'default)))))))
+
+;; TODO:
+;;  - test italic, bold
+;;  - test all indexed colors: standard, bright, 6x6x6 cube, grayscale
+;;  - test 24bit colors
