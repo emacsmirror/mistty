@@ -1,11 +1,11 @@
+use crate::types::BufferPos;
+use crate::vterm::VTerm;
 use alacritty_terminal::{
     grid::Dimensions,
     term::cell::Flags,
     vte::ansi::{Color, NamedColor},
 };
 use emacs::{Env, Result, Value, defun};
-
-use crate::vterm::VTerm;
 
 emacs::use_functions! {
     add_face_text_property
@@ -14,8 +14,7 @@ emacs::use_functions! {
     face_background
     goto_char
     insert
-    make_list => "list"
-    get_point => "point"
+    list_func => "list"
 }
 
 emacs::use_symbols! {
@@ -41,11 +40,9 @@ emacs::use_symbols! {
     ansi_color_yellow
     default_face => "default"
     cursor_face => "cursor"
-    colon_foreground => ":foreground"
-    colon_background => ":background"
-    colon_italic => ":italic"
-    colon_weight => ":weight"
-    bold_symbol => "bold"
+    foreground_sym => ":foreground"
+    background_sym => ":background"
+    bold_sym => "bold"
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -64,7 +61,7 @@ enum RenderProperty {
 /// Rendering is done in the current buffer in the range START to END.
 /// The point is left at the cursor position.
 #[defun]
-pub fn render(env: &Env, term: &VTerm, start: Value, end: Value) -> Result<()> {
+pub fn render(env: &Env, term: &VTerm, term_start: Value, term_end: Value) -> Result<()> {
     let screen_columns = term.inner().columns();
     let screen_lines = term.inner().screen_lines();
 
@@ -73,16 +70,19 @@ pub fn render(env: &Env, term: &VTerm, start: Value, end: Value) -> Result<()> {
     let mut content = term.inner().renderable_content();
     let cursor_point = content.cursor.point;
     let iter = &mut content.display_iter;
-    let mut fg = (Color::Named(NamedColor::Foreground), 0);
-    let mut bg = (Color::Named(NamedColor::Background), 0);
+
+    env.call(goto_char, (term_start,))?;
+    let origin = BufferPos::point(env)?;
+    let mut fg = (Color::Named(NamedColor::Foreground), origin);
+    let mut bg = (Color::Named(NamedColor::Background), origin);
     let mut italic = None;
     let mut bold = None;
     let mut underline = None;
     let mut inverse = None;
-    let mut props = vec![];
+    let mut props: Vec<(RenderProperty, BufferPos, BufferPos)> = vec![];
 
     while let Some(cur) = iter.next() {
-        let pos = as_string.len() as i32;
+        let pos = origin + as_string.len();
         let c = cur.c;
         if c == '\t' {
             // tabs are already stored in the cells as spaces
@@ -153,45 +153,40 @@ pub fn render(env: &Env, term: &VTerm, start: Value, end: Value) -> Result<()> {
             }
         }
     }
-    props.push((RenderProperty::Fg(fg.0), fg.1, as_string.len() as i32));
-    props.push((RenderProperty::Bg(bg.0), bg.1, as_string.len() as i32));
+    let end = origin + as_string.len();
+    props.push((RenderProperty::Fg(fg.0), fg.1, end));
+    props.push((RenderProperty::Bg(bg.0), bg.1, end));
     if let Some(start) = italic {
-        props.push((RenderProperty::Italic, start, as_string.len() as i32));
+        props.push((RenderProperty::Italic, start, end));
     }
     if let Some(start) = bold {
-        props.push((RenderProperty::Bold, start, as_string.len() as i32));
+        props.push((RenderProperty::Bold, start, end));
     }
     if let Some(start) = underline {
-        props.push((RenderProperty::Underline, start, as_string.len() as i32));
+        props.push((RenderProperty::Underline, start, end));
     }
     if let Some(start) = inverse {
-        props.push((RenderProperty::Inverse, start, as_string.len() as i32));
+        props.push((RenderProperty::Inverse, start, end));
     }
-    env.call(delete_region, (start, end))?;
-    env.call(goto_char, (start,))?;
-    let origin: i32 = env.call(get_point, [])?.into_rust()?;
+    env.call(delete_region, (term_start, term_end))?;
     env.call(insert, (as_string,))?;
-    set_properties(env, props, origin)?;
+    set_properties(env, props)?;
 
     if let Some(cursor_pos) = cursor_pos {
-        env.call(goto_char, (origin + cursor_pos,))?;
+        env.call(goto_char, (cursor_pos,))?;
     }
 
     Ok(())
 }
 
-fn set_properties(env: &Env, props: Vec<(RenderProperty, i32, i32)>, origin: i32) -> Result<()> {
+fn set_properties(env: &Env, props: Vec<(RenderProperty, BufferPos, BufferPos)>) -> Result<()> {
     for (prop, start, end) in props {
         match prop {
             RenderProperty::Fg(color) => {
                 if let Some(hex) = color_hex(env, color, true)? {
                     env.call(
                         add_face_text_property,
-                        (
-                            start + origin,
-                            end + origin,
-                            env.call(make_list, (colon_foreground, hex))?,
-                        ),
+                        (start, end, env.call(list_func, (foreground_sym, hex))?),
                     )?;
                 }
             }
@@ -199,37 +194,21 @@ fn set_properties(env: &Env, props: Vec<(RenderProperty, i32, i32)>, origin: i32
                 if let Some(hex) = color_hex(env, color, false)? {
                     env.call(
                         add_face_text_property,
-                        (
-                            start + origin,
-                            end + origin,
-                            env.call(make_list, (colon_background, hex))?,
-                        ),
+                        (start, end, env.call(list_func, (background_sym, hex))?),
                     )?;
                 }
             }
             RenderProperty::Italic => {
-                env.call(
-                    add_face_text_property,
-                    (start + origin, end + origin, ansi_color_italic),
-                )?;
+                env.call(add_face_text_property, (start, end, ansi_color_italic))?;
             }
             RenderProperty::Bold => {
-                env.call(
-                    add_face_text_property,
-                    (start + origin, end + origin, ansi_color_bold),
-                )?;
+                env.call(add_face_text_property, (start, end, ansi_color_bold))?;
             }
             RenderProperty::Underline => {
-                env.call(
-                    add_face_text_property,
-                    (start + origin, end + origin, ansi_color_underline),
-                )?;
+                env.call(add_face_text_property, (start, end, ansi_color_underline))?;
             }
             RenderProperty::Inverse => {
-                env.call(
-                    add_face_text_property,
-                    (start + origin, end + origin, ansi_color_inverse),
-                )?;
+                env.call(add_face_text_property, (start, end, ansi_color_inverse))?;
             }
         }
     }
@@ -239,70 +218,72 @@ fn set_properties(env: &Env, props: Vec<(RenderProperty, i32, i32)>, origin: i32
 fn color_hex(env: &Env, color: Color, fg: bool) -> Result<Option<String>> {
     Ok(match color {
         Color::Named(NamedColor::Black | NamedColor::DimBlack) | Color::Indexed(0) => {
-            Some(face_to_hex(env, ansi_color_black, fg)?)
+            Some(get_face_color(env, ansi_color_black, fg)?)
         }
         Color::Named(NamedColor::Red | NamedColor::DimRed) | Color::Indexed(1) => {
-            Some(face_to_hex(env, ansi_color_red, fg)?)
+            Some(get_face_color(env, ansi_color_red, fg)?)
         }
         Color::Named(NamedColor::Green | NamedColor::DimGreen) | Color::Indexed(2) => {
-            Some(face_to_hex(env, ansi_color_green, fg)?)
+            Some(get_face_color(env, ansi_color_green, fg)?)
         }
         Color::Named(NamedColor::Yellow | NamedColor::DimYellow) | Color::Indexed(3) => {
-            Some(face_to_hex(env, ansi_color_yellow, fg)?)
+            Some(get_face_color(env, ansi_color_yellow, fg)?)
         }
         Color::Named(NamedColor::Blue | NamedColor::DimBlue) | Color::Indexed(4) => {
-            Some(face_to_hex(env, ansi_color_blue, fg)?)
+            Some(get_face_color(env, ansi_color_blue, fg)?)
         }
         Color::Named(NamedColor::Magenta | NamedColor::DimMagenta) | Color::Indexed(5) => {
-            Some(face_to_hex(env, ansi_color_magenta, fg)?)
+            Some(get_face_color(env, ansi_color_magenta, fg)?)
         }
         Color::Named(NamedColor::Cyan | NamedColor::DimCyan) | Color::Indexed(6) => {
-            Some(face_to_hex(env, ansi_color_cyan, fg)?)
+            Some(get_face_color(env, ansi_color_cyan, fg)?)
         }
         Color::Named(NamedColor::White | NamedColor::DimWhite) | Color::Indexed(7) => {
-            Some(face_to_hex(env, ansi_color_white, fg)?)
+            Some(get_face_color(env, ansi_color_white, fg)?)
         }
         Color::Named(NamedColor::BrightBlack) | Color::Indexed(8) => {
-            Some(face_to_hex(env, ansi_color_black, fg)?)
+            Some(get_face_color(env, ansi_color_black, fg)?)
         }
         Color::Named(NamedColor::BrightRed) | Color::Indexed(9) => {
-            Some(face_to_hex(env, ansi_color_red, fg)?)
+            Some(get_face_color(env, ansi_color_red, fg)?)
         }
         Color::Named(NamedColor::BrightGreen) | Color::Indexed(10) => {
-            Some(face_to_hex(env, ansi_color_green, fg)?)
+            Some(get_face_color(env, ansi_color_green, fg)?)
         }
         Color::Named(NamedColor::BrightYellow) | Color::Indexed(11) => {
-            Some(face_to_hex(env, ansi_color_yellow, fg)?)
+            Some(get_face_color(env, ansi_color_yellow, fg)?)
         }
         Color::Named(NamedColor::BrightBlue) | Color::Indexed(12) => {
-            Some(face_to_hex(env, ansi_color_blue, fg)?)
+            Some(get_face_color(env, ansi_color_blue, fg)?)
         }
         Color::Named(NamedColor::BrightMagenta) | Color::Indexed(13) => {
-            Some(face_to_hex(env, ansi_color_magenta, fg)?)
+            Some(get_face_color(env, ansi_color_magenta, fg)?)
         }
         Color::Named(NamedColor::BrightCyan) | Color::Indexed(14) => {
-            Some(face_to_hex(env, ansi_color_cyan, fg)?)
+            Some(get_face_color(env, ansi_color_cyan, fg)?)
         }
         Color::Named(NamedColor::BrightWhite) | Color::Indexed(15) => {
-            Some(face_to_hex(env, ansi_color_white, fg)?)
+            Some(get_face_color(env, ansi_color_white, fg)?)
         }
         Color::Named(
             NamedColor::Foreground | NamedColor::BrightForeground | NamedColor::DimForeground,
         ) => {
             if fg {
+                // Nothing to set; it's the default
                 None
             } else {
-                Some(face_to_hex(env, default_face, false)?)
+                Some(get_face_color(env, default_face, false)?)
             }
         }
         Color::Named(NamedColor::Background) => {
             if fg {
-                Some(face_to_hex(env, default_face, true)?)
+                Some(get_face_color(env, default_face, true)?)
             } else {
+                // Nothing to set; it's the default
                 None
             }
         }
-        Color::Named(NamedColor::Cursor) => Some(face_to_hex(env, cursor_face, fg)?),
+        Color::Named(NamedColor::Cursor) => Some(get_face_color(env, cursor_face, fg)?),
         Color::Spec(rgb) => Some(format!("#{0:02x}{1:02x}{2:02x}", rgb.r, rgb.g, rgb.b)),
         Color::Indexed(code) => indexed_to_rgb(code),
     })
@@ -336,7 +317,10 @@ fn indexed_to_rgb(code: u8) -> Option<String> {
     }
 }
 
-fn face_to_hex(env: &Env, face: &emacs::OnceGlobalRef, fg: bool) -> Result<String> {
+/// Get the color of a specific Emacs face, to be used in a color spec.
+///
+/// This is usually, but not always a RGB code starting with #.
+fn get_face_color(env: &Env, face: &emacs::OnceGlobalRef, fg: bool) -> Result<String> {
     let hex: String = env
         .call(
             if fg { face_foreground } else { face_background },

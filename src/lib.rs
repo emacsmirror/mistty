@@ -1,4 +1,5 @@
 mod render;
+mod types;
 mod vterm;
 
 use emacs::{Env, IntoLisp, Result, Value, Vector, defun};
