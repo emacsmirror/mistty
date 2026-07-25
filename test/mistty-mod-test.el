@@ -139,7 +139,34 @@
        (equal (mistty-colors-at-point)
               (mistty-face-colors 'ansi-color-blue 'default)))))))
 
+
+(ert-deftest mistty-mod-set-face ()
+ (ert-with-test-buffer ()
+   (let ((term (mistty-mod-make-vterm 20 10)))
+    (mistty-mod-process-bytes term (vconcat "\e[1mbold, \e[3mitalic\e[0m,\r\n\e[4munderline\e[0m,\r\n\e[7minverse\e[0m."))
+    (mistty-mod-render term (point-min) (point-max))
+
+    (goto-char (point-min))
+    (should
+     (equal
+      "bold, italic,\nunderline,\ninverse."
+      (mistty-test-content)))
+
+    (mistty-test-goto "bold")
+    (should (equal 'ansi-color-bold (get-text-property (point) 'face)))
+
+    (mistty-test-goto "italic")
+    (should (equal '(ansi-color-bold ansi-color-italic) (get-text-property (point) 'face)))
+
+    (mistty-test-goto "underline")
+    (should (equal 'ansi-color-underline (get-text-property (point) 'face)))
+
+    (mistty-test-goto "inverse")
+    (should (equal 'ansi-color-inverse (get-text-property (point) 'face))))))
+
 ;; TODO:
-;;  - test italic, bold
 ;;  - test all indexed colors: standard, bright, 6x6x6 cube, grayscale
+;;    compare with
+;;    https://lucianofedericopereira.github.io/xterm-colors-cheat-sheet/
+;;    https://color-palette.hexdocs.pm/ansi_color_codes.html
 ;;  - test 24bit colors

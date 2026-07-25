@@ -36,7 +36,7 @@ emacs::use_symbols! {
     ansi_color_italic
     ansi_color_magenta
     ansi_color_red
-    ansi_color_underlink
+    ansi_color_underline
     ansi_color_white
     ansi_color_yellow
     default_face => "default"
@@ -52,10 +52,10 @@ emacs::use_symbols! {
 enum RenderProperty {
     Fg(Color),
     Bg(Color),
-    // Inverse,
+    Inverse,
     Bold,
     Italic,
-    // Underline,
+    Underline,
     // Wrapline,
 }
 
@@ -77,6 +77,8 @@ pub fn render(env: &Env, term: &VTerm, start: Value, end: Value) -> Result<()> {
     let mut bg = (Color::Named(NamedColor::Background), 0);
     let mut italic = None;
     let mut bold = None;
+    let mut underline = None;
+    let mut inverse = None;
     let mut props = vec![];
 
     while let Some(cur) = iter.next() {
@@ -123,6 +125,33 @@ pub fn render(env: &Env, term: &VTerm, start: Value, end: Value) -> Result<()> {
                 italic = Some(pos);
             }
         }
+        let want_bold = cur.flags.contains(Flags::BOLD);
+        if bold.is_some() != want_bold {
+            if let Some(start) = bold {
+                props.push((RenderProperty::Bold, start, pos));
+                bold = None;
+            } else {
+                bold = Some(pos);
+            }
+        }
+        let want_underline = cur.flags.contains(Flags::UNDERLINE);
+        if underline.is_some() != want_underline {
+            if let Some(start) = underline {
+                props.push((RenderProperty::Underline, start, pos));
+                underline = None;
+            } else {
+                underline = Some(pos);
+            }
+        }
+        let want_inverse = cur.flags.contains(Flags::INVERSE);
+        if inverse.is_some() != want_inverse {
+            if let Some(start) = inverse {
+                props.push((RenderProperty::Inverse, start, pos));
+                inverse = None;
+            } else {
+                inverse = Some(pos);
+            }
+        }
     }
     props.push((RenderProperty::Fg(fg.0), fg.1, as_string.len() as i32));
     props.push((RenderProperty::Bg(bg.0), bg.1, as_string.len() as i32));
@@ -132,7 +161,12 @@ pub fn render(env: &Env, term: &VTerm, start: Value, end: Value) -> Result<()> {
     if let Some(start) = bold {
         props.push((RenderProperty::Bold, start, as_string.len() as i32));
     }
-
+    if let Some(start) = underline {
+        props.push((RenderProperty::Underline, start, as_string.len() as i32));
+    }
+    if let Some(start) = inverse {
+        props.push((RenderProperty::Inverse, start, as_string.len() as i32));
+    }
     env.call(delete_region, (start, end))?;
     env.call(goto_char, (start,))?;
     let origin: i32 = env.call(get_point, [])?.into_rust()?;
@@ -183,6 +217,18 @@ fn set_properties(env: &Env, props: Vec<(RenderProperty, i32, i32)>, origin: i32
                 env.call(
                     add_face_text_property,
                     (start + origin, end + origin, ansi_color_bold),
+                )?;
+            }
+            RenderProperty::Underline => {
+                env.call(
+                    add_face_text_property,
+                    (start + origin, end + origin, ansi_color_underline),
+                )?;
+            }
+            RenderProperty::Inverse => {
+                env.call(
+                    add_face_text_property,
+                    (start + origin, end + origin, ansi_color_inverse),
                 )?;
             }
             _ => {}
