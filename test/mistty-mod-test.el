@@ -165,8 +165,4 @@
     (should (equal 'ansi-color-inverse (get-text-property (point) 'face))))))
 
 ;; TODO:
-;;  - test all indexed colors: standard, bright, 6x6x6 cube, grayscale
-;;    compare with
-;;    https://lucianofedericopereira.github.io/xterm-colors-cheat-sheet/
-;;    https://color-palette.hexdocs.pm/ansi_color_codes.html
-;;  - test 24bit colors
+;;  - 24bit colors

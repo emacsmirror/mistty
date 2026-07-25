@@ -231,7 +231,6 @@ fn set_properties(env: &Env, props: Vec<(RenderProperty, i32, i32)>, origin: i32
                     (start + origin, end + origin, ansi_color_inverse),
                 )?;
             }
-            _ => {}
         }
     }
     Ok(())
@@ -305,31 +304,36 @@ fn color_hex(env: &Env, color: Color, fg: bool) -> Result<Option<String>> {
         }
         Color::Named(NamedColor::Cursor) => Some(face_to_hex(env, cursor_face, fg)?),
         Color::Spec(rgb) => Some(format!("#{0:02x}{1:02x}{2:02x}", rgb.r, rgb.g, rgb.b)),
-        Color::Indexed(code) => {
-            if code >= 16 && code <= 231 {
-                // [16-231] 6x6x6 color cube
-                fn cube6_level(v: u8) -> u8 {
-                    if v == 0 { 0 } else { v * 40 + 55 }
-                }
-
-                let mut v = code - 16;
-                let red = cube6_level(v / 36);
-                v = v % 36;
-                let green = cube6_level(v / 6);
-                v = v % 6;
-                let blue = cube6_level(v);
-
-                Some(format!("#{red:02x}{green:02x}{blue:02x}"))
-            } else if code >= 232 {
-                // [232-255] grayscale
-                let gray = (code - 232) * 10 + 8;
-
-                Some(format!("#{gray:02x}{gray:02x}{gray:02x}"))
-            } else {
-                None
-            }
-        }
+        Color::Indexed(code) => indexed_to_rgb(code),
     })
+}
+
+/// Convert an ANSI color code >= 16 to a RGB value.
+///
+/// Return None if the code is unsupported.
+fn indexed_to_rgb(code: u8) -> Option<String> {
+    if code >= 16 && code <= 231 {
+        // [16-231] 6x6x6 color cube
+        fn cube6_level(v: u8) -> u8 {
+            if v == 0 { 0 } else { v * 40 + 55 }
+        }
+
+        let mut v = code - 16;
+        let red = cube6_level(v / 36);
+        v = v % 36;
+        let green = cube6_level(v / 6);
+        v = v % 6;
+        let blue = cube6_level(v);
+
+        Some(format!("#{red:02x}{green:02x}{blue:02x}"))
+    } else if code >= 232 {
+        // [232-255] grayscale
+        let gray = (code - 232) * 10 + 8;
+
+        Some(format!("#{gray:02x}{gray:02x}{gray:02x}"))
+    } else {
+        None
+    }
 }
 
 fn face_to_hex(env: &Env, face: &emacs::OnceGlobalRef, fg: bool) -> Result<String> {
@@ -340,4 +344,63 @@ fn face_to_hex(env: &Env, face: &emacs::OnceGlobalRef, fg: bool) -> Result<Strin
         )?
         .into_rust()?;
     Ok(hex)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn indexed_to_rgb_handpicked() {
+        // cornflower blue
+        assert_eq!(Some("#5f87ff"), indexed_to_rgb(69).as_deref());
+
+        // dark sea green 2 light
+        assert_eq!(Some("#afffaf"), indexed_to_rgb(157).as_deref());
+
+        // grey15
+        assert_eq!(Some("#262626"), indexed_to_rgb(235).as_deref());
+
+        // grey85
+        assert_eq!(Some("#dadada"), indexed_to_rgb(253).as_deref());
+    }
+
+    #[test]
+    fn indexed_to_rgb_unsupported() {
+        for code in 0..16 {
+            assert_eq!(None, indexed_to_rgb(code));
+        }
+    }
+
+    #[test]
+    fn indexed_to_rgb_colors() {
+        for red in 0..6 {
+            for green in 0..6 {
+                for blue in 0..6 {
+                    let code = 16 + (red * 36) + (green * 6) + blue;
+                    let r = if red != 0 { red * 40 + 55 } else { 0 };
+                    let g = if green != 0 { green * 40 + 55 } else { 0 };
+                    let b = if blue != 0 { blue * 40 + 55 } else { 0 };
+                    assert_eq!(
+                        Some(format!("#{r:02x}{g:02x}{b:02x}")),
+                        indexed_to_rgb(code),
+                        "({red}, {green}, {blue})"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn indexed_to_rgb_grayscale() {
+        for gray in 0..24 {
+            let level = gray * 10 + 8;
+            let code = 232 + gray;
+            assert_eq!(
+                Some(format!("#{level:02x}{level:02x}{level:02x}")),
+                indexed_to_rgb(code),
+                "gray: {gray}"
+            );
+        }
+    }
 }
