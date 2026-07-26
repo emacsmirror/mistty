@@ -1,11 +1,15 @@
 use crate::types::BufferPos;
 use crate::vterm::VTerm;
 use alacritty_terminal::{
-    grid::Dimensions,
-    term::cell::{Cell, Flags},
+    grid::{Dimensions, Indexed},
+    index::{Column, Line, Point},
+    term::{
+        TermDamage,
+        cell::{Cell, Flags},
+    },
     vte::ansi::{Color, NamedColor},
 };
-use emacs::{Env, Result, Value, defun};
+use emacs::{Env, IntoLisp, Result, Value, defun};
 use std::{collections::HashMap, ops::Deref};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -91,20 +95,137 @@ impl ToggleProperty {
 /// Rendering is done in the current buffer in the range START to END.
 /// The point is left at the cursor position.
 #[defun]
-pub fn render(env: &Env, term: &VTerm, term_start: Value, term_end: Value) -> Result<()> {
-    let screen_columns = term.inner().columns();
-    let screen_lines = term.inner().screen_lines();
-
+pub fn render(env: &Env, term: &mut VTerm, term_start: Value, term_end: Value) -> Result<()> {
+    let content = term.inner().renderable_content();
     let mut cursor_pos = None;
-    let mut as_string = String::with_capacity((screen_columns + 1) * screen_lines);
-    let mut content = term.inner().renderable_content();
-    let cursor_point = content.cursor.point;
-    let iter = &mut content.display_iter;
+    render_region(
+        env,
+        term,
+        content.display_iter,
+        term_start,
+        term_end,
+        &mut cursor_pos,
+    )?;
 
+    if let Some(cursor_pos) = cursor_pos {
+        env.call(goto_char, (cursor_pos,))?;
+    }
+
+    term.inner_mut().reset_damage();
+
+    Ok(())
+}
+
+/// Re-render modified parts of the terminal, Emacs-side.
+///
+/// This call optimizes rendering by only updating the portions of the
+/// terminal that have changed since last call to `render` or
+/// `render_damage. For this to work, the range START to END must
+/// contain the unmodified result of the previous call.
+///
+/// Rendering is done in the current buffer in the range START to END.
+/// The point is left at the cursor position.
+#[defun]
+pub fn render_damaged(
+    env: &Env,
+    term: &mut VTerm,
+    term_start: Value,
+    term_end: Value,
+) -> Result<()> {
+    let mut cursor_pos = None;
+
+    if let TermDamage::Partial(iter) = term.inner_mut().damage() {
+        // TODO: check term_end to make sure not to escape the bounds
+        // of term_start - term_end even when the buffer content isn't
+        // as expected.
+
+        let all_damage: Vec<(Line, Column)> = iter
+            .filter(|damage| damage.is_damaged())
+            .map(|d| (Line(d.line as i32), Column(d.left)))
+            .collect();
+
+        let grid = term.inner().grid();
+        for (line, left_col) in all_damage {
+            env.call(goto_char, (term_start,))?;
+            let line_pos = BufferPos::bol(env, line)?;
+            env.call(goto_char, (line_pos,))?;
+            let next_line_pos = BufferPos::bol(env, Line(1))?;
+
+            // damage_pos is the position of the start of the damage on the line
+            let mut damage_pos = line_pos;
+            let grid_line = &term.inner().grid()[line];
+            if left_col > 0 {
+                for cell in grid_line[Column(0)..left_col].iter() {
+                    damage_pos += 1 + cell.zerowidth().map(|chars| chars.len()).unwrap_or(0);
+                }
+            }
+
+            render_region(
+                env,
+                term,
+                grid_line[left_col..]
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| Indexed {
+                        point: Point::new(line, left_col + i),
+                        cell: c,
+                    }),
+                damage_pos.into_lisp(env)?,
+                next_line_pos.into_lisp(env)?,
+                // If the cursor moved, the damage area is supposed to
+                // contain the old and new cursor position, so this
+                // will be set.
+                // TODO: what if there were changes, but the cursor did
+                // not move?
+                &mut cursor_pos,
+            )?;
+        }
+    } else {
+        render_region(
+            env,
+            term,
+            term.inner().renderable_content().display_iter,
+            term_start,
+            term_end,
+            &mut cursor_pos,
+        )?;
+    }
+
+    if let Some(cursor_pos) = cursor_pos {
+        env.call(goto_char, (cursor_pos,))?;
+    }
+
+    term.inner_mut().reset_damage();
+
+    Ok(())
+}
+
+/// Render the display or a subset of the display.
+///
+/// `iter` should return the cells to render. [`term_start`,
+/// `term_end`)] defines the region of the buffer to be replaced with
+/// the content of `iter`.
+///
+/// If `iter` contains the cursor, the function sets `cursor_pos`,
+/// otherwise it leaves it alone.
+pub fn render_region<'a, I>(
+    env: &Env,
+    term: &'a VTerm,
+    mut iter: I,
+    term_start: Value,
+    term_end: Value,
+    cursor_pos: &mut Option<BufferPos>,
+) -> Result<()>
+where
+    I: Iterator<Item = Indexed<&'a Cell>>,
+{
+    let screen_columns = term.inner().columns();
+    let cursor_point = term.inner().grid().cursor.point;
     env.call(goto_char, (term_start,))?;
     let origin = BufferPos::point(env)?;
     let mut tracker = PropertyTracker::new(origin);
 
+    let mut as_string = string_with_capacity_for(&iter);
     while let Some(cur) = iter.next() {
         let pos = origin + as_string.len();
         let c = cur.c;
@@ -122,9 +243,9 @@ pub fn render(env: &Env, term: &VTerm, term_start: Value, term_end: Value) -> Re
             as_string.push('\n');
         }
 
-        // track cursor position
+        // Have we found the cursor? If yes, we now know its position.
         if cur.point == cursor_point {
-            cursor_pos = Some(pos);
+            *cursor_pos = Some(pos);
         }
 
         // track property changes
@@ -136,11 +257,27 @@ pub fn render(env: &Env, term: &VTerm, term_start: Value, term_end: Value) -> Re
     env.call(insert, (as_string,))?;
     tracker.apply(env, end_pos)?;
 
-    if let Some(cursor_pos) = cursor_pos {
-        env.call(goto_char, (cursor_pos,))?;
+    Ok(())
+}
+
+/// Build a string with enough capacity for storing the content of
+/// `iter`, assuming one character per element.
+fn string_with_capacity_for<'a, I>(iter: &I) -> String
+where
+    I: Iterator<Item = Indexed<&'a Cell>>,
+{
+    let max = 8192;
+    let (low, high) = iter.size_hint();
+    if let Some(high) = high
+        && high < max
+    {
+        return String::with_capacity(high);
+    }
+    if low < max {
+        return String::with_capacity(low);
     }
 
-    Ok(())
+    return String::new();
 }
 
 /// Track cell flags and apply them Emacs-side as text properties.

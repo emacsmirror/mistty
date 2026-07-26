@@ -182,3 +182,45 @@
 
     (mistty-test-goto "inverse")
     (should (equal 'ansi-color-inverse (get-text-property (point) 'face))))))
+
+(ert-deftest mistty-mod-render-damaged-move-cursor ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    ;; fill the screen
+    (mistty-mod-process-bytes term (vconcat "\r0"))
+    (dotimes (i 9)
+      (mistty-mod-process-bytes term (vconcat (format "\r\n%d" (1+ i)))))
+    (goto-char (point-min))
+    (ert-with-test-buffer ()
+        (mistty-mod-render term (point-min) (point-max))
+        (should
+         (equal
+          (concat
+           "0\n"
+           "1\n"
+           "2\n"
+           "3\n"
+           "4\n"
+           "5\n"
+           "6\n"
+           "7\n"
+           "8\n"
+           "9<>")
+          (mistty-test-content :show (point))))
+
+        ;; move cursor 3 lines up, 2 columns right
+        (mistty-mod-process-bytes term (vconcat "\r\e[3A\e[2Cmodified\r\e[2A\e[2C"))
+        (mistty-mod-render-damaged term (point-min) (point-max))
+        (should
+         (equal
+          (concat
+           "0\n"
+           "1\n"
+           "2\n"
+           "3\n"
+           "4 <>\n"        ; not modified, but the cursor moved there
+           "5\n"
+           "6 modified\n"  ; modified
+           "7\n"
+           "8\n"
+           "9")            ; not modified, but the cursor moved from there
+          (mistty-test-content :show (point)))))))

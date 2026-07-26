@@ -1,13 +1,12 @@
-use std::convert::TryInto;
-
 use alacritty_terminal::{
     Term,
     event::EventListener,
     grid::Dimensions,
     index::{Column, Line, Point},
-    term::{Config, RenderableContent},
+    term::Config,
     vte::ansi::Processor,
 };
+use std::convert::TryInto;
 
 /// Virtual Terminal for MisTTY that keeps its data in memory.
 pub struct VTerm {
@@ -32,10 +31,6 @@ impl VTerm {
 
     pub fn inner_mut(&mut self) -> &mut Term<EventAccumulator> {
         &mut self.inner
-    }
-
-    pub fn renderable_content(&self) -> RenderableContent<'_> {
-        self.inner.renderable_content()
     }
 
     /// Parse terminal data and update internal state

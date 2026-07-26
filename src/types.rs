@@ -1,3 +1,4 @@
+use alacritty_terminal::index::Line;
 use emacs::{Env, IntoLisp, Result};
 use std::{
     cmp::Ordering,
@@ -7,6 +8,7 @@ use std::{
 
 emacs::use_functions! {
     point_func => "point"
+    pos_bol_func => "pos-bol"
 }
 
 /// Newtype that represents an Emacs buffer position.
@@ -19,8 +21,19 @@ emacs::use_functions! {
 pub struct BufferPos(pub i32);
 
 impl BufferPos {
+    /// Return the position of the point in the current buffer.
     pub fn point(env: &Env) -> Result<Self> {
         Ok(BufferPos(env.call(point_func, [])?.into_rust()?))
+    }
+
+    /// Return the beginning-of-line position of the give line.
+    ///
+    /// `line` is relative to the current buffer, `Line(0)` returns
+    /// the beginning of the current line.
+    pub fn bol(env: &Env, line: Line) -> Result<Self> {
+        Ok(BufferPos(
+            env.call(pos_bol_func, (line.0 + 1,))?.into_rust()?,
+        ))
     }
 }
 impl fmt::Display for BufferPos {
