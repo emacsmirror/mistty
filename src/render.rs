@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use crate::types::BufferPos;
 use crate::vterm::VTerm;
 use alacritty_terminal::{
@@ -8,6 +6,9 @@ use alacritty_terminal::{
     vte::ansi::{Color, NamedColor},
 };
 use emacs::{Env, Result, Value, defun};
+use std::{collections::HashMap, ops::Deref};
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
 emacs::use_functions! {
     add_face_text_property
@@ -47,15 +48,42 @@ emacs::use_symbols! {
     bold_sym => "bold"
 }
 
+/// Cell or text properties.
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 enum RenderProperty {
+    /// Foreground color, [Cell::fg].
     Fg(Color),
+
+    /// Background color, [Cell::bg].
     Bg(Color),
+
+    /// Properties that are either on or off, [Cell::flags].
+    Toggle(ToggleProperty),
+}
+
+/// Boolean properties, that are either on or off [Cell::flags].
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, EnumIter)]
+enum ToggleProperty {
     Inverse,
     Bold,
     Italic,
     Underline,
     // Wrapline,
+}
+
+impl ToggleProperty {
+    fn flag(&self) -> Flags {
+        match self {
+            ToggleProperty::Inverse => Flags::INVERSE,
+            ToggleProperty::Bold => Flags::BOLD,
+            ToggleProperty::Italic => Flags::ITALIC,
+            ToggleProperty::Underline => Flags::UNDERLINE,
+        }
+    }
+
+    fn is_set(&self, flags: Flags) -> bool {
+        flags.intersects(self.flag())
+    }
 }
 
 /// Render the state of the terminal in a way Emacs understands.
@@ -119,10 +147,7 @@ pub fn render(env: &Env, term: &VTerm, term_start: Value, term_end: Value) -> Re
 struct PropertyTracker {
     fg: (Color, BufferPos),
     bg: (Color, BufferPos),
-    italic: Option<BufferPos>,
-    bold: Option<BufferPos>,
-    underline: Option<BufferPos>,
-    inverse: Option<BufferPos>,
+    toggles: HashMap<ToggleProperty, BufferPos>,
 
     buf: Vec<(RenderProperty, BufferPos, BufferPos)>,
 }
@@ -132,10 +157,7 @@ impl PropertyTracker {
         Self {
             fg: (Color::Named(NamedColor::Foreground), origin),
             bg: (Color::Named(NamedColor::Background), origin),
-            italic: None,
-            bold: None,
-            underline: None,
-            inverse: None,
+            toggles: HashMap::new(),
             buf: vec![],
         }
     }
@@ -159,40 +181,15 @@ impl PropertyTracker {
             }
             self.bg = (cell.bg, pos);
         }
-        let want_italic = cell.flags.contains(Flags::ITALIC);
-        if self.italic.is_some() != want_italic {
-            if let Some(start) = self.italic {
-                self.buf.push((RenderProperty::Italic, start, pos));
-                self.italic = None;
-            } else {
-                self.italic = Some(pos);
-            }
-        }
-        let want_bold = cell.flags.contains(Flags::BOLD);
-        if self.bold.is_some() != want_bold {
-            if let Some(start) = self.bold {
-                self.buf.push((RenderProperty::Bold, start, pos));
-                self.bold = None;
-            } else {
-                self.bold = Some(pos);
-            }
-        }
-        let want_underline = cell.flags.contains(Flags::UNDERLINE);
-        if self.underline.is_some() != want_underline {
-            if let Some(start) = self.underline {
-                self.buf.push((RenderProperty::Underline, start, pos));
-                self.underline = None;
-            } else {
-                self.underline = Some(pos);
-            }
-        }
-        let want_inverse = cell.flags.contains(Flags::INVERSE);
-        if self.inverse.is_some() != want_inverse {
-            if let Some(start) = self.inverse {
-                self.buf.push((RenderProperty::Inverse, start, pos));
-                self.inverse = None;
-            } else {
-                self.inverse = Some(pos);
+        for toggle in ToggleProperty::iter() {
+            let start = self.toggles.get(&toggle);
+            if start.is_some() != toggle.is_set(cell.flags) {
+                if let Some(start) = start {
+                    self.buf.push((RenderProperty::Toggle(toggle), *start, pos));
+                    self.toggles.remove(&toggle);
+                } else {
+                    self.toggles.insert(toggle, pos);
+                }
             }
         }
 
@@ -203,8 +200,15 @@ impl PropertyTracker {
     ///
     /// `end` is the buffer position pointing to the end of the last
     /// cell.
-    fn apply(self, env: &Env, end: BufferPos) -> Result<()> {
-        for (prop, start, end) in self.at_end(end) {
+    fn apply(mut self, env: &Env, end: BufferPos) -> Result<()> {
+        // close all ranges
+        self.track_change(end, &Cell::default())?;
+        assert!(self.toggles.is_empty());
+        assert_eq!(self.fg.0, Color::Named(NamedColor::Foreground));
+        assert_eq!(self.bg.0, Color::Named(NamedColor::Background));
+
+        let Self { buf, .. } = self;
+        for (prop, start, end) in buf {
             match prop {
                 RenderProperty::Fg(color) => {
                     if let Some(hex) = to_emacs_color(env, color, true)? {
@@ -222,51 +226,21 @@ impl PropertyTracker {
                         )?;
                     }
                 }
-                RenderProperty::Italic => {
+                RenderProperty::Toggle(ToggleProperty::Italic) => {
                     env.call(add_face_text_property, (start, end, ansi_color_italic))?;
                 }
-                RenderProperty::Bold => {
+                RenderProperty::Toggle(ToggleProperty::Bold) => {
                     env.call(add_face_text_property, (start, end, ansi_color_bold))?;
                 }
-                RenderProperty::Underline => {
+                RenderProperty::Toggle(ToggleProperty::Underline) => {
                     env.call(add_face_text_property, (start, end, ansi_color_underline))?;
                 }
-                RenderProperty::Inverse => {
+                RenderProperty::Toggle(ToggleProperty::Inverse) => {
                     env.call(add_face_text_property, (start, end, ansi_color_inverse))?;
                 }
             }
         }
         Ok(())
-    }
-
-    /// Close any currently opened property and return the complete set of properties.
-    ///
-    /// Normally only called through `apply()`.
-    fn at_end(mut self, end: BufferPos) -> Vec<(RenderProperty, BufferPos, BufferPos)> {
-        if self.fg.1 < end {
-            self.buf
-                .push((RenderProperty::Fg(self.fg.0), self.fg.1, end));
-        }
-        if self.bg.1 < end {
-            self.buf
-                .push((RenderProperty::Bg(self.bg.0), self.bg.1, end));
-        }
-        if let Some(start) = self.italic {
-            self.buf.push((RenderProperty::Italic, start, end));
-        }
-        if let Some(start) = self.bold {
-            self.buf.push((RenderProperty::Bold, start, end));
-        }
-        if let Some(start) = self.underline {
-            self.buf.push((RenderProperty::Underline, start, end));
-        }
-        if let Some(start) = self.inverse {
-            self.buf.push((RenderProperty::Inverse, start, end));
-        }
-
-        let Self { buf, .. } = self;
-
-        buf
     }
 }
 
