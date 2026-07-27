@@ -21,7 +21,6 @@ emacs::use_functions! {
     face_background
     goto_char
     insert
-    list_func => "list"
     set_marker
 }
 
@@ -368,7 +367,7 @@ impl PropertyTracker {
                     if let Some(hex) = to_emacs_color(env, color, true)? {
                         env.call(
                             add_face_text_property,
-                            (start, end, env.call(list_func, (foreground_sym, hex))?),
+                            (start, end, env.list((foreground_sym, hex))?),
                         )?;
                     }
                 }
@@ -376,7 +375,7 @@ impl PropertyTracker {
                     if let Some(hex) = to_emacs_color(env, color, false)? {
                         env.call(
                             add_face_text_property,
-                            (start, end, env.call(list_func, (background_sym, hex))?),
+                            (start, end, env.list((background_sym, hex))?),
                         )?;
                     }
                 }
