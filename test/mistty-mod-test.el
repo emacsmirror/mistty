@@ -39,13 +39,14 @@
       (mistty-mod-process-bytes term (vconcat (format "\r\n%d" (1+ i)))))
     (ert-with-test-buffer ()
       (insert "terminal:\n")
-      (let ((term-start (copy-marker (point)))
+      (let ((cursor (make-marker))
+            (term-start (copy-marker (point)))
             (term-end nil))
         (insert "---")
         (setq term-end (copy-marker (point)))
         (insert "\nend.")
 
-        (mistty-mod-render term term-start term-end)
+        (mistty-mod-render term term-start term-end cursor)
         (should
          (equal
           (concat
@@ -72,7 +73,8 @@
       (mistty-mod-process-bytes term (vconcat (format "\r\n%d" (1+ i)))))
     (goto-char (point-min))
     (ert-with-test-buffer ()
-        (mistty-mod-render term (point-min) (point-max))
+      (let ((cursor (make-marker)))
+        (mistty-mod-render term (point-min) (point-max) cursor)
         (should
          (equal
           (concat
@@ -86,11 +88,11 @@
            "7\n"
            "8\n"
            "9<>")
-          (mistty-test-content :show (point))))
+          (mistty-test-content :show cursor)))
 
         ;; move cursor 3 lines up, 2 columns right
         (mistty-mod-process-bytes term (vconcat "\e[3A\e[2C"))
-        (mistty-mod-render term (point-min) (point-max))
+        (mistty-mod-render term (point-min) (point-max) cursor)
         (should
          (equal
           (concat
@@ -104,13 +106,13 @@
            "7\n"
            "8\n"
            "9")
-          (mistty-test-content :show (point)))))))
+          (mistty-test-content :show cursor)))))))
 
 (turtles-ert-deftest mistty-mod-set-color (:instance 'mistty)
  (ert-with-test-buffer ()
    (let ((term (mistty-mod-make-vterm 20 10)))
     (mistty-mod-process-bytes term (vconcat "\e[31mred\e[0m, \e[37m\e[42mgreen\e[0m, \e[34mblue\e[0m."))
-    (mistty-mod-render term (point-min) (point-max))
+    (mistty-mod-render term (point-min) (point-max) (make-marker))
     (turtles-with-grab-buffer ()
       (goto-char (point-min))
       (should
@@ -144,7 +146,7 @@
    (let ((term (mistty-mod-make-vterm 20 10)))
     (mistty-mod-process-bytes
      term (vconcat "\e[38;2;237;237;216m\e[48;2;97;35;196mcolorful\e[0m!"))
-    (mistty-mod-render term (point-min) (point-max))
+    (mistty-mod-render term (point-min) (point-max) (make-marker))
     (turtles-with-grab-buffer ()
       (goto-char (point-min))
       (should
@@ -162,7 +164,7 @@
  (ert-with-test-buffer ()
    (let ((term (mistty-mod-make-vterm 20 10)))
     (mistty-mod-process-bytes term (vconcat "\e[1mbold, \e[3mitalic\e[0m,\r\n\e[4munderline\e[0m,\r\n\e[7minverse\e[0m."))
-    (mistty-mod-render term (point-min) (point-max))
+    (mistty-mod-render term (point-min) (point-max) (make-marker))
 
     (goto-char (point-min))
     (should
@@ -191,7 +193,8 @@
       (mistty-mod-process-bytes term (vconcat (format "\r\n%d" (1+ i)))))
     (goto-char (point-min))
     (ert-with-test-buffer ()
-        (mistty-mod-render term (point-min) (point-max))
+      (let ((cursor (make-marker)))
+        (mistty-mod-render term (point-min) (point-max) cursor)
         (should
          (equal
           (concat
@@ -205,11 +208,11 @@
            "7\n"
            "8\n"
            "9<>")
-          (mistty-test-content :show (point))))
+          (mistty-test-content :show cursor)))
 
         ;; move cursor 3 lines up, 2 columns right
         (mistty-mod-process-bytes term (vconcat "\r\e[3A\e[2Cmodified\r\e[2A\e[2C"))
-        (mistty-mod-render-damaged term (point-min) (point-max))
+        (mistty-mod-render-damaged term (point-min) (point-max) cursor)
         (should
          (equal
           (concat
@@ -223,4 +226,4 @@
            "7\n"
            "8\n"
            "9")            ; not modified, but the cursor moved from there
-          (mistty-test-content :show (point)))))))
+          (mistty-test-content :show cursor)))))))

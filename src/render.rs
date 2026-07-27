@@ -22,6 +22,7 @@ emacs::use_functions! {
     goto_char
     insert
     list_func => "list"
+    set_marker
 }
 
 emacs::use_symbols! {
@@ -93,9 +94,19 @@ impl ToggleProperty {
 /// Render the state of the terminal in a way Emacs understands.
 ///
 /// Rendering is done in the current buffer in the range START to END.
-/// The point is left at the cursor position.
+///
+/// `cursor_marker` is set to the cursor position.
+///
+/// The point is not conserved. Wrap this call inside a
+/// `save_excursion`.
 #[defun]
-pub fn render(env: &Env, term: &mut VTerm, term_start: Value, term_end: Value) -> Result<()> {
+pub fn render(
+    env: &Env,
+    term: &mut VTerm,
+    term_start: Value,
+    term_end: Value,
+    cursor_marker: Value,
+) -> Result<()> {
     let content = term.inner().renderable_content();
     let mut cursor_pos = None;
     render_region(
@@ -108,7 +119,7 @@ pub fn render(env: &Env, term: &mut VTerm, term_start: Value, term_end: Value) -
     )?;
 
     if let Some(cursor_pos) = cursor_pos {
-        env.call(goto_char, (cursor_pos,))?;
+        env.call(set_marker, (cursor_marker, cursor_pos))?;
     }
 
     term.inner_mut().reset_damage();
@@ -125,12 +136,20 @@ pub fn render(env: &Env, term: &mut VTerm, term_start: Value, term_end: Value) -
 ///
 /// Rendering is done in the current buffer in the range START to END.
 /// The point is left at the cursor position.
+///
+/// `cursor_marker` is set to the cursor position if that position has
+/// changed since last call. If the cursor hasn't moved since last
+/// call, the marker might just be left as it is.
+///
+/// The point is not conserved. Wrap this call inside
+/// `save_excursion`.
 #[defun]
 pub fn render_damaged(
     env: &Env,
     term: &mut VTerm,
     term_start: Value,
     term_end: Value,
+    cursor_marker: Value,
 ) -> Result<()> {
     let mut cursor_pos = None;
 
@@ -139,24 +158,27 @@ pub fn render_damaged(
         // of term_start - term_end even when the buffer content isn't
         // as expected.
 
-        let all_damage: Vec<(Line, Column)> = iter
+        let mut all_damage: Vec<(Line, Column)> = iter
             .filter(|damage| damage.is_damaged())
             .map(|d| (Line(d.line as i32), Column(d.left)))
             .collect();
+        all_damage.sort();
+        all_damage.dedup_by_key(|(line, _)| line.0);
+        // damage is sorted by line, one damage per line, with the
+        // column indicating the start of the damage on the line. This
+        // is important for the stored cursor position to make sense.
 
-        let grid = term.inner().grid();
         for (line, left_col) in all_damage {
             env.call(goto_char, (term_start,))?;
             let line_pos = BufferPos::bol(env, line)?;
             env.call(goto_char, (line_pos,))?;
             let next_line_pos = BufferPos::bol(env, Line(1))?;
 
-            // damage_pos is the position of the start of the damage on the line
-            let mut damage_pos = line_pos;
+            let mut damage_start = line_pos;
             let grid_line = &term.inner().grid()[line];
             if left_col > 0 {
                 for cell in grid_line[Column(0)..left_col].iter() {
-                    damage_pos += 1 + cell.zerowidth().map(|chars| chars.len()).unwrap_or(0);
+                    damage_start += 1 + cell.zerowidth().map(|chars| chars.len()).unwrap_or(0);
                 }
             }
 
@@ -170,13 +192,8 @@ pub fn render_damaged(
                         point: Point::new(line, left_col + i),
                         cell: c,
                     }),
-                damage_pos.into_lisp(env)?,
+                damage_start.into_lisp(env)?,
                 next_line_pos.into_lisp(env)?,
-                // If the cursor moved, the damage area is supposed to
-                // contain the old and new cursor position, so this
-                // will be set.
-                // TODO: what if there were changes, but the cursor did
-                // not move?
                 &mut cursor_pos,
             )?;
         }
@@ -192,7 +209,7 @@ pub fn render_damaged(
     }
 
     if let Some(cursor_pos) = cursor_pos {
-        env.call(goto_char, (cursor_pos,))?;
+        env.call(set_marker, (cursor_marker, cursor_pos))?;
     }
 
     term.inner_mut().reset_damage();
