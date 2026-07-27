@@ -25,8 +25,15 @@ fn make_vterm(_env: &Env, width: usize, height: usize) -> Result<VTerm> {
 }
 
 /// Process BYTES coming from a pty and update the virtual terminal.
+///
+/// Return a list of events to be processed Emacs-side. Events are
+/// encoded as list, with an identifying symbol as car followed by an
+/// event-specific argument list.
+///
+/// Events:
+///  (`write-pty` data): request to write DATA to the PTY
 #[defun]
-fn process_bytes(_env: &Env, term: &mut VTerm, bytes: Vector) -> Result<()> {
+fn process_bytes<'a>(env: &'a Env, term: &mut VTerm, bytes: Vector) -> Result<Value<'a>> {
     let mut v: Vec<u8> = Vec::with_capacity(bytes.len());
     for val in bytes {
         let b: u8 = val.into_rust()?;
@@ -34,7 +41,7 @@ fn process_bytes(_env: &Env, term: &mut VTerm, bytes: Vector) -> Result<()> {
     }
     term.process_bytes(&v);
 
-    Ok(())
+    term.handle_events(env)
 }
 
 /// Return the content of the virtual terminal as a string.

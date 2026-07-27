@@ -227,3 +227,11 @@
            "8\n"
            "9")            ; not modified, but the cursor moved from there
           (mistty-test-content :show cursor)))))))
+
+(ert-deftest mistty-mod-pty-write ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    ;; \e[6n queries the cursor position. ]
+    (should (equal nil (mistty-mod-process-bytes term (vconcat "foo\r\n"))))
+    (should (equal
+             '((pty-write "\33[2;4R"))
+             (mistty-mod-process-bytes term (vconcat "bar\e[6n\r\n"))))))

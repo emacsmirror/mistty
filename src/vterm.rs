@@ -1,28 +1,44 @@
 use alacritty_terminal::{
     Term,
-    event::EventListener,
+    event::{Event, EventListener},
     grid::Dimensions,
     index::{Column, Line, Point},
     term::Config,
     vte::ansi::Processor,
 };
-use std::convert::TryInto;
+use emacs::{Env, IntoLisp, Result, Value};
+use std::{cell::RefCell, collections::VecDeque, convert::TryInto, rc::Rc};
+
+emacs::use_functions! {
+    nreverse_func => "nreverse"
+}
+emacs::use_symbols! {
+    pty_write_sym => "pty-write"
+}
 
 /// Virtual Terminal for MisTTY that keeps its data in memory.
 pub struct VTerm {
     inner: Term<EventAccumulator>,
     processor: Processor,
+    events: Rc<RefCell<VecDeque<Event>>>,
 }
 
 impl VTerm {
     /// Create a new terminal with the given dimensions
     pub fn new(width: usize, height: usize) -> Self {
-        let acc = EventAccumulator::new();
+        let events = Rc::new(RefCell::new(VecDeque::new()));
+        let acc = EventAccumulator {
+            events: Rc::clone(&events),
+        };
         let config = Config::default();
         let inner = Term::new(config, &VTermDimensions::new(width, height), acc);
         let processor = Processor::new();
 
-        Self { inner, processor }
+        Self {
+            inner,
+            processor,
+            events,
+        }
     }
 
     pub fn inner(&self) -> &Term<EventAccumulator> {
@@ -36,6 +52,31 @@ impl VTerm {
     /// Parse terminal data and update internal state
     pub fn process_bytes(&mut self, bytes: &[u8]) {
         self.processor.advance(&mut self.inner, bytes);
+    }
+
+    /// Handle accumulated events using the given `env`.
+    ///
+    /// The return value is a list of events that should be handled by
+    /// the caller in lisp format.
+    pub fn handle_events<'a>(&self, env: &'a Env) -> Result<Value<'a>> {
+        let mut events = self.events.borrow_mut();
+        let mut result = ().into_lisp(env)?;
+        if events.is_empty() {
+            return Ok(result);
+        }
+
+        while let Some(event) = events.pop_front() {
+            let event = match event {
+                Event::PtyWrite(data) => Some(env.list((pty_write_sym, data))?),
+                _ => None,
+            };
+            if let Some(lisp_event) = event {
+                result = env.cons(lisp_event, result)?;
+            }
+        }
+        result = env.call(nreverse_func, (result,))?;
+
+        Ok(result)
     }
 
     /// Return the content of the display as a string.
@@ -77,12 +118,12 @@ impl Dimensions for VTermDimensions {
 }
 
 /// Accumulate terminal events and return when needed.
-pub struct EventAccumulator {}
-
-impl EventAccumulator {
-    fn new() -> Self {
-        Self {}
-    }
+pub struct EventAccumulator {
+    events: Rc<RefCell<VecDeque<Event>>>,
 }
 
-impl EventListener for EventAccumulator {}
+impl EventListener for EventAccumulator {
+    fn send_event(&self, event: Event) {
+        self.events.borrow_mut().push_back(event);
+    }
+}
