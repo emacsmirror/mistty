@@ -16,7 +16,9 @@ emacs::use_functions! {
 /// This is a char number inside of an Emacs buffer, starting at 1.
 ///
 /// To work with buffer pos, get a position from Emacs Lisp, usually
-/// with BufferPos::point(), then add or subtract values from it.
+/// with BufferPos::point(), then add or subtract character count from
+/// it. To obtain character count from a string, do
+/// `str.chars().cout`.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default, Ord, PartialOrd)]
 pub struct BufferPos(pub i32);
 

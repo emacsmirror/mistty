@@ -235,3 +235,82 @@
     (should (equal
              '((pty-write "\33[2;4R"))
              (mistty-mod-process-bytes term (vconcat "bar\e[6n\r\n"))))))
+
+(ert-deftest mistty-mod-render-unicode-wide-characters ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    (mistty-mod-process-bytes term (vconcat "\e[1ma\e[0m\xF0\x9F\x9F\xA7\e[4msquare\e[0m!\r\n"))
+    (ert-with-test-buffer ()
+      (let ((cursor (make-marker)))
+        (mistty-mod-render term (point-min) (point-max) cursor)
+        ;; Alacritty puts fake columns around wide chars to keep the column aligned. Make
+        ;; sure these don't appear in the Emacs text.
+        (should
+         (equal
+           "a\U0001F7E7square!"
+          (mistty-test-content)))
+
+        ;; The following makes sure that the text properties are
+        ;; applied to the right portion of the text, despite the
+        ;; calculations being possibly thrown off by the fake columns.
+        (should
+         (equal
+           "[a]\U0001F7E7square!"
+          (mistty-test-content :show-property '(face ansi-color-bold))))
+        (should
+         (equal
+           "a\U0001F7E7[square]!"
+          (mistty-test-content :show-property '(face ansi-color-underline))))))))
+
+
+(ert-deftest mistty-mod-render-unicode-combining-characters ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    (mistty-mod-process-bytes term (vconcat "\e[1mc'e\xcc\x81tait\e[0m \e[4ml'e\xcc\x81te\xcc\x81\e[0m!\r\n"))
+    (ert-with-test-buffer ()
+      (let ((cursor (make-marker)))
+        (mistty-mod-render term (point-min) (point-max) cursor)
+        ;; The following makes sure that the text properties are
+        ;; applied to the right portion of the text, despite the
+        ;; calculations being possibly thrown off by and é (e\u0301)
+        ;; counting as two characters in the emacs buffer, even though
+        ;; it's displayed in a single column.
+        (should
+         (equal
+           "[c'e\u0301tait] l'e\u0301te\u0301!"
+          (mistty-test-content :show-property '(face ansi-color-bold))))
+        (should
+         (equal
+           "c'e\u0301tait [l'e\u0301te\u0301]!"
+          (mistty-test-content :show-property '(face ansi-color-underline))))))))
+
+(ert-deftest mistty-mod-render-unicode-zerowidth-characters ()
+  (let ((term (mistty-mod-make-vterm 80 10)))
+    (mistty-mod-process-bytes
+     term (vconcat "https://example.com/\xe2\x80\x8b\e[1mvery\e[0m/\xe2\x80\x8blong/\xe2\x80\x8b\e[1mpath\e[0m.\r\n"))
+    (ert-with-test-buffer ()
+      (let ((cursor (make-marker)))
+        (mistty-mod-render term (point-min) (point-max) cursor)
+        ;; The zerowidth chars must be there. They must not have
+        ;; thrown off the text property computations.
+        (should
+         (equal
+           "https://example.com/\u200b[very]/\u200blong/\u200b[path]."
+          (mistty-test-content :show-property '(face ansi-color-bold))))
+        ))))
+
+(ert-deftest mistty-mod-render-unicode-joiner ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    (mistty-mod-process-bytes
+     term (vconcat
+           ;; 👨 (Man) + [ZWJ] + 👩 (Woman) + [ZWJ] + 👧 (Girl)
+           "\e[1m\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x91\xA9\xE2\x80\x8D\xF0\x9F\x91\xA7\e[0m.\r\n"))
+    (ert-with-test-buffer ()
+      (let ((cursor (make-marker)))
+        (mistty-mod-render term (point-min) (point-max) cursor)
+        ;; The joiner must not have thrown off the text property
+        ;; computations (no matter how alacritty decided to render
+        ;; it.)
+        (should
+         (equal
+          "[👨\u200d👩\u200d👧]."
+          (mistty-test-content :show-property '(face ansi-color-bold))))
+        ))))

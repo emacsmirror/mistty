@@ -177,7 +177,7 @@ pub fn render_damaged(
             let grid_line = &term.inner().grid()[line];
             if left_col > 0 {
                 for cell in grid_line[Column(0)..left_col].iter() {
-                    damage_start += 1 + cell.zerowidth().map(|chars| chars.len()).unwrap_or(0);
+                    damage_start += cell_char_count(cell);
                 }
             }
 
@@ -242,18 +242,10 @@ where
     let mut tracker = PropertyTracker::new(origin);
 
     let mut as_string = string_with_capacity_for(&iter);
+    let mut pos = origin;
     while let Some(cur) = iter.next() {
-        let pos = origin + as_string.len();
-        let c = cur.c;
-        if c == '\t' {
-            // tabs are already stored in the cells as spaces
-            as_string.push(' ');
-        } else {
-            as_string.push(c);
-        }
-        for c in cur.zerowidth().into_iter().flatten() {
-            as_string.push(*c);
-        }
+        let startlen = as_string.len();
+        append_cell_to_string(&cur.cell, &mut as_string);
 
         if cur.point.column == screen_columns - 1 {
             as_string.push('\n');
@@ -266,14 +258,56 @@ where
 
         // track property changes
         tracker.track_change(pos, cur.deref())?;
+
+        // update buffer position, counting characters
+        pos += as_string[startlen..].chars().count();
     }
-    let end_pos = origin + as_string.len();
 
     env.call(delete_region, (term_start, term_end))?;
     env.call(insert, (as_string,))?;
-    tracker.apply(env, end_pos)?;
+    tracker.apply(env, pos)?;
 
     Ok(())
+}
+
+/// Append the content of a cell to the give string.
+///
+/// A cell may contain more than one character, as long as they all
+/// fit into one column. A cell may also contain wide characters. Such
+/// cells are followed or preceded by columns containing spacers
+/// (Alacritty takes care of that)
+fn append_cell_to_string(cell: &Cell, dest: &mut String) {
+    if cell
+        .flags
+        .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER)
+    {
+        // Skipping spacers assumes that Emacs and Alacritty have the
+        // same idea of what a wide char is and will display them the
+        // same way, so a wide char for which Alacritty allocated two
+        // columns should actually take two columns when displayed by
+        // Emacs.
+        //
+        // TODO: force Emacs to follow Alacritty's lead in case of
+        // inconsistencies.
+        return;
+    }
+    if cell.c == '\t' {
+        // tabs are already stored in the cells as spaces
+        dest.push(' ');
+    } else {
+        dest.push(cell.c);
+    }
+    for c in cell.zerowidth().into_iter().flatten() {
+        dest.push(*c);
+    }
+}
+
+/// Count the number of characters in a cell, for computing BufferPos.
+fn cell_char_count(cell: &Cell) -> usize {
+    let mut str = String::with_capacity(4);
+    append_cell_to_string(cell, &mut str);
+
+    str.chars().count()
 }
 
 /// Build a string with enough capacity for storing the content of
