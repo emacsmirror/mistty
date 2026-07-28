@@ -23,6 +23,7 @@
 
 (require 'mistty-mod)
 (require 'mistty-util)
+(require 'mistty-term)
 (defvar explicit-shell-file-name) ;; defined in shell
 
 (defvar-local mistty-direct--vterm nil
