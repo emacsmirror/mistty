@@ -9,7 +9,7 @@ use alacritty_terminal::{
     },
     vte::ansi::{Color, NamedColor},
 };
-use emacs::{Env, IntoLisp, Result, Value, defun};
+use emacs::{Env, Result, Value, defun};
 use std::{collections::HashMap, ops::Deref};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -90,6 +90,37 @@ impl ToggleProperty {
     }
 }
 
+/// Write scrollback lines to the current buffer, clear terminal history.
+///
+/// This function writes any scrollback line kept in the virtual
+/// terminal to the current buffer at the current point and leaves the
+/// point at the end of the written lines.
+///
+/// It returns the number of lines written.
+///
+/// If scrollback is disabled on the virtual terminal, this call
+/// always returns 0 and does nothing.
+#[defun]
+pub fn write_scrollback(env: &Env, term: &mut VTerm) -> Result<usize> {
+    let grid = term.inner().grid();
+    let topmost_line = grid.topmost_line();
+    let history_size = grid.history_size();
+    if history_size == 0 {
+        return Ok(0);
+    }
+    let mut _ignored = None; // TODO: make arg of render_region optional
+    render_region(
+        env,
+        term,
+        grid.iter_from(Point::new(topmost_line - 1, grid.last_column()))
+            .take_while(|c| c.point.line.0 < 0),
+        &mut _ignored,
+    )?;
+    term.inner_mut().grid_mut().clear_history();
+
+    return Ok(history_size);
+}
+
 /// Render the state of the terminal in a way Emacs understands.
 ///
 /// Rendering is done in the current buffer in the range START to END.
@@ -108,14 +139,10 @@ pub fn render(
 ) -> Result<()> {
     let content = term.inner().renderable_content();
     let mut cursor_pos = None;
-    render_region(
-        env,
-        term,
-        content.display_iter,
-        term_start,
-        term_end,
-        &mut cursor_pos,
-    )?;
+
+    env.call(goto_char, (term_start,))?;
+    env.call(delete_region, (term_start, term_end))?;
+    render_region(env, term, content.display_iter, &mut cursor_pos)?;
 
     if let Some(cursor_pos) = cursor_pos {
         env.call(set_marker, (cursor_marker, cursor_pos))?;
@@ -170,8 +197,6 @@ pub fn render_damaged(
         for (line, left_col) in all_damage {
             env.call(goto_char, (term_start,))?;
             let line_pos = BufferPos::bol(env, line)?;
-            env.call(goto_char, (line_pos,))?;
-            let next_line_pos = BufferPos::bol(env, Line(1))?;
 
             let mut damage_start = line_pos;
             let grid_line = &term.inner().grid()[line];
@@ -181,6 +206,9 @@ pub fn render_damaged(
                 }
             }
 
+            env.call(goto_char, (damage_start,))?;
+            let next_line_pos = BufferPos::bol(env, Line(1))?;
+            env.call(delete_region, (damage_start, next_line_pos))?;
             render_region(
                 env,
                 term,
@@ -191,18 +219,16 @@ pub fn render_damaged(
                         point: Point::new(line, left_col + i),
                         cell: c,
                     }),
-                damage_start.into_lisp(env)?,
-                next_line_pos.into_lisp(env)?,
                 &mut cursor_pos,
             )?;
         }
     } else {
+        env.call(goto_char, (term_start,))?;
+        env.call(delete_region, (term_start, term_end))?;
         render_region(
             env,
             term,
             term.inner().renderable_content().display_iter,
-            term_start,
-            term_end,
             &mut cursor_pos,
         )?;
     }
@@ -228,8 +254,6 @@ pub fn render_region<'a, I>(
     env: &Env,
     term: &'a VTerm,
     mut iter: I,
-    term_start: Value,
-    term_end: Value,
     cursor_pos: &mut Option<BufferPos>,
 ) -> Result<()>
 where
@@ -237,7 +261,6 @@ where
 {
     let screen_columns = term.inner().columns();
     let cursor_point = term.inner().grid().cursor.point;
-    env.call(goto_char, (term_start,))?;
     let origin = BufferPos::point(env)?;
     let mut tracker = PropertyTracker::new(origin);
 
@@ -263,7 +286,6 @@ where
         pos += as_string[startlen..].chars().count();
     }
 
-    env.call(delete_region, (term_start, term_end))?;
     env.call(insert, (as_string,))?;
     tracker.apply(env, pos)?;
 

@@ -314,3 +314,146 @@
           "[👨\u200d👩\u200d👧]."
           (mistty-test-content :show-property '(face ansi-color-bold))))
         ))))
+
+(ert-deftest mistty-mod-scrollback-enabled ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    (mistty-mod-enable-scrollback term)
+
+    ;; fill the screen
+    (mistty-mod-process-bytes term (vconcat "\r0"))
+    (dotimes (i 9)
+      (mistty-mod-process-bytes term (vconcat (format "\r\n%d" (1+ i)))))
+
+    (ert-with-test-buffer ()
+      (let ((cursor (make-marker))
+            (screen-top (make-marker)))
+        (should (equal 0 (mistty-mod-write-scrollback term)))
+        (should (equal "" (buffer-string)))
+        (mistty-mod-render term (point-min) (point-max) cursor)
+        (should
+         (equal
+          (concat
+           "0                   \n"
+           "1                   \n"
+           "2                   \n"
+           "3                   \n"
+           "4                   \n"
+           "5                   \n"
+           "6                   \n"
+           "7                   \n"
+           "8                   \n"
+           "9                   \n")
+          (mistty-test-content :trim nil)))
+
+        (mistty-mod-process-bytes term (vconcat "\r\n10"))
+        (mistty-mod-process-bytes term (vconcat "\r\n11"))
+
+        ;; the scrollback lines are written before the start
+        ;; of the buffer
+        (goto-char (point-min))
+        (should (equal 2 (mistty-mod-write-scrollback term)))
+        (set-marker screen-top (point))
+        (mistty-mod-render term screen-top (point-max) cursor)
+        (should
+         (equal
+          (concat
+           "0                   \n"
+           "1                   \n"
+           "<>2                   \n"
+           "3                   \n"
+           "4                   \n"
+           "5                   \n"
+           "6                   \n"
+           "7                   \n"
+           "8                   \n"
+           "9                   \n"
+           "10                  \n"
+           "11                  \n")
+          (mistty-test-content :show screen-top
+                               :trim nil)))
+
+        (mistty-mod-process-bytes term (vconcat "\r\n12"))
+        (mistty-mod-process-bytes term (vconcat "\r\n13"))
+        (mistty-mod-process-bytes term (vconcat "\r\n14"))
+
+        ;; next time, only the additional scrollback lines
+        ;; are written, so 3 lines, not 5.
+        (goto-char screen-top)
+        (should (equal 3 (mistty-mod-write-scrollback term)))
+        (set-marker screen-top (point))
+        (mistty-mod-render term screen-top (point-max) cursor)
+        (should
+         (equal
+          (concat
+           "0                   \n"
+           "1                   \n"
+           "2                   \n"
+           "3                   \n"
+           "4                   \n"
+           "<>5                   \n"
+           "6                   \n"
+           "7                   \n"
+           "8                   \n"
+           "9                   \n"
+           "10                  \n"
+           "11                  \n"
+           "12                  \n"
+           "13                  \n"
+           "14                  \n")
+          (mistty-test-content :show screen-top
+                               :trim nil)))
+
+        ))))
+
+
+(ert-deftest mistty-mod-scrollback-disabled ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    ;; unnecessary, as scrollback is disabled by default
+    ;; (mistty-mod-disable-scrollback term)
+
+    ;; fill the screen
+    (mistty-mod-process-bytes term (vconcat "\r0"))
+    (dotimes (i 9)
+      (mistty-mod-process-bytes term (vconcat (format "\r\n%d" (1+ i)))))
+
+    (ert-with-test-buffer ()
+      (let ((cursor (make-marker)))
+        (mistty-mod-render term (point-min) (point-max) cursor)
+        (should
+         (equal
+          (concat
+           "0                   \n"
+           "1                   \n"
+           "2                   \n"
+           "3                   \n"
+           "4                   \n"
+           "5                   \n"
+           "6                   \n"
+           "7                   \n"
+           "8                   \n"
+           "9                   \n")
+          (mistty-test-content :trim nil)))
+
+        (mistty-mod-process-bytes term (vconcat "\r\n10"))
+        (mistty-mod-process-bytes term (vconcat "\r\n11"))
+
+        ;; There's no scrollback to write
+        (goto-char (point-min))
+        (should (equal 0 (mistty-mod-write-scrollback term)))
+        (mistty-mod-render term (point) (point-max) cursor)
+        (should
+         (equal
+          (concat
+           "2                   \n"
+           "3                   \n"
+           "4                   \n"
+           "5                   \n"
+           "6                   \n"
+           "7                   \n"
+           "8                   \n"
+           "9                   \n"
+           "10                  \n"
+           "11                  \n")
+          (mistty-test-content :trim nil)))
+
+        ))))

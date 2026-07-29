@@ -19,9 +19,31 @@ fn init(env: &Env) -> Result<Value<'_>> {
 }
 
 /// Create a virtual terminal wit the given dimensions WIDTH x HEIGHT.
+///
+/// If scrollback is enabled (not nil), the terminal will move when
+/// scrolling down, leaving scrollback lines behind it.
 #[defun(user_ptr)]
 fn make_vterm(_env: &Env, width: usize, height: usize) -> Result<VTerm> {
-    Ok(VTerm::new(width, height))
+    Ok(VTerm::new(width, height, false))
+}
+
+/// Tell the virtual terminal to track scrollback.
+///
+/// Scrollback must rendered at regular intervals using
+/// `mistty-mod-write-scrollback`.
+#[defun]
+fn enable_scrollback(term: &mut VTerm) -> Result<()> {
+    term.enable_scrollback();
+
+    Ok(())
+}
+
+/// Tell the virtual terminal to stop tracking scrollback.
+#[defun]
+fn disable_scrollback(term: &mut VTerm) -> Result<()> {
+    term.disable_scrollback();
+
+    Ok(())
 }
 
 /// Process BYTES coming from a pty and update the virtual terminal.

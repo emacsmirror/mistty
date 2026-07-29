@@ -25,12 +25,13 @@ pub struct VTerm {
 
 impl VTerm {
     /// Create a new terminal with the given dimensions
-    pub fn new(width: usize, height: usize) -> Self {
+    pub fn new(width: usize, height: usize, scrollback: bool) -> Self {
         let events = Rc::new(RefCell::new(VecDeque::new()));
         let acc = EventAccumulator {
             events: Rc::clone(&events),
         };
-        let config = Config::default();
+        let mut config = Config::default();
+        config.scrolling_history = 0; // call enable_scrollback to re-enable
         let inner = Term::new(config, &VTermDimensions::new(width, height), acc);
         let processor = Processor::new();
 
@@ -47,6 +48,14 @@ impl VTerm {
 
     pub fn inner_mut(&mut self) -> &mut Term<EventAccumulator> {
         &mut self.inner
+    }
+
+    pub fn enable_scrollback(&mut self) {
+        self.inner.grid_mut().update_history(100000);
+    }
+
+    pub fn disable_scrollback(&mut self) {
+        self.inner_mut().grid_mut().update_history(0);
     }
 
     /// Parse terminal data and update internal state
@@ -104,7 +113,6 @@ impl VTermDimensions {
 
 impl Dimensions for VTermDimensions {
     fn total_lines(&self) -> usize {
-        // TODO: add scrollback here if necessary
         self.height
     }
 
