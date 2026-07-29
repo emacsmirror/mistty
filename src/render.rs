@@ -50,6 +50,8 @@ emacs::use_symbols! {
     foreground_sym => ":foreground"
     background_sym => ":background"
     bold_sym => "bold"
+    put_text_property
+    term_line_wrap
 }
 
 /// Cell or text properties.
@@ -72,7 +74,7 @@ enum ToggleProperty {
     Bold,
     Italic,
     Underline,
-    // Wrapline,
+    Wrapline,
 }
 
 impl ToggleProperty {
@@ -82,6 +84,7 @@ impl ToggleProperty {
             ToggleProperty::Bold => Flags::BOLD,
             ToggleProperty::Italic => Flags::ITALIC,
             ToggleProperty::Underline => Flags::UNDERLINE,
+            ToggleProperty::Wrapline => Flags::WRAPLINE,
         }
     }
 
@@ -447,6 +450,12 @@ impl PropertyTracker {
                 }
                 RenderProperty::Toggle(ToggleProperty::Inverse) => {
                     env.call(add_face_text_property, (start, end, ansi_color_inverse))?;
+                }
+                RenderProperty::Toggle(ToggleProperty::Wrapline) => {
+                    // term_line_wrap isn't applied to the content of
+                    // the column the flag WRAPLINE appears, but to
+                    // the newline that follows.
+                    env.call(put_text_property, (start + 1, end, term_line_wrap, true))?;
                 }
             }
         }

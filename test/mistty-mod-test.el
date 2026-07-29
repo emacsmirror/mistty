@@ -457,3 +457,26 @@
           (mistty-test-content :trim nil)))
 
         ))))
+
+(ert-deftest mistty-mod-mark-line-wrap ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    ;; fill the screen
+    (mistty-mod-process-bytes
+     term (vconcat "\rBaa, baa, black sheep have you any wool?"))
+    (mistty-mod-process-bytes term (vconcat " Yes sir, yes, sir three bags full!"))
+    (mistty-mod-process-bytes term (vconcat "\r\nOne for the Master"))
+    (mistty-mod-process-bytes term (vconcat "\r\nand one for the Dame"))
+    (goto-char (point-min))
+    (ert-with-test-buffer ()
+      (let ((cursor (make-marker)))
+        (mistty-mod-render term (point-min) (point-max) cursor)
+        (should
+         (equal
+          (concat
+           "Baa, baa, black shee[\n]"
+           "p have you any wool?[\n]"
+           " Yes sir, yes, sir t[\n]"
+           "hree bags full!\n"
+           "One for the Master\n"
+           "and one for the Dame")
+          (mistty-test-content :show-property '(term-line-wrap t))))))))
