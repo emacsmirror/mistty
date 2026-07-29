@@ -33,6 +33,10 @@
   "Marker that tracks the cursor position, set by the last rendering
 operation.")
 
+(defvar-local mistty-direct--screen-top nil
+  "Marker that tracks the position of the top of the screen, following
+scrollback lines.")
+
 (defvar-keymap mistty-direct-mode-map
   :doc "Keymap of major mode MisTTY Direct"
   "RET" #'mistty-direct-send-self
@@ -70,8 +74,10 @@ process."
 	;; escape codes, so we need to see the raw output.  We will have to
 	;; do the decoding by hand on the parts that are made of chars.
 	(coding-system-for-read 'binary))
-    (setq mistty-direct--cursor (make-marker))
+    (setq mistty-direct--cursor (copy-marker (point-min)))
+    (setq mistty-direct--screen-top (copy-marker (point-min)))
     (setq mistty-direct--vterm (mistty-mod-make-vterm 80 24))
+    (mistty-mod-enable-scrollback mistty-direct--vterm)
     (let ((proc (apply #'start-file-process name (current-buffer)
                        ;; On Android, /bin doesn't exist, and the default shell is
                        ;; found as /system/bin/sh.
@@ -99,7 +105,11 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
         (pcase ev
           (`(pty-write ,data)
            (process-send-string proc data))))
-      (mistty-mod-render-damaged vterm (point-min) (point-max) mistty-direct--cursor)
+      (save-excursion
+         (goto-char mistty-direct--screen-top)
+         (unless (zerop (mistty-mod-write-scrollback vterm))
+           (set-marker mistty-direct--screen-top (point)))
+         (mistty-mod-render-damaged vterm (point) (point-max) mistty-direct--cursor))
       (goto-char mistty-direct--cursor))))
 
 (defun mistty-direct--sentinel (proc _msg)
