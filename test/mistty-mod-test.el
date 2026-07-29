@@ -458,25 +458,28 @@
 
         ))))
 
-(ert-deftest mistty-mod-mark-line-wrap ()
+(ert-deftest mistty-mod-scrollback-not-wrapped ()
   (let ((term (mistty-mod-make-vterm 20 10)))
-    ;; fill the screen
+    (mistty-mod-enable-scrollback term)
+
+    ;; The first line cannot fit into 10 columns, it'll be split by
+    ;; the terminal.
     (mistty-mod-process-bytes
      term (vconcat "\rBaa, baa, black sheep have you any wool?"))
     (mistty-mod-process-bytes term (vconcat " Yes sir, yes, sir three bags full!"))
     (mistty-mod-process-bytes term (vconcat "\r\nOne for the Master"))
     (mistty-mod-process-bytes term (vconcat "\r\nand one for the Dame"))
-    (goto-char (point-min))
+
+    ;; fill the screen, moving the wrapped line into scrollback
+    (dotimes (i 10)
+      (mistty-mod-process-bytes term (vconcat (format "\r\n%d" i))))
+
     (ert-with-test-buffer ()
-      (let ((cursor (make-marker)))
-        (mistty-mod-render term (point-min) (point-max) cursor)
-        (should
-         (equal
-          (concat
-           "Baa, baa, black shee[\n]"
-           "p have you any wool?[\n]"
-           " Yes sir, yes, sir t[\n]"
-           "hree bags full!\n"
-           "One for the Master\n"
-           "and one for the Dame")
-          (mistty-test-content :show-property '(term-line-wrap t))))))))
+      (goto-char (point-min))
+      (should (equal 6 (mistty-mod-write-scrollback term)))
+      (equal
+       (concat
+        "Baa, baa, black sheep have you any wool? Yes sir, yes sir, three bags full!\n"
+        "One for the Master\n"
+        "and one for the Dame")
+       (mistty-test-content)))))

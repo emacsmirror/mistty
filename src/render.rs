@@ -99,7 +99,9 @@ impl ToggleProperty {
 /// terminal to the current buffer at the current point and leaves the
 /// point at the end of the written lines.
 ///
-/// It returns the number of lines written.
+/// It returns the number of terminal lines written. This might be
+/// larger that the number of lines actually written to the buffer if
+/// some lines were wrapped.
 ///
 /// If scrollback is disabled on the virtual terminal, this call
 /// always returns 0 and does nothing.
@@ -117,6 +119,7 @@ pub fn write_scrollback(env: &Env, term: &mut VTerm) -> Result<usize> {
         grid.iter_from(Point::new(topmost_line - 1, grid.last_column()))
             .take_while(|c| c.point.line.0 < 0),
         None,
+        false, // merge wrapped lines
     )?;
     term.inner_mut().grid_mut().clear_history();
 
@@ -144,7 +147,7 @@ pub fn render(
 
     env.call(goto_char, (term_start,))?;
     env.call(delete_region, (term_start, term_end))?;
-    render_region(env, term, content.display_iter, Some(&mut cursor_pos))?;
+    render_region(env, term, content.display_iter, Some(&mut cursor_pos), true)?;
 
     if let Some(cursor_pos) = cursor_pos {
         env.call(set_marker, (cursor_marker, cursor_pos))?;
@@ -222,6 +225,7 @@ pub fn render_damaged(
                         cell: c,
                     }),
                 Some(&mut cursor_pos),
+                true,
             )?;
         }
     } else {
@@ -232,6 +236,7 @@ pub fn render_damaged(
             term,
             term.inner().renderable_content().display_iter,
             Some(&mut cursor_pos),
+            true,
         )?;
     }
 
@@ -257,6 +262,7 @@ pub fn render_region<'a, I>(
     term: &'a VTerm,
     mut iter: I,
     mut cursor_pos: Option<&mut Option<BufferPos>>,
+    wrap_lines: bool,
 ) -> Result<()>
 where
     I: Iterator<Item = Indexed<&'a Cell>>,
@@ -272,7 +278,9 @@ where
         let startlen = as_string.len();
         append_cell_to_string(&cur.cell, &mut as_string);
 
-        if cur.point.column == screen_columns - 1 {
+        if cur.point.column == screen_columns - 1
+            && (wrap_lines || !cur.flags.contains(Flags::WRAPLINE))
+        {
             as_string.push('\n');
         }
 
