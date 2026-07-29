@@ -40,4 +40,6 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Test the project
-      run: 'eldev -p -dtT test --ci || eldev -p -dtT test --ci :failed'
+      run: 'eldev -c -dtT test --ci || eldev -c -dtT test --ci :failed'
+      # TODO: test from package using eldev -c This requires solving the
+      # problem of how to package a module.
