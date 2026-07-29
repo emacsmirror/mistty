@@ -108,13 +108,12 @@ pub fn write_scrollback(env: &Env, term: &mut VTerm) -> Result<usize> {
     if history_size == 0 {
         return Ok(0);
     }
-    let mut _ignored = None; // TODO: make arg of render_region optional
     render_region(
         env,
         term,
         grid.iter_from(Point::new(topmost_line - 1, grid.last_column()))
             .take_while(|c| c.point.line.0 < 0),
-        &mut _ignored,
+        None,
     )?;
     term.inner_mut().grid_mut().clear_history();
 
@@ -142,7 +141,7 @@ pub fn render(
 
     env.call(goto_char, (term_start,))?;
     env.call(delete_region, (term_start, term_end))?;
-    render_region(env, term, content.display_iter, &mut cursor_pos)?;
+    render_region(env, term, content.display_iter, Some(&mut cursor_pos))?;
 
     if let Some(cursor_pos) = cursor_pos {
         env.call(set_marker, (cursor_marker, cursor_pos))?;
@@ -219,7 +218,7 @@ pub fn render_damaged(
                         point: Point::new(line, left_col + i),
                         cell: c,
                     }),
-                &mut cursor_pos,
+                Some(&mut cursor_pos),
             )?;
         }
     } else {
@@ -229,7 +228,7 @@ pub fn render_damaged(
             env,
             term,
             term.inner().renderable_content().display_iter,
-            &mut cursor_pos,
+            Some(&mut cursor_pos),
         )?;
     }
 
@@ -248,13 +247,13 @@ pub fn render_damaged(
 /// `term_end`)] defines the region of the buffer to be replaced with
 /// the content of `iter`.
 ///
-/// If `iter` contains the cursor, the function sets `cursor_pos`,
-/// otherwise it leaves it alone.
+/// If `iter` contains the cursor and `cursor_pos` is `Some`, the
+/// function sets the cursor position, otherwise it leaves it alone.
 pub fn render_region<'a, I>(
     env: &Env,
     term: &'a VTerm,
     mut iter: I,
-    cursor_pos: &mut Option<BufferPos>,
+    mut cursor_pos: Option<&mut Option<BufferPos>>,
 ) -> Result<()>
 where
     I: Iterator<Item = Indexed<&'a Cell>>,
@@ -276,7 +275,9 @@ where
 
         // Have we found the cursor? If yes, we now know its position.
         if cur.point == cursor_point {
-            *cursor_pos = Some(pos);
+            if let Some(cursor_pos) = &mut cursor_pos {
+                **cursor_pos = Some(pos);
+            }
         }
 
         // track property changes
