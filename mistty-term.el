@@ -931,12 +931,11 @@ This function returns the newly-created buffer."
       (setq-local mistty--prompt-cell (mistty--make-prompt-cell))
       (setq-local scroll-margin 0)
 
-      ;; This makes sure the obsolete option
+      ;; This makes sure the obsolete option, if it still exists,
       ;; term-suppress-hard-newline is not set, as MisTTY relies on
       ;; term.el inserting fake newlines marked with term-line-wrap.
-      (let ((var 'term-suppress-hard-newline))
-        (when (and (boundp var) (symbol-value var))
-          (setf (buffer-local-value var (current-buffer)) nil)))
+      (with-suppressed-warnings ((obsolete term-suppress-hard-newline))
+        (setq-local term-suppress-hard-newline nil))
 
       (mistty-term--exec program args)
       (let ((proc (get-buffer-process term-buffer)))
