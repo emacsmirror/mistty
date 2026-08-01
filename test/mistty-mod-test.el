@@ -668,3 +668,149 @@
     (should-error (mistty-mod-count-unwrapped-lines term -1 1))
     (should-error (mistty-mod-count-unwrapped-lines term 0 11))
     (should-error (mistty-mod-count-unwrapped-lines term 2 1))))
+
+(ert-deftest mistty-mod-scrollback-wrapped-lines ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    (mistty-mod-process-bytes
+     term (vconcat "\rBaa, baa, black sheep have you any wool?"))
+    (mistty-mod-process-bytes term (vconcat " Yes sir, yes, sir three bags full!"))
+    (mistty-mod-process-bytes term (vconcat "\r\nOne for the Master"))
+    (mistty-mod-process-bytes term (vconcat "\r\nand one for the Dame"))
+
+    (mistty-mod-enable-scrollback term)
+    (ert-with-test-buffer ()
+      (let ((cursor (copy-marker (point-min)))
+            (screen-top (copy-marker (point-min))))
+        (goto-char screen-top)
+        (mistty-mod-write-scrollback term)
+        (set-marker screen-top (point))
+        (mistty-mod-render term screen-top (point-max) cursor)
+        (dotimes (i 4)
+          (mistty-mod-process-bytes term (vconcat (format "\r\n%d" i)))
+          (goto-char screen-top)
+          (mistty-mod-write-scrollback term)
+          (set-marker screen-top (point))
+          (mistty-mod-render term screen-top (point-max) cursor))
+        (should
+         (equal
+          (concat
+           "<>Baa, baa, black shee\n"
+           "p have you any wool?\n"
+           " Yes sir, yes, sir t\n"
+           "hree bags full!\n"
+           "One for the Master\n"
+           "and one for the Dame\n"
+           "0\n"
+           "1\n"
+           "2\n"
+           "3")
+          (mistty-test-content :show screen-top)))
+
+        (mistty-mod-process-bytes term (vconcat "\r\n4"))
+        (goto-char screen-top)
+        (mistty-mod-write-scrollback term)
+        (set-marker screen-top (point))
+        (mistty-mod-render term screen-top (point-max) cursor)
+        (should
+         (equal
+          (concat
+           "Baa, baa, black shee\n"
+           ;; the scrollback line above must end with a newline, even
+           ;; tough it's wrapped, because the next line is a terminal
+           ;; line.
+           "<>p have you any wool?\n"
+           " Yes sir, yes, sir t\n"
+           "hree bags full!\n"
+           "One for the Master\n"
+           "and one for the Dame\n"
+           "0\n"
+           "1\n"
+           "2\n"
+           "3\n"
+           "4")
+          (mistty-test-content :show screen-top)))
+
+        (mistty-mod-process-bytes term (vconcat "\r\n5"))
+        (goto-char screen-top)
+        (mistty-mod-write-scrollback term)
+        (set-marker screen-top (point))
+        (mistty-mod-render term screen-top (point-max) cursor)
+        (should
+         (equal
+          (concat
+           "Baa, baa, black sheep have you any wool?\n"
+           "<> Yes sir, yes, sir t\n"
+           "hree bags full!\n"
+           "One for the Master\n"
+           "and one for the Dame\n"
+           "0\n"
+           "1\n"
+           "2\n"
+           "3\n"
+           "4\n"
+           "5")
+          (mistty-test-content :show screen-top)))
+
+        (mistty-mod-process-bytes term (vconcat "\r\n6"))
+        (goto-char screen-top)
+        (mistty-mod-write-scrollback term)
+        (set-marker screen-top (point))
+        (mistty-mod-render term screen-top (point-max) cursor)
+        (should
+         (equal
+          (concat
+           "Baa, baa, black sheep have you any wool? Yes sir, yes, sir t\n"
+           "<>hree bags full!\n"
+           "One for the Master\n"
+           "and one for the Dame\n"
+           "0\n"
+           "1\n"
+           "2\n"
+           "3\n"
+           "4\n"
+           "5\n"
+           "6")
+          (mistty-test-content :show screen-top)))
+
+        (mistty-mod-process-bytes term (vconcat "\r\n7"))
+        (goto-char screen-top)
+        (mistty-mod-write-scrollback term)
+        (set-marker screen-top (point))
+        (mistty-mod-render term screen-top (point-max) cursor)
+        (should
+         (equal
+          (concat
+           "Baa, baa, black sheep have you any wool? Yes sir, yes, sir three bags full!\n"
+           "<>One for the Master\n"
+           "and one for the Dame\n"
+           "0\n"
+           "1\n"
+           "2\n"
+           "3\n"
+           "4\n"
+           "5\n"
+           "6\n"
+           "7")
+          (mistty-test-content :show screen-top)))
+
+        (mistty-mod-process-bytes term (vconcat "\r\n8"))
+        (goto-char screen-top)
+        (mistty-mod-write-scrollback term)
+        (set-marker screen-top (point))
+        (mistty-mod-render term screen-top (point-max) cursor)
+        (should
+         (equal
+          (concat
+           "Baa, baa, black sheep have you any wool? Yes sir, yes, sir three bags full!\n"
+           "One for the Master\n"
+           "<>and one for the Dame\n"
+           "0\n"
+           "1\n"
+           "2\n"
+           "3\n"
+           "4\n"
+           "5\n"
+           "6\n"
+           "7\n"
+           "8")
+          (mistty-test-content :show screen-top)))))))

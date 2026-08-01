@@ -22,6 +22,7 @@ pub struct VTerm {
     inner: Term<EventAccumulator>,
     processor: Processor,
     events: Rc<RefCell<VecDeque<Event>>>,
+    start_with_wrapped_line: bool,
 }
 
 impl VTerm {
@@ -42,6 +43,7 @@ impl VTerm {
             inner,
             processor,
             events,
+            start_with_wrapped_line: false,
         }
     }
 
@@ -59,6 +61,27 @@ impl VTerm {
 
     pub fn disable_scrollback(&mut self) {
         self.inner_mut().grid_mut().update_history(0);
+    }
+
+    /// Clear history, normally after having written scrollback to the
+    /// buffer.
+    pub fn clear_history(&mut self) {
+        let grid = self.inner_mut().grid_mut();
+        if grid.topmost_line() == 0 {
+            return;
+        }
+        let wrapped = grid[Line(-1)][grid.last_column()]
+            .flags
+            .contains(Flags::WRAPLINE);
+        grid.clear_history();
+
+        self.start_with_wrapped_line = wrapped;
+    }
+
+    /// Check whether the last line cleared by the previous call to
+    /// `clear_history` ended within a line that was wrapped.
+    pub fn start_with_wrapped_line(&self) -> bool {
+        self.start_with_wrapped_line
     }
 
     /// Return the first line of scrollback, or the top of the screen.

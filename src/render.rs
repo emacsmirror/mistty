@@ -16,6 +16,7 @@ use strum_macros::EnumIter;
 
 emacs::use_functions! {
     add_face_text_property
+    delete_char
     delete_region
     face_foreground
     face_background
@@ -113,6 +114,15 @@ pub fn write_scrollback(env: &Env, term: &mut VTerm) -> Result<usize> {
     if history_size == 0 {
         return Ok(0);
     }
+    if term.start_with_wrapped_line() {
+        let c = env.call("char-before", [])?;
+        if c.is_not_nil() {
+            let c: i32 = c.into_rust()?;
+            if c == 10 {
+                env.call(delete_char, (-1,))?;
+            }
+        }
+    }
     render_region(
         env,
         term,
@@ -121,7 +131,11 @@ pub fn write_scrollback(env: &Env, term: &mut VTerm) -> Result<usize> {
         None,
         false, // merge wrapped lines
     )?;
-    term.inner_mut().grid_mut().clear_history();
+    term.clear_history();
+
+    if term.start_with_wrapped_line() {
+        env.call(insert, ("\n",))?;
+    }
 
     return Ok(history_size);
 }
