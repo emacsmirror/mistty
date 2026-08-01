@@ -34,7 +34,7 @@
 (ert-deftest mistty-mod-render ()
   (let ((term (mistty-mod-make-vterm 20 10)))
     ;; fill the screen
-    (mistty-mod-process-bytes term (vconcat "\r0"))
+    (mistty-mod-process-bytes term (vconcat "\r0 "))
     (dotimes (i 9)
       (mistty-mod-process-bytes term (vconcat (format "\r\n%d" (1+ i)))))
     (ert-with-test-buffer ()
@@ -248,6 +248,10 @@
          (equal
            "a\U0001F7E7square!"
           (mistty-test-content)))
+        (should (equal "a" (mistty-mod-display-substring term 0 0 0 0)))
+        (should (equal "a\U0001F7E7" (mistty-mod-display-substring term 0 0 0 1)))
+        (should (equal "a\U0001F7E7" (mistty-mod-display-substring term 0 0 0 2)))
+        (should (equal "a\U0001F7E7s" (mistty-mod-display-substring term 0 0 0 3)))
 
         ;; The following makes sure that the text properties are
         ;; applied to the right portion of the text, despite the
@@ -483,3 +487,184 @@
         "One for the Master\n"
         "and one for the Dame")
        (mistty-test-content)))))
+
+(ert-deftest mistty-mod-top-bottom-lines ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    (mistty-mod-enable-scrollback term)
+
+    (should (equal 0 (mistty-mod-topmost-line term)))
+    (should (equal 9 (mistty-mod-bottommost-line term)))
+    (should (equal 19 (mistty-mod-last-column term)))
+
+    ;; fill the screen
+    (mistty-mod-process-bytes term (vconcat "\r0"))
+    (dotimes (i 9)
+      (mistty-mod-process-bytes term (vconcat (format "\r\n%d" (1+ i)))))
+
+    (should (equal 0 (mistty-mod-topmost-line term)))
+    (should (equal 9 (mistty-mod-bottommost-line term)))
+
+    (mistty-mod-process-bytes term (vconcat "\r\n10"))
+    (mistty-mod-process-bytes term (vconcat "\r\n11"))
+    (mistty-mod-process-bytes term (vconcat "\r\n12"))
+
+    (should (equal -3 (mistty-mod-topmost-line term)))
+    (should (equal 9 (mistty-mod-bottommost-line term)))
+
+    (ert-with-test-buffer ()
+      (mistty-mod-write-scrollback term)
+
+    (should (equal 0 (mistty-mod-topmost-line term)))
+    (should (equal 9 (mistty-mod-bottommost-line term)))
+
+    (mistty-mod-process-bytes term (vconcat "\r\n13"))
+    (should (equal -1 (mistty-mod-topmost-line term)))
+    (should (equal 9 (mistty-mod-bottommost-line term))))))
+
+(ert-deftest mistty-mod-cursor-point ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    (should (equal '(0 . 0) (mistty-mod-cursor-point term)))
+    (mistty-mod-process-bytes term (vconcat "test"))
+    (should (equal '(0 . 4) (mistty-mod-cursor-point term)))
+    (mistty-mod-process-bytes term (vconcat "\e[2D"))
+    (should (equal '(0 . 2) (mistty-mod-cursor-point term)))
+    (mistty-mod-process-bytes term (vconcat "\e[3B\e[5C"))
+    (should (equal '(3 . 7) (mistty-mod-cursor-point term)))))
+
+(ert-deftest mistty-mod-count-chars ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    ;; full empty line
+    (should (equal 20 (mistty-mod-count-chars term 0 0 0 20)))
+    ;; full empty screen, 10 lines of 20 columns + newline
+    (should (equal 210 (mistty-mod-count-chars term 0 0 10 0)))
+
+    ;; line 0: regular 1-byte chars in UTF-8
+    (mistty-mod-process-bytes term (vconcat "baa, baa\r\n"))
+
+    ;; line 1: regular 1-byte chars in UTF-8
+    (mistty-mod-process-bytes term (vconcat "black sheep\r\n"))
+
+    ;; line 2: wide character: character takes 2 columns
+    (mistty-mod-process-bytes term (vconcat ".\xF0\x9F\x9F\xA7....\r\n"))
+
+    ;; line 3: combining characters: columns 2 and 4 display 2 chars
+    (mistty-mod-process-bytes term (vconcat "l'e\xcc\x81te\xcc\x81.\r\n"))
+
+    ;; line 4: zerowidth character: column 1 and 3 display 2 chars
+    (mistty-mod-process-bytes term (vconcat "--\xe2\x80\x8b--\xe2\x80\x8b---\r\n"))
+
+    ;; simple case
+    (should (equal 5 (mistty-mod-count-chars term 0 0 0 5)))
+    ;; empty
+    (should (equal 0 (mistty-mod-count-chars term 0 0 0 0)))
+    ;; full line, without newline
+    (should (equal 20 (mistty-mod-count-chars term 0 0 0 20)))
+    ;; full line plus newline
+    (should (equal 21 (mistty-mod-count-chars term 0 0 1 0)))
+    ;; partial line start
+    (should (equal 16 (mistty-mod-count-chars term 0 5 1 0)))
+    ;; partial line end
+    (should (equal 26 (mistty-mod-count-chars term 0 0 1 5)))
+    ;; multiple lines, with newlines (2 lines + 2 newlines)
+    (should (equal 62 (mistty-mod-count-chars term 0 0 3 0)))
+
+    ;; column 1 on line 2, containing a wide character, count as one
+    ;; character.
+    (should (equal 1 (mistty-mod-count-chars term 2 0 2 1)))
+    (should (equal 2 (mistty-mod-count-chars term 2 0 2 2)))
+    (should (equal 2 (mistty-mod-count-chars term 2 0 2 3)))
+    (should (equal 3 (mistty-mod-count-chars term 2 0 2 4)))
+    (should (equal 20 (mistty-mod-count-chars term 2 0 3 0)))
+
+    ;; line 3 contains columns that display multiple characters
+    (should (equal 1 (mistty-mod-count-chars term 3 0 3 1)))
+    (should (equal 2 (mistty-mod-count-chars term 3 0 3 2)))
+    (should (equal 4 (mistty-mod-count-chars term 3 0 3 3)))
+    (should (equal 5 (mistty-mod-count-chars term 3 0 3 4)))
+    (should (equal 7 (mistty-mod-count-chars term 3 0 3 5)))
+    (should (equal 23 (mistty-mod-count-chars term 3 0 4 0)))
+
+    ;; line 4 contains two zerowidth characters
+    (should (equal 1 (mistty-mod-count-chars term 4 0 4 1)))
+    (should (equal 3 (mistty-mod-count-chars term 4 0 4 2)))
+    (should (equal 4 (mistty-mod-count-chars term 4 0 4 3)))
+    (should (equal 6 (mistty-mod-count-chars term 4 0 4 4)))
+    (should (equal 7 (mistty-mod-count-chars term 4 0 4 5)))
+    (should (equal 23 (mistty-mod-count-chars term 4 0 5 0)))))
+
+(ert-deftest mistty-mod-count-chars-invalid ()
+    (let ((term (mistty-mod-make-vterm 20 10)))
+      ;; end < start
+      (should-error (mistty-mod-count-chars term 1 0 0 5))
+      ;; invalid start line
+      (should-error (mistty-mod-count-chars term -1 0 0 1))
+      ;; invalid start column
+      (should-error (mistty-mod-count-chars term 0 20 1 0))
+
+      ;; invalid end line
+      (should-error (mistty-mod-count-chars term 0 0 10 1))
+      (should-error (mistty-mod-count-chars term 0 0 11 0))))
+
+(ert-deftest mistty-mod-count-chars-in-scrollback ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    ;; negative line are ok when there is scrollback data
+    (mistty-mod-enable-scrollback term)
+    (mistty-mod-process-bytes term (vconcat "0\r\n"))
+    (dotimes (i 20)
+      (mistty-mod-process-bytes term (vconcat (format "\r\n%d" (1+ i)))))
+
+    (should (equal 21 (mistty-mod-count-chars term -2 0 -1 0)))))
+
+
+(ert-deftest mistty-mod-count-unwrapped-lines ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    (mistty-mod-process-bytes
+     term (vconcat "\rBaa, baa, black sheep have you any wool?"))
+    (mistty-mod-process-bytes term (vconcat " Yes sir, yes, sir three bags full!"))
+    (mistty-mod-process-bytes term (vconcat "\r\nOne for the Master"))
+    (mistty-mod-process-bytes term (vconcat "\r\nand one for the Dame"))
+
+    ;; The first real line takes 4 terminal lines. The two lines after
+    ;; that each take one terminal line.
+    (should (equal 0 (mistty-mod-count-unwrapped-lines term 0 1)))
+    (should (equal 0 (mistty-mod-count-unwrapped-lines term 0 2)))
+    (should (equal 0 (mistty-mod-count-unwrapped-lines term 0 3)))
+    (should (equal 1 (mistty-mod-count-unwrapped-lines term 0 4)))
+    (should (equal 2 (mistty-mod-count-unwrapped-lines term 0 5)))
+
+    ;; The real newline is at the end of line 3
+    (should (equal 0 (mistty-mod-count-unwrapped-lines term 1 2)))
+    (should (equal 1 (mistty-mod-count-unwrapped-lines term 3 4)))
+    (should (equal 2 (mistty-mod-count-unwrapped-lines term 3 5)))
+
+    ;; The last line is a real line
+    (should (equal 3 (mistty-mod-count-unwrapped-lines term 0 6)))
+
+    ;; Empty lines are all real
+    (should (equal 3 (mistty-mod-count-unwrapped-lines term 6 9)))
+
+    ;; The last line is real
+    (should (equal 1 (mistty-mod-count-unwrapped-lines term 9 10)))))
+
+(ert-deftest mistty-mod-count-unwrapped-lines-in-scrollback ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    (mistty-mod-process-bytes
+     term (vconcat "\rBaa, baa, black sheep have you any wool?"))
+    (mistty-mod-process-bytes term (vconcat " Yes sir, yes, sir three bags full!"))
+    (mistty-mod-process-bytes term (vconcat "\r\nOne for the Master"))
+    (mistty-mod-process-bytes term (vconcat "\r\nand one for the Dame"))
+
+    ;; fill the screen and put everything into scrollback
+    (mistty-mod-enable-scrollback term)
+    (dotimes (i 10)
+      (mistty-mod-process-bytes term (vconcat (format "\r\n%d" i))))
+
+    ;; count the lines in scrollback
+    (should (equal 3 (mistty-mod-count-unwrapped-lines term -6 0)))))
+
+(ert-deftest mistty-mod-count-unwrapped-lines-invalid ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    (should (equal 10 (mistty-mod-count-unwrapped-lines term 0 10)))
+    (should-error (mistty-mod-count-unwrapped-lines term -1 1))
+    (should-error (mistty-mod-count-unwrapped-lines term 0 11))
+    (should-error (mistty-mod-count-unwrapped-lines term 2 1))))

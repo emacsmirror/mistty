@@ -199,31 +199,23 @@ pub fn render_damaged(
         // column indicating the start of the damage on the line. This
         // is important for the stored cursor position to make sense.
 
+        let grid = term.inner().grid();
         for (line, left_col) in all_damage {
             env.call(goto_char, (term_start,))?;
             let line_pos = BufferPos::bol(env, line)?;
+            let row = &grid[line];
 
-            let mut damage_start = line_pos;
-            let grid_line = &term.inner().grid()[line];
-            if left_col > 0 {
-                for cell in grid_line[Column(0)..left_col].iter() {
-                    damage_start += cell_char_count(cell);
-                }
-            }
-
+            let damage_start = line_pos + count_chars_in_line(&row[Column(0)..left_col]) as usize;
             env.call(goto_char, (damage_start,))?;
             let next_line_pos = BufferPos::bol(env, Line(1))?;
             env.call(delete_region, (damage_start, next_line_pos))?;
             render_region(
                 env,
                 term,
-                grid_line[left_col..]
-                    .iter()
-                    .enumerate()
-                    .map(|(i, c)| Indexed {
-                        point: Point::new(line, left_col + i),
-                        cell: c,
-                    }),
+                row[left_col..].iter().enumerate().map(|(i, c)| Indexed {
+                    point: Point::new(line, left_col + i),
+                    cell: c,
+                }),
                 Some(&mut cursor_pos),
                 true,
             )?;
@@ -304,13 +296,22 @@ where
     Ok(())
 }
 
+fn count_chars_in_line(cell_range: &[Cell]) -> usize {
+    let mut buf = String::with_capacity(cell_range.len());
+    for cell in cell_range {
+        append_cell_to_string(cell, &mut buf);
+    }
+
+    buf.chars().count()
+}
+
 /// Append the content of a cell to the give string.
 ///
 /// A cell may contain more than one character, as long as they all
 /// fit into one column. A cell may also contain wide characters. Such
 /// cells are followed or preceded by columns containing spacers
 /// (Alacritty takes care of that)
-fn append_cell_to_string(cell: &Cell, dest: &mut String) {
+pub fn append_cell_to_string(cell: &Cell, dest: &mut String) {
     if cell
         .flags
         .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER)
@@ -334,14 +335,6 @@ fn append_cell_to_string(cell: &Cell, dest: &mut String) {
     for c in cell.zerowidth().into_iter().flatten() {
         dest.push(*c);
     }
-}
-
-/// Count the number of characters in a cell, for computing BufferPos.
-fn cell_char_count(cell: &Cell) -> usize {
-    let mut str = String::with_capacity(4);
-    append_cell_to_string(cell, &mut str);
-
-    str.chars().count()
 }
 
 /// Build a string with enough capacity for storing the content of

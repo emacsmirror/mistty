@@ -2,11 +2,17 @@ mod render;
 mod types;
 mod vterm;
 
-use emacs::{Env, IntoLisp, Result, Value, Vector, defun};
-
 use crate::vterm::VTerm;
+use alacritty_terminal::{
+    grid::Dimensions,
+    index::{Column, Line, Point},
+};
+use emacs::{Env, IntoLisp, Result, Value, Vector, defun};
+use std::{fmt::Debug, ops::RangeBounds};
 
 emacs::plugin_is_GPL_compatible!();
+
+emacs::use_symbols! {args_out_of_range}
 
 #[emacs::module(
     name = "mistty-mod",
@@ -24,7 +30,7 @@ fn init(env: &Env) -> Result<Value<'_>> {
 /// scrolling down, leaving scrollback lines behind it.
 #[defun(user_ptr)]
 fn make_vterm(_env: &Env, width: usize, height: usize) -> Result<VTerm> {
-    Ok(VTerm::new(width, height, false))
+    Ok(VTerm::new(width, height))
 }
 
 /// Tell the virtual terminal to track scrollback.
@@ -66,10 +72,207 @@ fn process_bytes<'a>(env: &'a Env, term: &mut VTerm, bytes: Vector) -> Result<Va
     term.handle_events(env)
 }
 
-/// Return the content of the virtual terminal as a string.
+/// Return the content of the virtual terminal as a string with no
+/// properties, without wapped lines.
 #[defun]
-fn display_string<'a>(env: &'a Env, term: &VTerm) -> Result<Value<'a>> {
-    let str = term.display_string();
+fn display_string<'a>(term: &VTerm) -> Result<String> {
+    Ok(term.display_substring(
+        Point::new(Line(0), Column(0)),
+        Point::new(term.bottommost_line(), term.last_column()),
+    ))
+}
 
-    str.into_lisp(env)
+/// Return a subset of the content of the virtual terminal as a string
+/// with no properties, without wapped lines.
+///
+/// This returns the content of the range [start, end).
+#[defun]
+fn display_substring<'a>(
+    env: &'a Env,
+    term: &VTerm,
+    start_line: i32,
+    start_col: i32,
+    end_line: i32,
+    end_col: i32,
+) -> Result<Value<'a>> {
+    term.display_substring(
+        point_range_check(env, start_line, start_col, term)?,
+        point_range_boundary_check(env, end_line, end_col, term)?,
+    )
+    .into_lisp(env)
+}
+
+/// Return the number of the topmost line in the virtual terminal.
+///
+/// The screen first line is always 0 and scrollback lines are
+/// negatives.
+///
+/// This will always return 0 right after a call to
+/// `mistty-mod-write-scrollback`.
+#[defun]
+fn topmost_line(term: &VTerm) -> Result<i32> {
+    Ok(term.topmost_line().0)
+}
+
+/// Return the number of the bottom most line in the virtual terminal.
+///
+/// This is usually the screen bottom, so screen_height -1.
+#[defun]
+fn bottommost_line(term: &VTerm) -> Result<i32> {
+    Ok(term.bottommost_line().0)
+}
+
+/// Return the number of the last valid column (screen width -1).
+#[defun]
+fn last_column(term: &VTerm) -> Result<usize> {
+    Ok(term.last_column().0)
+}
+
+/// Return the position of the cursor as (LINE, COLUMN).
+///
+/// LINE is a terminal line number betwen `mistty-mod-topmost-line`
+/// and `mistty-mod-bottommost-line`, with 0 being the terminal screen
+/// top.
+///
+/// COLUMN is a column number between 0 and `mistty-mod-last-column`.
+#[defun]
+fn cursor_point<'a>(env: &'a Env, term: &VTerm) -> Result<Value<'a>> {
+    let point = term.cursor_point();
+
+    env.cons(point.line.0, point.column.0)
+}
+
+/// Return the character count within [start, end).
+///
+/// This can be used to match column number to buffer positions, but
+/// be aware that char distance in the virtual terminal only matches
+/// the buffer just after rendering, and before calling
+/// `mistty-mod-process-bytes'.
+///
+/// The newline at the end of a column is counted.
+#[defun]
+fn count_chars(
+    env: &Env,
+    term: &VTerm,
+    start_line: i32,
+    start_col: i32,
+    end_line: i32,
+    end_col: i32,
+) -> Result<usize> {
+    let start = point_range_check(env, start_line, start_col, term)?;
+    let end = point_range_boundary_check(env, end_line, end_col, term)?;
+    if start > end {
+        return env.signal(
+            args_out_of_range,
+            (format!(
+                "range start comes before end: [{start:?}, {end:?})"
+            ),),
+        );
+    }
+    Ok(term.count_chars(start, end))
+}
+
+/// Return the number of unwrapped line separating `start` from
+/// `end`.
+///
+/// The lines passed to this function are terminal line, with the
+/// topmost line of the terminal being 0. If there are scrollback
+/// lines not consumed by `mistty-mod-write-scrollback` yet, they are
+/// accessible using negative line numbers. The line must be between
+/// `mistty-mod-topmost-line` and `mistty-mod-bottmmmost-line`.
+///
+/// This counts the number of newlines not marked as line wrap
+/// between `start` and `end`.
+///
+/// Be aware that unwrapped line distance in the virtual terminal only
+/// matches the buffer just after rendering, and before calling
+/// `mistty-mod-process-bytes'.
+#[defun]
+fn count_unwrapped_lines(env: &Env, term: &VTerm, start: i32, end: i32) -> Result<usize> {
+    let start = line_range_check(env, start, term)?;
+    let end = line_range_boundary_check(env, end, term)?;
+    if start > end {
+        return env.signal(
+            args_out_of_range,
+            (format!(
+                "line range start comes before end: [{start:?}, {end:?})"
+            ),),
+        );
+    }
+
+    Ok(term.count_unwrapped_lines(start, end))
+}
+
+/// Create a `Column` that's guaranteed to be a valid column for the
+/// terminal that is inside the range [0, screen_columns).
+fn column_range_check(env: &Env, val: i32, term: &VTerm) -> Result<Column> {
+    range_check(env, "column", val, 0..(term.inner().columns() as i32)).map(|c| Column(c as usize))
+}
+
+/// Create a `Column` that's valid for a boundary, that is, within
+/// the range [0, screen_columns].
+fn column_range_boundary_check(env: &Env, val: i32, term: &VTerm) -> Result<Column> {
+    range_check(env, "column", val, 0..=(term.inner().columns() as i32)).map(|c| Column(c as usize))
+}
+
+/// Create a `Column` that's guaranteed to be a valid line for the
+/// terminal that is inside the range [topmost_line, bottommost_line].
+fn line_range_check(env: &Env, val: i32, term: &VTerm) -> Result<Line> {
+    range_check(
+        env,
+        "line",
+        val,
+        term.topmost_line().0..=term.bottommost_line().0,
+    )
+    .map(|c| Line(c))
+}
+
+/// Create a `Column` that's guaranteed to be a valid line for the
+/// terminal that is inside the range [topmost_line, bottommost_line+1].
+pub fn line_range_boundary_check(env: &Env, val: i32, term: &VTerm) -> Result<Line> {
+    range_check(
+        env,
+        "line",
+        val,
+        term.topmost_line().0..=term.inner().screen_lines() as i32,
+    )
+    .map(|c| Line(c))
+}
+
+/// Create a `Point` that's guaranteed to be a valid point within the
+/// terminal, possibly in the scrollback area.
+fn point_range_check(env: &Env, l: i32, c: i32, term: &VTerm) -> Result<Point> {
+    Ok(Point::new(
+        line_range_check(env, l, term)?,
+        column_range_check(env, c, term)?,
+    ))
+}
+
+/// Create a `Point` that's guaranteed to be a valid point within the
+/// terminal, possibly in the scrollback area just after that at
+/// column+1 on a valid line or at (bottomline+1, 0).
+fn point_range_boundary_check(env: &Env, l: i32, c: i32, term: &VTerm) -> Result<Point> {
+    if l == (term.bottommost_line().0 + 1) && c == 0 {
+        return Ok(Point::new(Line(l), Column(0)));
+    }
+    Ok(Point::new(
+        line_range_check(env, l, term)?,
+        column_range_boundary_check(env, c, term)?,
+    ))
+}
+
+/// Return a column guaranteed to be within [0, last_column] or
+/// throw an error
+pub fn range_check<T>(env: &Env, typename: &'static str, val: i32, range: T) -> Result<i32>
+where
+    T: RangeBounds<i32> + Debug,
+{
+    if !range.contains(&val) {
+        return env.signal(
+            args_out_of_range,
+            (format!("{typename}: value out of range {range:?}"), val),
+        );
+    }
+
+    Ok(val)
 }
