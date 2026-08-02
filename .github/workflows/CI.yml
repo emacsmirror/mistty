@@ -37,6 +37,9 @@ jobs:
     - name: Check out the source code
       uses: actions/checkout@v4
 
+    - name: Test the module
+      run: 'cargo test'
+      
     - name: Test the project
       run: 'eldev -c -dtT test --ci || eldev -c -dtT test --ci :failed'
       # TODO: test from package using eldev -c This requires solving the
