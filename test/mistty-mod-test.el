@@ -694,9 +694,9 @@
         (should
          (equal
           (concat
-           "<>Baa, baa, black shee\n"
-           "p have you any wool?\n"
-           " Yes sir, yes, sir t\n"
+           "<>Baa, baa, black shee[\n]"
+           "p have you any wool?[\n]"
+           " Yes sir, yes, sir t[\n]"
            "hree bags full!\n"
            "One for the Master\n"
            "and one for the Dame\n"
@@ -704,7 +704,8 @@
            "1\n"
            "2\n"
            "3")
-          (mistty-test-content :show screen-top)))
+          (mistty-test-content
+           :show screen-top :show-property '(term-line-wrap t))))
 
         (mistty-mod-process-bytes term (vconcat "\r\n4"))
         (goto-char screen-top)
@@ -714,12 +715,12 @@
         (should
          (equal
           (concat
-           "Baa, baa, black shee\n"
-           ;; the scrollback line above must end with a newline, even
+           "Baa, baa, black shee[\n]"
+           ;; The scrollback line above must end with a newline, even
            ;; tough it's wrapped, because the next line is a terminal
-           ;; line.
-           "<>p have you any wool?\n"
-           " Yes sir, yes, sir t\n"
+           ;; line. The newline must be marked as 'term-line-wrap.
+           "<>p have you any wool?[\n]"
+           " Yes sir, yes, sir t[\n]"
            "hree bags full!\n"
            "One for the Master\n"
            "and one for the Dame\n"
@@ -728,7 +729,8 @@
            "2\n"
            "3\n"
            "4")
-          (mistty-test-content :show screen-top)))
+          (mistty-test-content
+           :show screen-top :show-property '(term-line-wrap t))))
 
         (mistty-mod-process-bytes term (vconcat "\r\n5"))
         (goto-char screen-top)
@@ -738,8 +740,11 @@
         (should
          (equal
           (concat
-           "Baa, baa, black sheep have you any wool?\n"
-           "<> Yes sir, yes, sir t\n"
+           "Baa, baa, black sheep have you any wool?[\n]"
+           ;; The newline within sheep, above, must have been removed
+           ;; when writing the scrollback as now both terminal lines
+           ;; are part of the scrollback portion of the buffer.
+           "<> Yes sir, yes, sir t[\n]"
            "hree bags full!\n"
            "One for the Master\n"
            "and one for the Dame\n"
@@ -749,7 +754,8 @@
            "3\n"
            "4\n"
            "5")
-          (mistty-test-content :show screen-top)))
+          (mistty-test-content
+           :show screen-top :show-property '(term-line-wrap t))))
 
         (mistty-mod-process-bytes term (vconcat "\r\n6"))
         (goto-char screen-top)
@@ -759,7 +765,7 @@
         (should
          (equal
           (concat
-           "Baa, baa, black sheep have you any wool? Yes sir, yes, sir t\n"
+           "Baa, baa, black sheep have you any wool? Yes sir, yes, sir t[\n]"
            "<>hree bags full!\n"
            "One for the Master\n"
            "and one for the Dame\n"
@@ -770,7 +776,8 @@
            "4\n"
            "5\n"
            "6")
-          (mistty-test-content :show screen-top)))
+          (mistty-test-content
+           :show screen-top :show-property '(term-line-wrap t))))
 
         (mistty-mod-process-bytes term (vconcat "\r\n7"))
         (goto-char screen-top)
@@ -791,7 +798,8 @@
            "5\n"
            "6\n"
            "7")
-          (mistty-test-content :show screen-top)))
+          (mistty-test-content
+           :show screen-top :show-property '(term-line-wrap t))))
 
         (mistty-mod-process-bytes term (vconcat "\r\n8"))
         (goto-char screen-top)
@@ -813,4 +821,5 @@
            "6\n"
            "7\n"
            "8")
-          (mistty-test-content :show screen-top)))))))
+          (mistty-test-content
+           :show screen-top :show-property '(term-line-wrap t))))))))

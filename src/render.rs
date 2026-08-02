@@ -16,12 +16,15 @@ use strum_macros::EnumIter;
 
 emacs::use_functions! {
     add_face_text_property
+    get_text_property
+    char_before
     delete_char
     delete_region
     face_foreground
     face_background
     goto_char
     insert
+    propertize
     set_marker
 }
 
@@ -115,12 +118,18 @@ pub fn write_scrollback(env: &Env, term: &mut VTerm) -> Result<usize> {
         return Ok(0);
     }
     if term.start_with_wrapped_line() {
-        let c = env.call("char-before", [])?;
-        if c.is_not_nil() {
-            let c: i32 = c.into_rust()?;
-            if c == 10 {
-                env.call(delete_char, (-1,))?;
-            }
+        // TODO: move this logic elisp-side
+        let c = env.call(char_before, [])?;
+        if c.is_not_nil()
+            && c.into_rust::<i32>()? == 10 // nl
+            && env
+                .call(
+                    get_text_property,
+                    (BufferPos::point(env)? - 1, term_line_wrap),
+                )?
+                .is_not_nil()
+        {
+            env.call(delete_char, (-1,))?;
         }
     }
     render_region(
@@ -134,7 +143,10 @@ pub fn write_scrollback(env: &Env, term: &mut VTerm) -> Result<usize> {
     term.clear_history();
 
     if term.start_with_wrapped_line() {
-        env.call(insert, ("\n",))?;
+        env.call(
+            insert,
+            (env.call(propertize, ("\n", term_line_wrap, true))?,),
+        )?;
     }
 
     return Ok(history_size);
