@@ -1,7 +1,7 @@
 use crate::types::BufferPos;
 use crate::vterm::VTerm;
 use alacritty_terminal::{
-    grid::{Dimensions, Indexed},
+    grid::{Dimensions, Indexed, Row},
     index::{Column, Line, Point},
     term::{
         TermDamage,
@@ -166,12 +166,15 @@ pub fn write_scrollback(env: &Env, term: &mut VTerm) -> Result<usize> {
     for line in topmost_line.0..0 {
         let line = Line(line);
         let row = &grid[line];
-        for col in 0..=last_column.0 {
-            let col = Column(col);
-            let cell = &row[col];
-            let cell_pos = pos;
-            pos += append_cell_to_string(&cell, &mut as_string);
-            tracker.track_change(cell_pos, &cell);
+
+        if let Some(right_col) = last_written_cell(row) {
+            for col in 0..=right_col.0 {
+                let col = Column(col);
+                let cell = &row[col];
+                let cell_pos = pos;
+                pos += append_cell_to_string(&cell, &mut as_string);
+                tracker.track_change(cell_pos, &cell);
+            }
         }
         if !row[last_column].flags.contains(Flags::WRAPLINE) {
             as_string.push('\n');
@@ -190,6 +193,18 @@ pub fn write_scrollback(env: &Env, term: &mut VTerm) -> Result<usize> {
     }
 
     return Ok(history_size);
+}
+
+/// Return the column of the last cell that isn't clear.
+fn last_written_cell(row: &Row<Cell>) -> Option<Column> {
+    for col in (0..row.len()).rev() {
+        let col = Column(col);
+        if !is_clear(row[col].flags) {
+            return Some(col);
+        }
+    }
+
+    None
 }
 
 /// Render the state of the terminal in a way Emacs understands.

@@ -361,8 +361,8 @@
         (should
          (equal
           (concat
-           "0                   \n"
-           "1                   \n"
+           "0\n"
+           "1\n"
            "<>2                   \n"
            "3                   \n"
            "4                   \n"
@@ -389,11 +389,11 @@
         (should
          (equal
           (concat
-           "0                   \n"
-           "1                   \n"
-           "2                   \n"
-           "3                   \n"
-           "4                   \n"
+           "0\n"
+           "1\n"
+           "2\n"
+           "3\n"
+           "4\n"
            "<>5                   \n"
            "6                   \n"
            "7                   \n"
@@ -405,10 +405,27 @@
            "13                  \n"
            "14                  \n")
           (mistty-test-content :show screen-top
-                               :trim nil)))
+                               :trim nil)))))))
 
-        ))))
+(ert-deftest mistty-mod-scrollback-trim-right ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    (mistty-mod-enable-scrollback term)
 
+    ;; When writing scrollback data, spaces that were not actually
+    ;; written at the end of the line should be skipped, but spaces
+    ;; not written in the middle or in the beginning should be
+    ;; written.
+    (mistty-mod-process-bytes term (vconcat "\e[2Cfoo\e[2Cbar   "))
+
+    ;; fill the screen
+    (dotimes (i 10)
+      (mistty-mod-process-bytes term (vconcat (format "\r\n%d" i))))
+
+    (ert-with-test-buffer ()
+      (let ((cursor (make-marker))
+            (screen-top (make-marker)))
+        (mistty-mod-write-scrollback term))
+        (should (equal "  foo  bar   \n" (buffer-string))))))
 
 (ert-deftest mistty-mod-scrollback-disabled ()
   (let ((term (mistty-mod-make-vterm 20 10)))
