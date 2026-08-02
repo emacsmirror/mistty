@@ -24,6 +24,12 @@
 (require 'mistty-mod)
 (require 'mistty-util)
 (require 'mistty-term)
+(require 'mistty-log)
+(require 'mistty-osc7)
+(require 'mistty-accum)
+(eval-when-compile
+  (require 'mistty-accum-macros))
+
 (defvar explicit-shell-file-name) ;; defined in shell
 
 (defvar-local mistty-direct--vterm nil
@@ -94,16 +100,26 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
       ;; start-file-process doesn't always respect
       ;; coding-system-for-read. Force it.
       (set-process-coding-system proc 'binary (cdr (process-coding-system proc)))
+      (process-put proc 'adjust-window-size-function #'ignore)
+      (set-process-window-size proc 24 80)
+
       (mistty-mod-render mistty-direct--vterm (point-min) (point-max) mistty-direct--cursor)
-      (set-process-filter proc #'mistty-direct--process-filter)
-      (set-process-sentinel proc #'mistty-direct--sentinel))))
+      (set-process-sentinel proc #'mistty-direct--sentinel)
+      (let ((accum (mistty--make-accumulator #'mistty-direct--process-filter)))
+        (mistty--accum-add-processor-lambda accum
+            (ctx '(seq OSC ?7 ?\; (let text Pt) ST))
+          (mistty-osc7 7 text))
+        (set-process-filter proc accum))
+      )))
 
 (defun mistty-direct--process-filter (proc str)
+  (mistty-log "RECV %S" str)
   (mistty--with-live-buffer (process-buffer proc)
     (when-let* ((vterm mistty-direct--vterm))
       (dolist (ev (mistty-mod-process-bytes vterm (vconcat str)))
         (pcase ev
           (`(pty-write ,data)
+           (mistty-log "REPLY %S" data)
            (process-send-string proc data))))
       (save-excursion
          (goto-char mistty-direct--screen-top)
@@ -138,9 +154,8 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
   (if-let ((proc (get-buffer-process (current-buffer))))
       (let* ((key (or key (this-command-keys-vector)))
              (translated-key (mistty-translate-key key n)))
-        (message "SEND %S" translated-key)
+        (mistty-log "SEND KEY %s %s %S" n key translated-key)
         (process-send-string proc translated-key))
-    (message "NO PROCESS")
     (self-insert-command n key)))
 
 (provide 'mistty-direct)
