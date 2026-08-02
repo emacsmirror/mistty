@@ -4,7 +4,10 @@ use alacritty_terminal::{
     event::{Event, EventListener},
     grid::Dimensions,
     index::{Column, Line, Point},
-    term::{Config, cell::Flags},
+    term::{
+        Config,
+        cell::{Cell, Flags},
+    },
     vte::ansi::{self, Attr, Handler, Processor},
 };
 use emacs::{Env, IntoLisp, Result, Value};
@@ -123,41 +126,18 @@ impl VTerm {
     /// Newlines count as one character, even newlines added for
     /// wrapping count. Empty columns count as one character.
     pub fn count_chars(&self, start: Point, end: Point) -> usize {
-        if start == end {
-            return 0;
-        }
+        self.apply_cell_counter(start, end, render::cell_char_count)
+    }
 
-        // If end points to the beginning of a line, count the newline just before it.
-        let (last_line, add_final_nl) = if end.column.0 == 0 {
-            (end.line - 1, true)
-        } else {
-            (end.line, false)
-        };
-        let grid = self.inner().grid();
-        let last_column = grid.last_column();
-        let mut charcount = 0;
-        for line in start.line.0..=last_line.0 {
-            let line = Line(line);
-            let row = &grid[line];
-            let start_col = if line == start.line {
-                start.column
-            } else {
-                charcount += 1; // last line newline
-
-                Column(0)
-            };
-            let end_col = if line == end.line {
-                end.column
-            } else {
-                last_column + 1
-            };
-            charcount += render::count_chars_in_line(&row[start_col..end_col]);
-        }
-        if add_final_nl {
-            charcount += 1;
-        }
-
-        charcount
+    /// Return the number of cells between two positions.
+    ///
+    /// This count ignores clear cells. Each newline count as one.
+    pub fn count_cells(&self, start: Point, end: Point) -> usize {
+        self.apply_cell_counter(
+            start,
+            end,
+            |c| if render::is_clear(c.flags) { 0 } else { 1 },
+        )
     }
 
     /// Return the number of unwrapped line separating `start` from
@@ -218,6 +198,53 @@ impl VTerm {
     /// may be just outside the valid range.
     pub fn display_substring(&self, start: Point, end: Point) -> String {
         self.inner.bounds_to_string(start, end)
+    }
+
+    /// Process cells within [start, end) with `counter` and sum it up.
+    ///
+    /// Newlines count as 1.
+    fn apply_cell_counter<F>(&self, start: Point, end: Point, counter: F) -> usize
+    where
+        F: Fn(&Cell) -> usize,
+    {
+        if start == end {
+            return 0;
+        }
+
+        // If end points to the beginning of a line, count the newline just before it.
+        let (last_line, add_final_nl) = if end.column.0 == 0 {
+            (end.line - 1, true)
+        } else {
+            (end.line, false)
+        };
+        let grid = self.inner().grid();
+        let last_column = grid.last_column();
+        let mut count = 0;
+        for line in start.line.0..=last_line.0 {
+            let line = Line(line);
+            let row = &grid[line];
+            let start_col = if line == start.line {
+                start.column
+            } else {
+                count += 1; // last line newline
+
+                Column(0)
+            };
+            let end_col = if line == end.line {
+                end.column
+            } else {
+                last_column + 1
+            };
+            count += row[start_col..end_col]
+                .iter()
+                .map(|c| counter(c))
+                .sum::<usize>();
+        }
+        if add_final_nl {
+            count += 1;
+        }
+
+        count
     }
 }
 

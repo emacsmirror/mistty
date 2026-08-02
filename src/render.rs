@@ -97,7 +97,7 @@ impl ToggleProperty {
             ToggleProperty::Underline => flags.intersects(Flags::UNDERLINE),
 
             // Flags::DIM is handled specially in this code. See comment on vterm::HandlerProxy.
-            ToggleProperty::Clear => !flags.intersects(Flags::DIM),
+            ToggleProperty::Clear => is_clear(flags),
 
             // Wrapline is handled specially, as it applies to the
             // newline following the last column, to the column that's
@@ -241,7 +241,11 @@ pub fn render_damaged(
             let line_pos = BufferPos::bol(env, line)?;
             let row = &grid[line];
 
-            let damage_start = line_pos + count_chars_in_line(&row[Column(0)..left_col]) as usize;
+            let damage_start = line_pos
+                + row[Column(0)..left_col]
+                    .iter()
+                    .map(cell_char_count)
+                    .sum::<usize>() as usize;
             env.call(goto_char, (damage_start,))?;
             let next_line_pos = BufferPos::bol(env, Line(1))?;
             env.call(delete_region, (damage_start, next_line_pos))?;
@@ -335,12 +339,6 @@ where
     Ok(())
 }
 
-/// Count the number of characters that correspond
-/// to the given cell range.
-pub fn count_chars_in_line(cell_range: &[Cell]) -> usize {
-    cell_range.iter().map(cell_char_count).sum()
-}
-
 /// Count the number of characters in the cell.
 pub fn cell_char_count(c: &Cell) -> usize {
     if is_spacer(c) {
@@ -348,6 +346,13 @@ pub fn cell_char_count(c: &Cell) -> usize {
     }
 
     1 + c.zerowidth().map(|chars| chars.len()).unwrap_or(0)
+}
+
+/// Check whether a cell is clear (has not been written to).
+///
+/// See comment on vterm::HandlerProxy
+pub fn is_clear(flags: Flags) -> bool {
+    !flags.intersects(Flags::DIM)
 }
 
 /// Append the content of a cell to the give string.

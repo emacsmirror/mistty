@@ -905,3 +905,38 @@
                        "[b]ar\n"
                        "not dim")
                (mistty-test-content :show-property '(face ansi-color-bold)))))))
+
+(ert-deftest mistty-mod-count-cells ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+      ;; mistty-clear identifies cells that have been explicitly
+      ;; written to. It allows telling cells that contain space from
+      ;; cells that are just empty.
+      (mistty-mod-process-bytes term (vconcat "\e[2Chello,  \e[2Cworld. \r\n"))
+      (mistty-mod-process-bytes term (vconcat "\e[2C foo \e[2C bar \r\n"))
+      ;; "[  ]hello,  [  ]world. [ ]\n"
+      ;; "[  ] foo [  ] bar [      ]\n"
+
+      ;; 1st line: "hello, world. "
+      (should (equal 15 (mistty-mod-count-cells term 0 0 0 20)))
+
+      ;; 2nd line: " foo bar "
+      (should (equal 10 (mistty-mod-count-cells term 1 0 1 20)))
+
+      ;; line 1 and 2, with two newlines
+      (should (equal 27 (mistty-mod-count-cells term 0 0 2 0)))
+
+      ;; "[ ]\n[  ] f"
+      (should (equal 3 (mistty-mod-count-cells term 0 18 1 3)))))
+
+(ert-deftest mistty-mod-count-cells-invalid ()
+    (let ((term (mistty-mod-make-vterm 20 10)))
+      ;; end < start
+      (should-error (mistty-mod-count-cells term 1 0 0 5))
+      ;; invalid start line
+      (should-error (mistty-mod-count-cells term -1 0 0 1))
+      ;; invalid start column
+      (should-error (mistty-mod-count-cells term 0 20 1 0))
+
+      ;; invalid end line
+      (should-error (mistty-mod-count-cells term 0 0 10 1))
+      (should-error (mistty-mod-count-cells term 0 0 11 0))))

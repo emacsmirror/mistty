@@ -172,6 +172,29 @@ fn count_chars(
     Ok(term.count_chars(start, end))
 }
 
+/// Return the cells count between [start, end), ignoring clear cells.
+#[defun]
+fn count_cells(
+    env: &Env,
+    term: &VTerm,
+    start_line: i32,
+    start_col: i32,
+    end_line: i32,
+    end_col: i32,
+) -> Result<usize> {
+    let start = point_range_check(env, start_line, start_col, term)?;
+    let end = point_range_boundary_check(env, end_line, end_col, term)?;
+    if start > end {
+        return env.signal(
+            args_out_of_range,
+            (format!(
+                "range start comes before end: [{start:?}, {end:?})"
+            ),),
+        );
+    }
+    Ok(term.count_cells(start, end))
+}
+
 /// Return the number of unwrapped line separating `start` from
 /// `end`.
 ///
