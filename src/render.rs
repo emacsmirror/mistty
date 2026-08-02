@@ -11,8 +11,6 @@ use alacritty_terminal::{
 };
 use emacs::{Env, Result, Value, defun};
 use std::{collections::HashMap, ops::Deref};
-use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
 
 emacs::use_functions! {
     add_face_text_property
@@ -73,7 +71,7 @@ enum RenderProperty {
 }
 
 /// Boolean properties, that are either on or off [Cell::flags].
-#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, EnumIter)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
 enum ToggleProperty {
     Inverse,
     Bold,
@@ -89,6 +87,24 @@ enum ToggleProperty {
 }
 
 impl ToggleProperty {
+    /// Set of properties relevant when rendering the terminal area.
+    const ON_TERMINAL: &[ToggleProperty] = &[
+        ToggleProperty::Inverse,
+        ToggleProperty::Bold,
+        ToggleProperty::Italic,
+        ToggleProperty::Underline,
+        ToggleProperty::Clear,
+        ToggleProperty::Wrapline,
+    ];
+
+    /// Set of properties relevant when writing in the scrollback area.
+    const ON_SCROLLBACK: &[ToggleProperty] = &[
+        ToggleProperty::Inverse,
+        ToggleProperty::Bold,
+        ToggleProperty::Italic,
+        ToggleProperty::Underline,
+    ];
+
     fn is_set(&self, flags: Flags) -> bool {
         match self {
             ToggleProperty::Inverse => flags.intersects(Flags::INVERSE),
@@ -123,6 +139,7 @@ impl ToggleProperty {
 pub fn write_scrollback(env: &Env, term: &mut VTerm) -> Result<usize> {
     let grid = term.inner().grid();
     let topmost_line = grid.topmost_line();
+    let last_column = grid.last_column();
     let history_size = grid.history_size();
     if history_size == 0 {
         return Ok(0);
@@ -142,14 +159,27 @@ pub fn write_scrollback(env: &Env, term: &mut VTerm) -> Result<usize> {
             env.call(delete_char, (-1,))?;
         }
     }
-    render_region(
-        env,
-        term,
-        grid.iter_from(Point::new(topmost_line - 1, grid.last_column()))
-            .take_while(|c| c.point.line.0 < 0),
-        None,
-        false, // merge wrapped lines
-    )?;
+    let mut as_string = String::with_capacity((-topmost_line.0) as usize * (last_column.0 * 2 + 1));
+    let origin = BufferPos::point(env)?;
+    let mut tracker = PropertyTracker::new(origin, ToggleProperty::ON_SCROLLBACK);
+    let mut pos = origin;
+    for line in topmost_line.0..0 {
+        let line = Line(line);
+        let row = &grid[line];
+        for col in 0..=last_column.0 {
+            let col = Column(col);
+            let cell = &row[col];
+            let cell_pos = pos;
+            pos += append_cell_to_string(&cell, &mut as_string);
+            tracker.track_change(cell_pos, &cell);
+        }
+        if !row[last_column].flags.contains(Flags::WRAPLINE) {
+            as_string.push('\n');
+            pos += 1;
+        }
+    }
+    env.call(insert, (as_string,))?;
+    tracker.apply(env, pos)?;
     term.clear_history();
 
     if term.start_with_wrapped_line() {
@@ -183,7 +213,7 @@ pub fn render(
 
     env.call(goto_char, (term_start,))?;
     env.call(delete_region, (term_start, term_end))?;
-    render_region(env, term, content.display_iter, Some(&mut cursor_pos), true)?;
+    render_region(env, term, content.display_iter, Some(&mut cursor_pos))?;
 
     if let Some(cursor_pos) = cursor_pos {
         env.call(set_marker, (cursor_marker, cursor_pos))?;
@@ -257,7 +287,6 @@ pub fn render_damaged(
                     cell: c,
                 }),
                 Some(&mut cursor_pos),
-                true,
             )?;
         }
     } else {
@@ -268,7 +297,6 @@ pub fn render_damaged(
             term,
             term.inner().renderable_content().display_iter,
             Some(&mut cursor_pos),
-            true,
         )?;
     }
 
@@ -294,7 +322,6 @@ pub fn render_region<'a, I>(
     term: &'a VTerm,
     mut iter: I,
     mut cursor_pos: Option<&mut Option<BufferPos>>,
-    wrap_lines: bool,
 ) -> Result<()>
 where
     I: Iterator<Item = Indexed<&'a Cell>>,
@@ -302,7 +329,7 @@ where
     let last_column = term.inner().grid().last_column();
     let cursor_point = term.inner().grid().cursor.point;
     let origin = BufferPos::point(env)?;
-    let mut tracker = PropertyTracker::new(origin);
+    let mut tracker = PropertyTracker::new(origin, ToggleProperty::ON_TERMINAL);
 
     let mut as_string = string_with_capacity_for(&iter);
     let mut pos = origin;
@@ -320,16 +347,13 @@ where
         }
 
         if cur.point.column == last_column {
-            let is_wrapped = cur.flags.contains(Flags::WRAPLINE);
-            if wrap_lines || !is_wrapped {
-                // A NL is never clear
-                tracker.set_toggle(pos, ToggleProperty::Clear, false);
-                if is_wrapped {
-                    tracker.set_toggle(pos, ToggleProperty::Wrapline, true);
-                }
-                as_string.push('\n');
-                pos += 1;
+            // A NL is never clear
+            tracker.set_toggle(pos, ToggleProperty::Clear, false);
+            if cur.flags.contains(Flags::WRAPLINE) {
+                tracker.set_toggle(pos, ToggleProperty::Wrapline, true);
             }
+            as_string.push('\n');
+            pos += 1;
         }
     }
 
@@ -424,17 +448,19 @@ where
 struct PropertyTracker {
     fg: (Color, BufferPos),
     bg: (Color, BufferPos),
-    toggles: HashMap<ToggleProperty, BufferPos>,
+    toggles: &'static [ToggleProperty],
+    toggle_map: HashMap<ToggleProperty, BufferPos>,
 
     buf: Vec<(RenderProperty, BufferPos, BufferPos)>,
 }
 
 impl PropertyTracker {
-    fn new(origin: BufferPos) -> Self {
+    fn new(origin: BufferPos, toggles: &'static [ToggleProperty]) -> Self {
         Self {
             fg: (Color::Named(NamedColor::Foreground), origin),
             bg: (Color::Named(NamedColor::Background), origin),
-            toggles: HashMap::new(),
+            toggle_map: HashMap::new(),
+            toggles,
             buf: vec![],
         }
     }
@@ -447,8 +473,8 @@ impl PropertyTracker {
         self.set_fg(pos, cell.fg);
         self.set_bg(pos, cell.bg);
         let flags = cell.flags;
-        for toggle in ToggleProperty::iter() {
-            self.set_toggle(pos, toggle, toggle.is_set(flags));
+        for toggle in self.toggles {
+            self.set_toggle(pos, *toggle, toggle.is_set(flags));
         }
     }
 
@@ -476,15 +502,15 @@ impl PropertyTracker {
 
     /// Disable or enable a property for the given position.
     fn set_toggle(&mut self, pos: BufferPos, toggle: ToggleProperty, is_set: bool) {
-        let start = self.toggles.get(&toggle);
+        let start = self.toggle_map.get(&toggle);
         if start.is_some() == is_set {
             return;
         }
         if let Some(start) = start {
             self.buf.push((RenderProperty::Toggle(toggle), *start, pos));
-            self.toggles.remove(&toggle);
+            self.toggle_map.remove(&toggle);
         } else {
-            self.toggles.insert(toggle, pos);
+            self.toggle_map.insert(toggle, pos);
         }
     }
 
@@ -496,10 +522,10 @@ impl PropertyTracker {
         // close all ranges
         self.set_bg(end, Color::Named(NamedColor::Background));
         self.set_fg(end, Color::Named(NamedColor::Foreground));
-        for toggle in ToggleProperty::iter() {
-            self.set_toggle(end, toggle, false);
+        for toggle in self.toggles {
+            self.set_toggle(end, *toggle, false);
         }
-        assert!(self.toggles.is_empty());
+        assert!(self.toggle_map.is_empty());
         assert_eq!(self.fg.0, Color::Named(NamedColor::Foreground));
         assert_eq!(self.bg.0, Color::Named(NamedColor::Background));
 
