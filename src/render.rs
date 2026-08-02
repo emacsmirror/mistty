@@ -303,34 +303,30 @@ where
     let mut as_string = string_with_capacity_for(&iter);
     let mut pos = origin;
     while let Some(cur) = iter.next() {
-        let startlen = as_string.len();
-        append_cell_to_string(&cur.cell, &mut as_string);
-        let mut endpos = pos + as_string[startlen..].chars().count();
+        let cell_pos = pos;
+        pos += append_cell_to_string(&cur.cell, &mut as_string);
+        tracker.track_change(cell_pos, cur.deref());
 
         // Have we found the cursor? If yes, we now know its
         // (upcoming) buffer position.
         if cur.point == cursor_point {
             if let Some(cursor_pos) = &mut cursor_pos {
-                **cursor_pos = Some(pos);
+                **cursor_pos = Some(cell_pos);
             }
         }
-
-        tracker.track_change(pos, cur.deref());
 
         if cur.point.column == last_column {
             let is_wrapped = cur.flags.contains(Flags::WRAPLINE);
             if wrap_lines || !is_wrapped {
                 // A NL is never clear
-                tracker.set_toggle(endpos, ToggleProperty::Clear, false);
+                tracker.set_toggle(pos, ToggleProperty::Clear, false);
                 if is_wrapped {
-                    tracker.set_toggle(endpos, ToggleProperty::Wrapline, true);
+                    tracker.set_toggle(pos, ToggleProperty::Wrapline, true);
                 }
                 as_string.push('\n');
-                endpos += 1;
+                pos += 1;
             }
         }
-
-        pos = endpos;
     }
 
     env.call(insert, (as_string,))?;
@@ -339,13 +335,19 @@ where
     Ok(())
 }
 
-fn count_chars_in_line(cell_range: &[Cell]) -> usize {
-    let mut buf = String::with_capacity(cell_range.len());
-    for cell in cell_range {
-        append_cell_to_string(cell, &mut buf);
+/// Count the number of characters that correspond
+/// to the given cell range.
+pub fn count_chars_in_line(cell_range: &[Cell]) -> usize {
+    cell_range.iter().map(cell_char_count).sum()
+}
+
+/// Count the number of characters in the cell.
+pub fn cell_char_count(c: &Cell) -> usize {
+    if is_spacer(c) {
+        return 0;
     }
 
-    buf.chars().count()
+    1 + c.zerowidth().map(|chars| chars.len()).unwrap_or(0)
 }
 
 /// Append the content of a cell to the give string.
@@ -354,20 +356,11 @@ fn count_chars_in_line(cell_range: &[Cell]) -> usize {
 /// fit into one column. A cell may also contain wide characters. Such
 /// cells are followed or preceded by columns containing spacers
 /// (Alacritty takes care of that)
-pub fn append_cell_to_string(cell: &Cell, dest: &mut String) {
-    if cell
-        .flags
-        .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER)
-    {
-        // Skipping spacers assumes that Emacs and Alacritty have the
-        // same idea of what a wide char is and will display them the
-        // same way, so a wide char for which Alacritty allocated two
-        // columns should actually take two columns when displayed by
-        // Emacs.
-        //
-        // TODO: force Emacs to follow Alacritty's lead in case of
-        // inconsistencies.
-        return;
+///
+/// Returns the number of characters added to `dest`.
+fn append_cell_to_string(cell: &Cell, dest: &mut String) -> usize {
+    if is_spacer(cell) {
+        return 0;
     }
     if cell.c == '\t' {
         // tabs are already stored in the cells as spaces
@@ -375,9 +368,31 @@ pub fn append_cell_to_string(cell: &Cell, dest: &mut String) {
     } else {
         dest.push(cell.c);
     }
+    let mut charcount = 1;
+
     for c in cell.zerowidth().into_iter().flatten() {
+        charcount += 1;
         dest.push(*c);
     }
+
+    charcount
+}
+
+/// Check whether a cell contains as spacer.
+///
+/// Spacers should not be rendered.
+///
+/// Skipping spacers assumes that Emacs and Alacritty have the
+/// same idea of what a wide char is and will display them the
+/// same way, so a wide char for which Alacritty allocated two
+/// columns should actually take two columns when displayed by
+/// Emacs.
+///
+/// TODO: force Emacs to follow Alacritty's lead in case of
+/// inconsistencies.
+fn is_spacer(cell: &Cell) -> bool {
+    cell.flags
+        .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER)
 }
 
 /// Build a string with enough capacity for storing the content of

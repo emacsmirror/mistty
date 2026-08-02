@@ -135,7 +135,6 @@ impl VTerm {
         };
         let grid = self.inner().grid();
         let last_column = grid.last_column();
-        let mut buf = String::with_capacity(grid.columns());
         let mut charcount = 0;
         for line in start.line.0..=last_line.0 {
             let line = Line(line);
@@ -152,11 +151,7 @@ impl VTerm {
             } else {
                 last_column + 1
             };
-            buf.clear();
-            for col in start_col.0..end_col.0 {
-                render::append_cell_to_string(&row[Column(col)], &mut buf);
-            }
-            charcount += buf.chars().count();
+            charcount += render::count_chars_in_line(&row[start_col..end_col]);
         }
         if add_final_nl {
             charcount += 1;
