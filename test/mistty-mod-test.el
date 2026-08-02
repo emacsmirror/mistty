@@ -823,3 +823,85 @@
            "8")
           (mistty-test-content
            :show screen-top :show-property '(term-line-wrap t))))))))
+
+(ert-deftest mistty-mod-render-mistty-clear ()
+  (let ((term (mistty-mod-make-vterm 20 10))
+        (cursor (make-marker)))
+    (ert-with-test-buffer ()
+      (mistty-mod-render term (point-min) (point-max) cursor)
+      (should (equal
+               (concat "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]")
+               (mistty-test-content :show-property '(mistty-clear t))))
+
+      ;; mistty-clear identifies cells that have been explicitly
+      ;; written to. It allows telling cells that contain space from
+      ;; cells that are just empty.
+      (mistty-mod-process-bytes term (vconcat "\e[2Chello,  \e[2Cworld. \r\n"))
+      (mistty-mod-render term (point-min) (point-max) cursor)
+      (should (equal
+               (concat "[  ]hello,  [  ]world. [ ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]")
+               (mistty-test-content :show-property '(mistty-clear t))))
+
+      ;; mistty-clear must be reset when cells are cleared
+      (mistty-mod-process-bytes term (vconcat "\e[H\e[2J"))
+      (mistty-mod-render term (point-min) (point-max) cursor)
+      (should (equal
+               (concat "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]")
+               (mistty-test-content :show-property '(mistty-clear t))))
+      )))
+
+(ert-deftest mistty-mod-render-mistty-clear-not-dim ()
+  (let ((term (mistty-mod-make-vterm 20 10))
+        (cursor (make-marker)))
+    (ert-with-test-buffer ()
+      ;; Since the DIM flag is used internally to track clear terminal
+      ;; columns, DIM-related commands must be ignored. Notably \e[0m
+      ;; and \e[22m must not clear DIM (but they must clear BOLD).
+      (mistty-mod-process-bytes
+       term (vconcat "\e[1mf\e[0moo\r\n\e[1mb\e[22mar\r\n\e[2mnot dim\e[0m\r\n"))
+      (mistty-mod-render term (point-min) (point-max) cursor)
+
+      (should (equal
+               (concat "foo[                 ]\n"
+                       "bar[                 ]\n"
+                       "not dim[             ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]\n"
+                       "[                    ]")
+               (mistty-test-content :show-property '(mistty-clear t))))
+      (should (equal
+               (concat "[f]oo\n"
+                       "[b]ar\n"
+                       "not dim")
+               (mistty-test-content :show-property '(face ansi-color-bold)))))))

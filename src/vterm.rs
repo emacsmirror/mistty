@@ -5,7 +5,7 @@ use alacritty_terminal::{
     grid::Dimensions,
     index::{Column, Line, Point},
     term::{Config, cell::Flags},
-    vte::ansi::Processor,
+    vte::ansi::{self, Attr, Handler, Processor},
 };
 use emacs::{Env, IntoLisp, Result, Value};
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
@@ -37,6 +37,7 @@ impl VTerm {
         let mut inner = Term::new(config, &VTermDimensions::new(width, height), acc);
         let processor = Processor::new();
 
+        // See comment on HandlerProxy
         inner.grid_mut().cursor.template.flags |= Flags::DIM;
 
         Self {
@@ -186,7 +187,8 @@ impl VTerm {
 
     /// Parse terminal data and update internal state
     pub fn process_bytes(&mut self, bytes: &[u8]) {
-        self.processor.advance(&mut self.inner, bytes);
+        self.processor
+            .advance(&mut HandlerProxy::new(&mut self.inner), bytes);
     }
 
     /// Handle accumulated events using the given `env`.
@@ -258,5 +260,347 @@ pub struct EventAccumulator {
 impl EventListener for EventAccumulator {
     fn send_event(&self, event: Event) {
         self.events.borrow_mut().push_back(event);
+    }
+}
+
+/// HandlerProxy intercepts calls from vte::ansi to the Term instance.
+///
+/// ## Flags::DIM Hack
+///
+/// HandlerProxy intercepts calls to set or clear Flags::DIM, as it is used
+/// as signal that a cell has been written to in this code.
+///
+/// That is, we keep DIM always set in the template so that
+/// cells that have been written to have the flag set, whereas
+/// cells that have been cleared or skipped over will have this
+/// flag cleared. This makes it possible to tell cells to which
+/// a space was written from empty cells. HandlerProxy
+/// guarantees the DIM flag stays set in the template, even if
+/// the application tries to turn it off.
+///
+/// This does mean that DIM cannot be supported. This would
+/// require allocating a separate flag for that.
+struct HandlerProxy<'a, T> {
+    inner: &'a mut Term<T>,
+}
+
+impl<'a, T> HandlerProxy<'a, T> {
+    fn new(inner: &'a mut Term<T>) -> Self {
+        Self { inner }
+    }
+}
+
+impl<'a, T> Handler for HandlerProxy<'a, T>
+where
+    T: EventListener,
+{
+    fn terminal_attribute(&mut self, attr: Attr) {
+        match attr {
+            Attr::Reset => {
+                self.inner.terminal_attribute(attr);
+                self.inner
+                    .grid_mut()
+                    .cursor
+                    .template
+                    .flags
+                    .set(Flags::DIM, true);
+            }
+            Attr::Dim => {}
+            Attr::CancelBoldDim => {
+                self.inner.terminal_attribute(Attr::CancelBold);
+            }
+            _ => {
+                self.inner.terminal_attribute(attr);
+            }
+        }
+    }
+
+    //=== everything below this point just delegates to inner
+    //
+    // WARNING: if a new method is added to Handler in a new version
+    // of the vte crate, it needs to be delegated here, too.
+
+    fn set_title(&mut self, title: Option<String>) {
+        self.inner.set_title(title);
+    }
+
+    fn set_cursor_style(&mut self, s: Option<ansi::CursorStyle>) {
+        self.inner.set_cursor_style(s);
+    }
+
+    fn set_cursor_shape(&mut self, shape: ansi::CursorShape) {
+        self.inner.set_cursor_shape(shape);
+    }
+
+    fn input(&mut self, c: char) {
+        self.inner.input(c);
+    }
+
+    fn goto(&mut self, line: i32, col: usize) {
+        self.inner.goto(line, col);
+    }
+
+    fn goto_line(&mut self, line: i32) {
+        self.inner.goto_line(line);
+    }
+
+    fn goto_col(&mut self, col: usize) {
+        self.inner.goto_col(col);
+    }
+
+    fn insert_blank(&mut self, n: usize) {
+        self.inner.insert_blank(n);
+    }
+
+    fn move_up(&mut self, n: usize) {
+        self.inner.move_up(n);
+    }
+
+    fn move_down(&mut self, n: usize) {
+        self.inner.move_down(n);
+    }
+
+    fn identify_terminal(&mut self, intermediate: Option<char>) {
+        self.inner.identify_terminal(intermediate);
+    }
+
+    fn device_status(&mut self, n: usize) {
+        self.inner.device_status(n);
+    }
+
+    fn move_forward(&mut self, col: usize) {
+        self.inner.move_forward(col);
+    }
+
+    fn move_backward(&mut self, col: usize) {
+        self.inner.move_backward(col);
+    }
+
+    fn move_down_and_cr(&mut self, row: usize) {
+        self.inner.move_down_and_cr(row);
+    }
+
+    fn move_up_and_cr(&mut self, row: usize) {
+        self.inner.move_up_and_cr(row);
+    }
+
+    fn put_tab(&mut self, count: u16) {
+        self.inner.put_tab(count);
+    }
+
+    fn backspace(&mut self) {
+        self.inner.backspace();
+    }
+
+    fn carriage_return(&mut self) {
+        self.inner.carriage_return();
+    }
+
+    fn linefeed(&mut self) {
+        self.inner.linefeed();
+    }
+
+    fn bell(&mut self) {
+        self.inner.bell();
+    }
+
+    fn substitute(&mut self) {
+        self.inner.substitute();
+    }
+
+    fn newline(&mut self) {
+        self.inner.newline();
+    }
+
+    fn set_horizontal_tabstop(&mut self) {
+        self.inner.set_horizontal_tabstop();
+    }
+
+    fn scroll_up(&mut self, n: usize) {
+        self.inner.scroll_up(n);
+    }
+
+    fn scroll_down(&mut self, n: usize) {
+        self.inner.scroll_down(n);
+    }
+
+    fn insert_blank_lines(&mut self, n: usize) {
+        self.inner.insert_blank_lines(n);
+    }
+
+    fn delete_lines(&mut self, n: usize) {
+        self.inner.delete_lines(n);
+    }
+
+    fn erase_chars(&mut self, n: usize) {
+        self.inner.erase_chars(n);
+    }
+
+    fn delete_chars(&mut self, n: usize) {
+        self.inner.delete_chars(n);
+    }
+
+    fn move_backward_tabs(&mut self, count: u16) {
+        self.inner.move_backward_tabs(count);
+    }
+
+    fn move_forward_tabs(&mut self, count: u16) {
+        self.inner.move_forward_tabs(count);
+    }
+
+    fn save_cursor_position(&mut self) {
+        self.inner.save_cursor_position();
+    }
+
+    fn restore_cursor_position(&mut self) {
+        self.inner.restore_cursor_position();
+    }
+
+    fn clear_line(&mut self, mode: ansi::LineClearMode) {
+        self.inner.clear_line(mode);
+    }
+
+    fn clear_screen(&mut self, mode: ansi::ClearMode) {
+        self.inner.clear_screen(mode);
+    }
+
+    fn clear_tabs(&mut self, mode: ansi::TabulationClearMode) {
+        self.inner.clear_tabs(mode);
+    }
+
+    fn set_tabs(&mut self, interval: u16) {
+        self.inner.set_tabs(interval);
+    }
+
+    fn reset_state(&mut self) {
+        self.inner.reset_state();
+    }
+
+    fn reverse_index(&mut self) {
+        self.inner.reverse_index();
+    }
+
+    fn set_mode(&mut self, mode: ansi::Mode) {
+        self.inner.set_mode(mode);
+    }
+
+    fn unset_mode(&mut self, mode: ansi::Mode) {
+        self.inner.unset_mode(mode);
+    }
+
+    fn report_mode(&mut self, mode: ansi::Mode) {
+        self.inner.report_mode(mode);
+    }
+
+    fn set_private_mode(&mut self, mode: ansi::PrivateMode) {
+        self.inner.set_private_mode(mode);
+    }
+
+    fn unset_private_mode(&mut self, mode: ansi::PrivateMode) {
+        self.inner.unset_private_mode(mode);
+    }
+
+    fn report_private_mode(&mut self, mode: ansi::PrivateMode) {
+        self.inner.report_private_mode(mode);
+    }
+
+    fn set_scrolling_region(&mut self, top: usize, bottom: Option<usize>) {
+        self.inner.set_scrolling_region(top, bottom);
+    }
+
+    fn set_keypad_application_mode(&mut self) {
+        self.inner.set_keypad_application_mode();
+    }
+
+    fn unset_keypad_application_mode(&mut self) {
+        self.inner.unset_keypad_application_mode();
+    }
+
+    fn set_active_charset(&mut self, index: ansi::CharsetIndex) {
+        self.inner.set_active_charset(index);
+    }
+
+    fn configure_charset(&mut self, index: ansi::CharsetIndex, charset: ansi::StandardCharset) {
+        self.inner.configure_charset(index, charset);
+    }
+
+    fn set_color(&mut self, index: usize, color: ansi::Rgb) {
+        self.inner.set_color(index, color);
+    }
+
+    fn dynamic_color_sequence(&mut self, prefix: String, index: usize, terminator: &str) {
+        self.inner.dynamic_color_sequence(prefix, index, terminator);
+    }
+
+    fn reset_color(&mut self, index: usize) {
+        self.inner.reset_color(index);
+    }
+
+    fn clipboard_store(&mut self, clipboard: u8, base64: &[u8]) {
+        self.inner.clipboard_store(clipboard, base64);
+    }
+
+    fn clipboard_load(&mut self, clipboard: u8, terminator: &str) {
+        self.inner.clipboard_load(clipboard, terminator);
+    }
+
+    fn decaln(&mut self) {
+        self.inner.decaln();
+    }
+
+    fn push_title(&mut self) {
+        self.inner.push_title();
+    }
+
+    fn pop_title(&mut self) {
+        self.inner.pop_title();
+    }
+
+    fn text_area_size_pixels(&mut self) {
+        self.inner.text_area_size_pixels();
+    }
+
+    fn text_area_size_chars(&mut self) {
+        self.inner.text_area_size_chars();
+    }
+
+    fn set_hyperlink(&mut self, hyperlink: Option<ansi::Hyperlink>) {
+        self.inner.set_hyperlink(hyperlink);
+    }
+
+    fn set_mouse_cursor_icon(&mut self, icon: ansi::cursor_icon::CursorIcon) {
+        self.inner.set_mouse_cursor_icon(icon);
+    }
+
+    fn report_keyboard_mode(&mut self) {
+        self.inner.report_keyboard_mode();
+    }
+
+    fn push_keyboard_mode(&mut self, mode: ansi::KeyboardModes) {
+        self.inner.push_keyboard_mode(mode);
+    }
+
+    fn pop_keyboard_modes(&mut self, to_pop: u16) {
+        self.inner.pop_keyboard_modes(to_pop);
+    }
+
+    fn set_keyboard_mode(
+        &mut self,
+        mode: ansi::KeyboardModes,
+        behavior: ansi::KeyboardModesApplyBehavior,
+    ) {
+        self.inner.set_keyboard_mode(mode, behavior);
+    }
+
+    fn set_modify_other_keys(&mut self, mode: ansi::ModifyOtherKeys) {
+        self.inner.set_modify_other_keys(mode);
+    }
+
+    fn report_modify_other_keys(&mut self) {
+        self.inner.report_modify_other_keys();
+    }
+
+    fn set_scp(&mut self, char_path: ansi::ScpCharPath, update_mode: ansi::ScpUpdateMode) {
+        self.inner.set_scp(char_path, update_mode);
     }
 }

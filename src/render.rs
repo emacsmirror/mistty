@@ -56,6 +56,7 @@ emacs::use_symbols! {
     bold_sym => "bold"
     put_text_property
     term_line_wrap
+    mistty_clear
 }
 
 /// Cell or text properties.
@@ -78,22 +79,31 @@ enum ToggleProperty {
     Bold,
     Italic,
     Underline,
+
+    /// Identifies newlines added to split lines longer than the width
+    /// of the terminal. This is set on the newline characters.
     Wrapline,
+
+    /// Identifies cells that haven't been written to yet.
+    Clear,
 }
 
 impl ToggleProperty {
-    fn flag(&self) -> Flags {
-        match self {
-            ToggleProperty::Inverse => Flags::INVERSE,
-            ToggleProperty::Bold => Flags::BOLD,
-            ToggleProperty::Italic => Flags::ITALIC,
-            ToggleProperty::Underline => Flags::UNDERLINE,
-            ToggleProperty::Wrapline => Flags::WRAPLINE,
-        }
-    }
-
     fn is_set(&self, flags: Flags) -> bool {
-        flags.intersects(self.flag())
+        match self {
+            ToggleProperty::Inverse => flags.intersects(Flags::INVERSE),
+            ToggleProperty::Bold => flags.intersects(Flags::BOLD),
+            ToggleProperty::Italic => flags.intersects(Flags::ITALIC),
+            ToggleProperty::Underline => flags.intersects(Flags::UNDERLINE),
+
+            // Flags::DIM is handled specially in this code. See comment on vterm::HandlerProxy.
+            ToggleProperty::Clear => !flags.intersects(Flags::DIM),
+
+            // Wrapline is handled specially, as it applies to the
+            // newline following the last column, to the column that's
+            // flagged. Wrapline must be set with set_toggle.
+            ToggleProperty::Wrapline => false,
+        }
     }
 }
 
@@ -285,7 +295,7 @@ pub fn render_region<'a, I>(
 where
     I: Iterator<Item = Indexed<&'a Cell>>,
 {
-    let screen_columns = term.inner().columns();
+    let last_column = term.inner().grid().last_column();
     let cursor_point = term.inner().grid().cursor.point;
     let origin = BufferPos::point(env)?;
     let mut tracker = PropertyTracker::new(origin);
@@ -295,25 +305,32 @@ where
     while let Some(cur) = iter.next() {
         let startlen = as_string.len();
         append_cell_to_string(&cur.cell, &mut as_string);
+        let mut endpos = pos + as_string[startlen..].chars().count();
 
-        if cur.point.column == screen_columns - 1
-            && (wrap_lines || !cur.flags.contains(Flags::WRAPLINE))
-        {
-            as_string.push('\n');
-        }
-
-        // Have we found the cursor? If yes, we now know its position.
+        // Have we found the cursor? If yes, we now know its
+        // (upcoming) buffer position.
         if cur.point == cursor_point {
             if let Some(cursor_pos) = &mut cursor_pos {
                 **cursor_pos = Some(pos);
             }
         }
 
-        // track property changes
-        tracker.track_change(pos, cur.deref())?;
+        tracker.track_change(pos, cur.deref());
 
-        // update buffer position, counting characters
-        pos += as_string[startlen..].chars().count();
+        if cur.point.column == last_column {
+            let is_wrapped = cur.flags.contains(Flags::WRAPLINE);
+            if wrap_lines || !is_wrapped {
+                // A NL is never clear
+                tracker.set_toggle(endpos, ToggleProperty::Clear, false);
+                if is_wrapped {
+                    tracker.set_toggle(endpos, ToggleProperty::Wrapline, true);
+                }
+                as_string.push('\n');
+                endpos += 1;
+            }
+        }
+
+        pos = endpos;
     }
 
     env.call(insert, (as_string,))?;
@@ -406,34 +423,49 @@ impl PropertyTracker {
     ///
     /// All cells must be passed to track_change in order for the
     /// algorithm to make sense.
-    fn track_change(&mut self, pos: BufferPos, cell: &Cell) -> Result<()> {
-        if cell.fg != self.fg.0 {
-            if self.fg.1 < pos {
-                self.buf
-                    .push((RenderProperty::Fg(self.fg.0), self.fg.1, pos));
-            }
-            self.fg = (cell.fg, pos);
+    fn track_change(&mut self, pos: BufferPos, cell: &Cell) {
+        self.set_fg(pos, cell.fg);
+        self.set_bg(pos, cell.bg);
+        let flags = cell.flags;
+        for toggle in ToggleProperty::iter() {
+            self.set_toggle(pos, toggle, toggle.is_set(flags));
         }
-        if cell.bg != self.bg.0 {
+    }
+
+    /// Maybe change background color.
+    fn set_bg(&mut self, pos: BufferPos, bg: Color) {
+        if bg != self.bg.0 {
             if self.bg.1 < pos {
                 self.buf
                     .push((RenderProperty::Bg(self.bg.0), self.bg.1, pos));
             }
-            self.bg = (cell.bg, pos);
+            self.bg = (bg, pos);
         }
-        for toggle in ToggleProperty::iter() {
-            let start = self.toggles.get(&toggle);
-            if start.is_some() != toggle.is_set(cell.flags) {
-                if let Some(start) = start {
-                    self.buf.push((RenderProperty::Toggle(toggle), *start, pos));
-                    self.toggles.remove(&toggle);
-                } else {
-                    self.toggles.insert(toggle, pos);
-                }
-            }
-        }
+    }
 
-        Ok(())
+    /// Maybe change foreground color.
+    fn set_fg(&mut self, pos: BufferPos, fg: Color) {
+        if fg != self.fg.0 {
+            if self.fg.1 < pos {
+                self.buf
+                    .push((RenderProperty::Fg(self.fg.0), self.fg.1, pos));
+            }
+            self.fg = (fg, pos);
+        }
+    }
+
+    /// Disable or enable a property for the given position.
+    fn set_toggle(&mut self, pos: BufferPos, toggle: ToggleProperty, is_set: bool) {
+        let start = self.toggles.get(&toggle);
+        if start.is_some() == is_set {
+            return;
+        }
+        if let Some(start) = start {
+            self.buf.push((RenderProperty::Toggle(toggle), *start, pos));
+            self.toggles.remove(&toggle);
+        } else {
+            self.toggles.insert(toggle, pos);
+        }
     }
 
     /// Set text properties on the current Emacs buffer.
@@ -442,7 +474,11 @@ impl PropertyTracker {
     /// cell.
     fn apply(mut self, env: &Env, end: BufferPos) -> Result<()> {
         // close all ranges
-        self.track_change(end, &Cell::default())?;
+        self.set_bg(end, Color::Named(NamedColor::Background));
+        self.set_fg(end, Color::Named(NamedColor::Foreground));
+        for toggle in ToggleProperty::iter() {
+            self.set_toggle(end, toggle, false);
+        }
         assert!(self.toggles.is_empty());
         assert_eq!(self.fg.0, Color::Named(NamedColor::Foreground));
         assert_eq!(self.bg.0, Color::Named(NamedColor::Background));
@@ -479,10 +515,10 @@ impl PropertyTracker {
                     env.call(add_face_text_property, (start, end, ansi_color_inverse))?;
                 }
                 RenderProperty::Toggle(ToggleProperty::Wrapline) => {
-                    // term_line_wrap isn't applied to the content of
-                    // the column the flag WRAPLINE appears, but to
-                    // the newline that follows.
-                    env.call(put_text_property, (start + 1, end, term_line_wrap, true))?;
+                    env.call(put_text_property, (start, end, term_line_wrap, true))?;
+                }
+                RenderProperty::Toggle(ToggleProperty::Clear) => {
+                    env.call(put_text_property, (start, end, mistty_clear, true))?;
                 }
             }
         }
