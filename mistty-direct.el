@@ -107,7 +107,7 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
       (set-process-sentinel proc #'mistty-direct--sentinel)
       (let ((accum (mistty--make-accumulator #'mistty-direct--process-filter)))
         (mistty--accum-add-processor-lambda accum
-            (ctx '(seq OSC ?7 ?\; (let text Pt) ST))
+            (_ctx '(seq OSC ?7 ?\; (let text Pt) ST))
           (mistty-osc7 7 text))
         (set-process-filter proc accum))
       )))
