@@ -55,6 +55,7 @@ emacs::use_symbols! {
     put_text_property
     term_line_wrap
     mistty_clear
+    mistty_updated
 }
 
 /// Cell or text properties.
@@ -84,6 +85,12 @@ enum ToggleProperty {
 
     /// Identifies cells that haven't been written to yet.
     Clear,
+
+    /// `render` and `render_damage` mark whatever they write with
+    /// this property, `mistty-updated` on the elisp side, which can
+    /// then be cleared and checked again to identify portions of the
+    /// screen that have changed.
+    Updated,
 }
 
 impl ToggleProperty {
@@ -95,6 +102,7 @@ impl ToggleProperty {
         ToggleProperty::Underline,
         ToggleProperty::Clear,
         ToggleProperty::Wrapline,
+        ToggleProperty::Updated,
     ];
 
     /// Set of properties relevant when writing in the scrollback area.
@@ -105,20 +113,24 @@ impl ToggleProperty {
         ToggleProperty::Underline,
     ];
 
-    fn is_set(&self, flags: Flags) -> bool {
+    fn is_set(&self, flags: Flags) -> Option<bool> {
         match self {
-            ToggleProperty::Inverse => flags.intersects(Flags::INVERSE),
-            ToggleProperty::Bold => flags.intersects(Flags::BOLD),
-            ToggleProperty::Italic => flags.intersects(Flags::ITALIC),
-            ToggleProperty::Underline => flags.intersects(Flags::UNDERLINE),
+            ToggleProperty::Inverse => Some(flags.intersects(Flags::INVERSE)),
+            ToggleProperty::Bold => Some(flags.intersects(Flags::BOLD)),
+            ToggleProperty::Italic => Some(flags.intersects(Flags::ITALIC)),
+            ToggleProperty::Underline => Some(flags.intersects(Flags::UNDERLINE)),
 
             // Flags::DIM is handled specially in this code. See comment on vterm::HandlerProxy.
-            ToggleProperty::Clear => is_clear(flags),
+            ToggleProperty::Clear => Some(is_clear(flags)),
 
             // Wrapline is handled specially, as it applies to the
             // newline following the last column, to the column that's
             // flagged. Wrapline must be set with set_toggle.
-            ToggleProperty::Wrapline => false,
+            ToggleProperty::Wrapline => Some(false),
+
+            // Updated is handled specially, as it is just set
+            // whenever some portion of the terminal is rendered.
+            ToggleProperty::Updated => None,
         }
     }
 }
@@ -127,7 +139,7 @@ impl ToggleProperty {
 ///
 /// Return how many lines were cleared.
 #[defun]
-pub fn clear_scrollback(env: &Env, term: &mut VTerm) -> Result<usize> {
+pub fn clear_scrollback(term: &mut VTerm) -> Result<usize> {
     let history_size = term.inner().grid().history_size();
     term.clear_history();
 
@@ -282,7 +294,7 @@ pub fn render_damaged(
         // as expected.
 
         let mut all_damage: Vec<(Line, Column)> = iter
-            .filter(|damage| damage.is_damaged())
+            .filter(|d| d.is_damaged() && d.right > d.left)
             .map(|d| (Line(d.line as i32), Column(d.left)))
             .collect();
         all_damage.sort();
@@ -356,6 +368,7 @@ where
     let cursor_point = term.inner().grid().cursor.point;
     let origin = BufferPos::point(env)?;
     let mut tracker = PropertyTracker::new(origin, ToggleProperty::ON_TERMINAL);
+    tracker.set_toggle(origin, ToggleProperty::Updated, true);
 
     let mut as_string = string_with_capacity_for(&iter);
     let mut pos = origin;
@@ -500,7 +513,9 @@ impl PropertyTracker {
         self.set_bg(pos, cell.bg);
         let flags = cell.flags;
         for toggle in self.toggles {
-            self.set_toggle(pos, *toggle, toggle.is_set(flags));
+            if let Some(val) = toggle.is_set(flags) {
+                self.set_toggle(pos, *toggle, val);
+            }
         }
     }
 
@@ -591,6 +606,9 @@ impl PropertyTracker {
                 }
                 RenderProperty::Toggle(ToggleProperty::Clear) => {
                     env.call(put_text_property, (start, end, mistty_clear, true))?;
+                }
+                RenderProperty::Toggle(ToggleProperty::Updated) => {
+                    env.call(put_text_property, (start, end, mistty_updated, true))?;
                 }
             }
         }
