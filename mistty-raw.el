@@ -1,4 +1,4 @@
-;;; mistty-direct.el --- Raw alacritty-based terminal -*- lexical-binding: t -*-
+;;; mistty-raw.el --- Raw alacritty-based terminal -*- lexical-binding: t -*-
 
 ;; This program is free software: you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -32,58 +32,54 @@
 
 (defvar explicit-shell-file-name) ;; defined in shell
 
-(defvar-local mistty-direct--vterm nil
+(defvar-local mistty-raw--vterm nil
   "Virtual terminal tied to the buffer, from mistty-mod.")
 
-(defvar-local mistty-direct--cursor nil
+(defvar-local mistty-raw--cursor nil
   "Marker that tracks the cursor position, set by the last rendering
 operation.")
 
-(defvar-local mistty-direct--screen-top nil
+(defvar-local mistty-raw--screen-top nil
   "Marker that tracks the position of the top of the screen, following
 scrollback lines.")
 
-(defvar-keymap mistty-direct-mode-map
+(defvar-keymap mistty-raw-mode-map
   :doc "Keymap of major mode MisTTY Direct"
-  "RET" #'mistty-direct-send-self
-  "TAB" #'mistty-direct-send-self
-  "DEL" #'mistty-direct-send-self
-  "C-d" #'mistty-direct-send-self
-  "C-a" #'mistty-direct-send-self
-  "C-e" #'mistty-direct-send-self
-  "C-p" #'mistty-direct-send-self
-  "C-n" #'mistty-direct-send-self
-  "C-k" #'mistty-direct-send-self
-  "C-w" #'mistty-direct-send-self
-  "<remap> <self-insert-command>" #'mistty-direct-send-self)
+  "RET" #'mistty-raw-send-self
+  "TAB" #'mistty-raw-send-self
+  "DEL" #'mistty-raw-send-self
+  "C-d" #'mistty-raw-send-self
+  "C-a" #'mistty-raw-send-self
+  "C-e" #'mistty-raw-send-self
+  "C-p" #'mistty-raw-send-self
+  "C-n" #'mistty-raw-send-self
+  "C-k" #'mistty-raw-send-self
+  "C-w" #'mistty-raw-send-self
+  "<remap> <self-insert-command>" #'mistty-raw-send-self)
 
-(define-derived-mode mistty-direct-mode fundamental-mode "MisTTY Direct"
+(define-derived-mode mistty-raw-mode fundamental-mode "MisTTY Direct"
   "Major mode that provides a raw terminal tied to a subprocess.
 
-Call `mistty-direct-exec' to create the virtual terminal and start the
+Call `mistty-raw-exec' to create the virtual terminal and start the
 process."
-  (use-local-map mistty-direct-mode-map))
+  (use-local-map mistty-raw-mode-map))
 
-(defun mistty-direct-exec (name program args)
-  (unless (eq major-mode 'mistty-direct-mode)
-    (error "Must be called from a mistty-direct-mode buffer."))
+(defun mistty-raw-exec (name program args)
+  (unless (eq major-mode 'mistty-raw-mode)
+    (error "Must be called from a mistty-raw-mode buffer."))
   (when (get-buffer-process (current-buffer))
     (error "A process is already attached to the buffer."))
-  (message "launch %s" program)
+  (mistty-log "LAUNCH %s %s" program args)
   (let ((process-environment
          (list "TERM=xterm-256color"
                (concat "INSIDE_EMACS=" emacs-version)))
         (process-connection-type t)
-	;; We should suppress conversion of end-of-line format.
 	(inhibit-eol-conversion t)
-	;; The process's output contains not just chars but also binary
-	;; escape codes, so we need to see the raw output.  We will have to
-	;; do the decoding by hand on the parts that are made of chars.
 	(coding-system-for-read 'binary))
-    (setq mistty-direct--cursor (copy-marker (point-min)))
-    (setq mistty-direct--screen-top (copy-marker (point-min)))
-    (setq mistty-direct--vterm (mistty-mod-make-vterm 80 24))
-    (mistty-mod-enable-scrollback mistty-direct--vterm)
+    (setq mistty-raw--cursor (copy-marker (point-min)))
+    (setq mistty-raw--screen-top (copy-marker (point-min)))
+    (setq mistty-raw--vterm (mistty-mod-make-vterm 80 24))
+    (mistty-mod-enable-scrollback mistty-raw--vterm)
     (let ((proc (apply #'start-file-process name (current-buffer)
                        ;; On Android, /bin doesn't exist, and the default shell is
                        ;; found as /system/bin/sh.
@@ -103,43 +99,43 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
       (process-put proc 'adjust-window-size-function #'ignore)
       (set-process-window-size proc 24 80)
 
-      (mistty-mod-render mistty-direct--vterm (point-min) (point-max) mistty-direct--cursor)
-      (set-process-sentinel proc #'mistty-direct--sentinel)
-      (let ((accum (mistty--make-accumulator #'mistty-direct--process-filter)))
+      (mistty-mod-render mistty-raw--vterm (point-min) (point-max) mistty-raw--cursor)
+      (set-process-sentinel proc #'mistty-raw--sentinel)
+      (let ((accum (mistty--make-accumulator #'mistty-raw--process-filter)))
         (mistty--accum-add-processor-lambda accum
-            (_ctx '(seq OSC ?7 ?\; (let text Pt) ST))
+            (ctx '(seq OSC ?7 ?\; (let text Pt) ST))
           (mistty-osc7 7 text))
         (set-process-filter proc accum))
       )))
 
-(defun mistty-direct--process-filter (proc str)
+(defun mistty-raw--process-filter (proc str)
   (mistty-log "RECV %S" str)
   (mistty--with-live-buffer (process-buffer proc)
-    (when-let* ((vterm mistty-direct--vterm))
+    (when-let* ((vterm mistty-raw--vterm))
       (dolist (ev (mistty-mod-process-bytes vterm (vconcat str)))
         (pcase ev
           (`(pty-write ,data)
            (mistty-log "REPLY %S" data)
            (process-send-string proc data))))
       (save-excursion
-         (goto-char mistty-direct--screen-top)
+         (goto-char mistty-raw--screen-top)
          (unless (zerop (mistty-mod-write-scrollback vterm))
-           (set-marker mistty-direct--screen-top (point)))
-         (mistty-mod-render-damaged vterm (point) (point-max) mistty-direct--cursor))
-      (goto-char mistty-direct--cursor))))
+           (set-marker mistty-raw--screen-top (point)))
+         (mistty-mod-render-damaged vterm (point) (point-max) mistty-raw--cursor))
+      (goto-char mistty-raw--cursor))))
 
-(defun mistty-direct--sentinel (proc _msg)
+(defun mistty-raw--sentinel (proc _msg)
   (when (memq (process-status proc) '(signal exit))
     (mistty--with-live-buffer (process-buffer proc)
-      (setq mistty-direct--vterm nil))
+      (setq mistty-raw--vterm nil))
     (set-process-buffer proc nil)
     (delete-process proc)))
 
-(defun mistty-direct-launch ()
+(defun mistty-raw-launch ()
   (interactive)
-  (with-current-buffer (generate-new-buffer "*mistty-direct*")
-    (mistty-direct-mode)
-    (mistty-direct-exec
+  (with-current-buffer (generate-new-buffer "*mistty-raw*")
+    (mistty-raw-mode)
+    (mistty-raw-exec
      (buffer-name)
      (with-connection-local-variables
       (or
@@ -149,7 +145,7 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
      '("-i"))
     (pop-to-buffer (current-buffer))))
 
-(defun mistty-direct-send-self (&optional n key)
+(defun mistty-raw-send-self (&optional n key)
   (interactive "p")
   (if-let ((proc (get-buffer-process (current-buffer))))
       (let* ((key (or key (this-command-keys-vector)))
@@ -158,6 +154,6 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
         (process-send-string proc translated-key))
     (self-insert-command n key)))
 
-(provide 'mistty-direct)
+(provide 'mistty-raw)
 
-;;; mistty-direct.el ends here
+;;; mistty-raw.el ends here
