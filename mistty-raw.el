@@ -25,10 +25,6 @@
 (require 'mistty-util)
 (require 'mistty-kbd)
 (require 'mistty-log)
-(require 'mistty-osc7)
-(require 'mistty-accum)
-(eval-when-compile
-  (require 'mistty-accum-macros))
 
 (defvar explicit-shell-file-name) ;; defined in shell
 
@@ -39,7 +35,7 @@
   "Marker that tracks the cursor position, set by the last rendering
 operation.")
 
-(defvar-local mistty-raw--screen-top nil
+(defvar-local mistty-raw--home nil
   "Marker that tracks the position of the top of the screen, following
 scrollback lines.")
 
@@ -77,7 +73,7 @@ process."
 	(inhibit-eol-conversion t)
 	(coding-system-for-read 'binary))
     (setq mistty-raw--cursor (copy-marker (point-min)))
-    (setq mistty-raw--screen-top (copy-marker (point-min)))
+    (setq mistty-raw--home (copy-marker (point-min)))
     (setq mistty-raw--vterm (mistty-mod-make-vterm 80 24))
     (mistty-mod-enable-scrollback mistty-raw--vterm)
     (let ((proc (apply #'start-file-process name (current-buffer)
@@ -100,29 +96,40 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
       (set-process-window-size proc 24 80)
 
       (mistty-mod-render mistty-raw--vterm (point-min) (point-max) mistty-raw--cursor)
+      (goto-char mistty-raw--cursor)
       (set-process-sentinel proc #'mistty-raw--sentinel)
-      (let ((accum (mistty--make-accumulator #'mistty-raw--process-filter)))
-        (mistty--accum-add-processor-lambda accum
-            (_ctx '(seq OSC ?7 ?\; (let text Pt) ST))
-          (mistty-osc7 7 text))
-        (set-process-filter proc accum))
-      )))
+      (set-process-filter proc #'mistty-raw--process-filter))))
 
 (defun mistty-raw--process-filter (proc str)
   (mistty-log "RECV %S" str)
   (mistty--with-live-buffer (process-buffer proc)
-    (when-let* ((vterm mistty-raw--vterm))
-      (dolist (ev (mistty-mod-process-bytes vterm (vconcat str)))
-        (pcase ev
-          (`(pty-write ,data)
-           (mistty-log "REPLY %S" data)
-           (process-send-string proc data))))
-      (save-excursion
-         (goto-char mistty-raw--screen-top)
-         (unless (zerop (mistty-mod-write-scrollback vterm))
-           (set-marker mistty-raw--screen-top (point)))
-         (mistty-mod-render-damaged vterm (point) (point-max) mistty-raw--cursor))
-      (goto-char mistty-raw--cursor))))
+    (mistty-raw--process-bytes str)
+    (mistty-raw--render)))
+
+(defun mistty-raw--process-bytes (str)
+  "Send bytes from STR to the virtual terminal to be processed.
+
+The current buffer must have a virtual terminal associated."
+  (when-let* ((vterm mistty-raw--vterm)
+              (proc (get-buffer-process (current-buffer))))
+    (dolist (ev (mistty-mod-process-bytes vterm (vconcat str)))
+      (pcase ev
+        (`(pty-write ,data)
+         (mistty-log "REPLY %S" data)
+         (process-send-string proc data))))))
+
+(defun mistty-raw--render ()
+  "Render the virtual terminal on the current buffer.
+
+The current buffer must have a virtual terminal associated."
+  (when-let* ((vterm mistty-raw--vterm))
+    (mistty-log "RENDER")
+    (save-excursion
+      (goto-char mistty-raw--home)
+      (unless (zerop (mistty-mod-write-scrollback vterm))
+        (set-marker mistty-raw--home (point)))
+      (mistty-mod-render-damaged vterm (point) (point-max) mistty-raw--cursor))
+    (goto-char mistty-raw--cursor)))
 
 (defun mistty-raw--sentinel (proc _msg)
   (when (memq (process-status proc) '(signal exit))
