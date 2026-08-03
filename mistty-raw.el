@@ -39,6 +39,12 @@ operation.")
   "Marker that tracks the position of the top of the screen, following
 scrollback lines.")
 
+(defvar-local mistty-raw-width nil
+  "Width of the terminal, in columns. Set by `mistty-raw-resize'.")
+
+(defvar-local mistty-raw-height nil
+  "Height of the terminal, in lines. Set by `mistty-raw-resize'.")
+
 (defvar-keymap mistty-raw-mode-map
   :doc "Keymap of major mode MisTTY Direct"
   "RET" #'mistty-raw-send-self
@@ -60,7 +66,7 @@ Call `mistty-raw-exec' to create the virtual terminal and start the
 process."
   (use-local-map mistty-raw-mode-map))
 
-(defun mistty-raw-exec (name program args)
+(defun mistty-raw-exec (name program args width height)
   (unless (eq major-mode 'mistty-raw-mode)
     (error "Must be called from a mistty-raw-mode buffer."))
   (when (get-buffer-process (current-buffer))
@@ -74,7 +80,9 @@ process."
 	(coding-system-for-read 'binary))
     (setq mistty-raw--cursor (copy-marker (point-min)))
     (setq mistty-raw--home (copy-marker (point-min)))
-    (setq mistty-raw--vterm (mistty-mod-make-vterm 80 24))
+    (setq mistty-raw-width width)
+    (setq mistty-raw-height height)
+    (setq mistty-raw--vterm (mistty-mod-make-vterm width height))
     (mistty-mod-enable-scrollback mistty-raw--vterm)
     (let ((proc (apply #'start-file-process name (current-buffer)
                        ;; On Android, /bin doesn't exist, and the default shell is
@@ -86,19 +94,28 @@ process."
 	               (format "stty -nl echo rows %d columns %d sane 2>%s;\
 if [ $1 = .. ]; then shift; fi; exec \"$@\""
                                ;; term-height term-width null-device
-		               24 80 "/dev/null")
+		               height width "/dev/null")
 	               ".."
 	               program args)))
+      ;; Window size must be adjusted manually with mistty-raw--resize
+      (process-put proc 'adjust-window-size-function #'ignore)
+
       ;; start-file-process doesn't always respect
       ;; coding-system-for-read. Force it.
       (set-process-coding-system proc 'binary (cdr (process-coding-system proc)))
-      (process-put proc 'adjust-window-size-function #'ignore)
-      (set-process-window-size proc 24 80)
 
       (mistty-mod-render mistty-raw--vterm (point-min) (point-max) mistty-raw--cursor)
       (goto-char mistty-raw--cursor)
       (set-process-sentinel proc #'mistty-raw--sentinel)
       (set-process-filter proc #'mistty-raw--process-filter))))
+
+(defun mistty-raw-resize (width height)
+  "Resize the terminal and pty to WIDTH x HEIGHT."
+  (if (or (/= mistty-raw-width width) (/= mistty-raw-height height))
+      (when-let* ((vterm mistty-raw--vterm)
+                  (proc (get-buffer-process (current-buffer))))
+        (mistty-mod-resize vterm width height)
+        (set-process-window-size proc height width))))
 
 (defun mistty-raw--process-filter (proc str)
   (mistty-log "RECV %S" str)
@@ -142,6 +159,8 @@ The current buffer must have a virtual terminal associated."
   (interactive)
   (with-current-buffer (generate-new-buffer "*mistty-raw*")
     (mistty-raw-mode)
+     ;; select window right away to get its dimensions
+    (pop-to-buffer (current-buffer))
     (mistty-raw-exec
      (buffer-name)
      (with-connection-local-variables
@@ -149,8 +168,9 @@ The current buffer must have a virtual terminal associated."
        explicit-shell-file-name
        shell-file-name
        (getenv "SHELL")))
-     '("-i"))
-    (pop-to-buffer (current-buffer))))
+     '("-i")
+     (window-max-chars-per-line)
+     (floor (window-screen-lines)))))
 
 (defun mistty-raw-send-self (&optional n key)
   (interactive "p")

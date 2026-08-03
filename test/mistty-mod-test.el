@@ -957,3 +957,35 @@
       ;; invalid end line
       (should-error (mistty-mod-count-cells term 0 0 10 1))
       (should-error (mistty-mod-count-cells term 0 0 11 0))))
+
+(ert-deftest mistty-mod-resize ()
+  (let ((term (mistty-mod-make-vterm 20 10))
+        (cursor (make-marker)))
+    (ert-with-test-buffer ()
+      (mistty-mod-process-bytes term (vconcat "Baa, baa, black sheep have you any wool?\r\n"))
+      (mistty-mod-render term (point-min) (point-max) cursor)
+      (should (equal
+               (concat "Baa, baa, black shee\n"
+                       "p have you any wool?\n"
+                       "                    \n"
+                       "                    \n"
+                       "                    \n"
+                       "                    \n"
+                       "                    \n"
+                       "                    \n"
+                       "                    \n"
+                       "                    \n")
+               (mistty-test-content :trim nil)))
+
+      (mistty-mod-resize term 30 8)
+      (mistty-mod-render term (point-min) (point-max) cursor)
+      (should (equal
+               (concat "Baa, baa, black sheep have you\n"
+                       " any wool?                    \n"
+                       "                              \n"
+                       "                              \n"
+                       "                              \n"
+                       "                              \n"
+                       "                              \n"
+                       "                              \n")
+               (mistty-test-content :trim nil))))))

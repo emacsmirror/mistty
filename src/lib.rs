@@ -52,6 +52,14 @@ fn disable_scrollback(term: &mut VTerm) -> Result<()> {
     Ok(())
 }
 
+/// Change terminal dimensions
+#[defun]
+fn resize(term: &mut VTerm, width: usize, height: usize) -> Result<()> {
+    term.resize(width, height);
+
+    Ok(())
+}
+
 /// Process BYTES coming from a pty and update the virtual terminal.
 ///
 /// Return a list of events to be processed Emacs-side. Events are

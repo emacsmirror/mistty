@@ -37,7 +37,7 @@ impl VTerm {
         };
         let mut config = Config::default();
         config.scrolling_history = 0; // call enable_scrollback to re-enable
-        let mut inner = Term::new(config, &VTermDimensions::new(width, height), acc);
+        let mut inner = Term::new(config, &VTermDimensions::new(width, height, 0), acc);
         let processor = Processor::new();
 
         // See comment on HandlerProxy
@@ -65,6 +65,12 @@ impl VTerm {
 
     pub fn disable_scrollback(&mut self) {
         self.inner_mut().grid_mut().update_history(0);
+    }
+
+    pub fn resize(&mut self, width: usize, height: usize) {
+        let history_size = self.inner().grid().history_size();
+        self.inner_mut()
+            .resize(VTermDimensions::new(width, height, history_size));
     }
 
     /// Clear history, normally after having written scrollback to the
@@ -252,17 +258,22 @@ impl VTerm {
 struct VTermDimensions {
     width: usize,
     height: usize,
+    history_size: usize,
 }
 
 impl VTermDimensions {
-    fn new(width: usize, height: usize) -> Self {
-        Self { width, height }
+    fn new(width: usize, height: usize, history_size: usize) -> Self {
+        Self {
+            width,
+            height,
+            history_size,
+        }
     }
 }
 
 impl Dimensions for VTermDimensions {
     fn total_lines(&self) -> usize {
-        self.height
+        self.height + self.history_size
     }
 
     fn screen_lines(&self) -> usize {
