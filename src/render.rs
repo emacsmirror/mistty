@@ -293,35 +293,28 @@ pub fn render_damaged(
         // of term_start - term_end even when the buffer content isn't
         // as expected.
 
-        let mut all_damage: Vec<(Line, Column)> = iter
+        let mut all_damage: Vec<Line> = iter
             .filter(|d| d.is_damaged() && d.right > d.left)
-            .map(|d| (Line(d.line as i32), Column(d.left)))
+            .map(|d| Line(d.line as i32))
             .collect();
-        all_damage.sort();
-        all_damage.dedup_by_key(|(line, _)| line.0);
-        // damage is sorted by line, one damage per line, with the
-        // column indicating the start of the damage on the line. This
-        // is important for the stored cursor position to make sense.
+        all_damage.sort_unstable();
+        all_damage.dedup();
+        // damage is sorted by line, one damage per line.
 
         let grid = term.inner().grid();
-        for (line, left_col) in all_damage {
+        for line in all_damage {
             env.call(goto_char, (term_start,))?;
             let line_pos = BufferPos::bol(env, line)?;
             let row = &grid[line];
 
-            let damage_start = line_pos
-                + row[Column(0)..left_col]
-                    .iter()
-                    .map(cell_char_count)
-                    .sum::<usize>() as usize;
-            env.call(goto_char, (damage_start,))?;
+            env.call(goto_char, (line_pos,))?;
             let next_line_pos = BufferPos::bol(env, Line(1))?;
-            env.call(delete_region, (damage_start, next_line_pos))?;
+            env.call(delete_region, (line_pos, next_line_pos))?;
             render_region(
                 env,
                 term,
-                row[left_col..].iter().enumerate().map(|(i, c)| Indexed {
-                    point: Point::new(line, left_col + i),
+                row[..].iter().enumerate().map(|(i, c)| Indexed {
+                    point: Point::new(line, Column(i)),
                     cell: c,
                 }),
                 Some(&mut cursor_pos),
