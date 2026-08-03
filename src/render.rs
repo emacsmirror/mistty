@@ -123,6 +123,17 @@ impl ToggleProperty {
     }
 }
 
+/// Clear terminal history without writing it.
+///
+/// Return how many lines were cleared.
+#[defun]
+pub fn clear_scrollback(env: &Env, term: &mut VTerm) -> Result<usize> {
+    let history_size = term.inner().grid().history_size();
+    term.clear_history();
+
+    Ok(history_size)
+}
+
 /// Write scrollback lines to the current buffer, clear terminal history.
 ///
 /// This function writes any scrollback line kept in the virtual

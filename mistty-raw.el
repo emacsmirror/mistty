@@ -25,6 +25,8 @@
 (require 'mistty-util)
 (require 'mistty-kbd)
 (require 'mistty-log)
+(eval-when-compile
+  (require 'cl-lib))
 
 (defvar explicit-shell-file-name) ;; defined in shell
 
@@ -38,6 +40,9 @@ operation.")
 (defvar-local mistty-raw--home nil
   "Marker that tracks the position of the top of the screen, following
 scrollback lines.")
+
+(defvar-local mistty-raw--home-scrolline nil
+  "Scrolline that correspond to `mistty-raw--home'")
 
 (defvar-local mistty-raw-width nil
   "Width of the terminal, in columns. Set by `mistty-raw-resize'.")
@@ -80,6 +85,7 @@ process."
 	(coding-system-for-read 'binary))
     (setq mistty-raw--cursor (copy-marker (point-min)))
     (setq mistty-raw--home (copy-marker (point-min)))
+    (setq mistty-raw--home-scrolline 0)
     (setq mistty-raw-width width)
     (setq mistty-raw-height height)
     (setq mistty-raw--vterm (mistty-mod-make-vterm width height))
@@ -140,11 +146,10 @@ The current buffer must have a virtual terminal associated."
 
 The current buffer must have a virtual terminal associated."
   (when-let* ((vterm mistty-raw--vterm))
-    (mistty-log "RENDER")
     (save-excursion
       (goto-char mistty-raw--home)
-      (unless (zerop (mistty-mod-write-scrollback vterm))
-        (set-marker mistty-raw--home (point)))
+      (cl-incf mistty-raw--home-scrolline (mistty-mod-clear-scrollback vterm))
+      (mistty-log "RENDER @%s" mistty-raw--home-scrolline)
       (mistty-mod-render-damaged vterm (point) (point-max) mistty-raw--cursor))
     (goto-char mistty-raw--cursor)))
 

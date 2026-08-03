@@ -505,6 +505,23 @@
         "and one for the Dame")
        (mistty-test-content)))))
 
+(ert-deftest mistty-mod-clear-scrollback ()
+  (let ((term (mistty-mod-make-vterm 20 10)))
+    (mistty-mod-enable-scrollback term)
+
+    ;; fill the screen
+    (mistty-mod-process-bytes term (vconcat "\r0"))
+    (dotimes (i 9)
+      (mistty-mod-process-bytes term (vconcat (format "\r\n%d" (1+ i)))))
+
+    (should (equal 0 (mistty-mod-topmost-line term)))
+    (mistty-mod-process-bytes term (vconcat "\r\n10"))
+    (mistty-mod-process-bytes term (vconcat "\r\n11"))
+    (mistty-mod-process-bytes term (vconcat "\r\n12"))
+    (should (equal -3 (mistty-mod-topmost-line term)))
+    (should (equal 3 (mistty-mod-clear-scrollback term)))
+    (should (equal 0 (mistty-mod-topmost-line term)))))
+
 (ert-deftest mistty-mod-top-bottom-lines ()
   (let ((term (mistty-mod-make-vterm 20 10)))
     (mistty-mod-enable-scrollback term)
