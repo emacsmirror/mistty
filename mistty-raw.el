@@ -23,7 +23,7 @@
 
 (require 'mistty-mod)
 (require 'mistty-util)
-(require 'mistty-term)
+(require 'mistty-kbd)
 (require 'mistty-log)
 (require 'mistty-osc7)
 (require 'mistty-accum)
@@ -103,7 +103,7 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
       (set-process-sentinel proc #'mistty-raw--sentinel)
       (let ((accum (mistty--make-accumulator #'mistty-raw--process-filter)))
         (mistty--accum-add-processor-lambda accum
-            (ctx '(seq OSC ?7 ?\; (let text Pt) ST))
+            (_ctx '(seq OSC ?7 ?\; (let text Pt) ST))
           (mistty-osc7 7 text))
         (set-process-filter proc accum))
       )))
