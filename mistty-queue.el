@@ -282,6 +282,7 @@ If VALUE is set, send that value to the first call to
     (let ((proc (mistty--queue-proc queue)))
       (dolist (p (nreverse pending-outputs))
         (dolist (str (nreverse p))
+          (mistty-log "SEND %S" str)
           (process-send-string proc str))))))
 
 (cl-defun mistty--dequeue-1 (queue value)
