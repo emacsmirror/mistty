@@ -136,6 +136,7 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
 
       (mistty-mod-render mistty-raw--vterm (point-min) (point-max) mistty-raw--cursor)
       (goto-char mistty-raw--cursor)
+      (set-marker (process-mark proc) mistty-raw--cursor)
       (set-process-sentinel proc #'mistty-raw--sentinel)
       (set-process-filter proc #'mistty-raw--process-filter))))
 
@@ -186,7 +187,10 @@ The current buffer must have a virtual terminal associated."
       (goto-char mistty-raw--home)
       (cl-incf mistty-raw--home-scrolline (mistty-mod-clear-scrollback vterm))
       (mistty-log "RENDER @%s" mistty-raw--home-scrolline)
-      (mistty-mod-render-damaged vterm (point) (point-max) mistty-raw--cursor))
+      (mistty-mod-render-damaged vterm (point) (point-max) mistty-raw--cursor)
+      (when-let ((proc (get-buffer-process (current-buffer))))
+        (when (process-live-p proc)
+          (set-marker (process-mark proc) mistty-raw--cursor))))
     (goto-char mistty-raw--cursor)))
 
 (defun mistty-raw--sentinel (proc _msg)
