@@ -28,12 +28,6 @@
 (require 'mistty-log)
 (require 'mistty-queue)
 
-(eval-when-compile
-  ;; defined in term
-  (defvar term-width)
-  (defvar term-height)
-  (defvar term-home-marker))
-
 (defvar mistty-test-bash-exe (executable-find "bash"))
 (defvar mistty-test-zsh-exe (executable-find "zsh")) ;; optional
 (defvar mistty-test-fish-exe (executable-find "fish"));; optional
