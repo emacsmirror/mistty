@@ -3657,7 +3657,7 @@ Width and height are limited to `mistty-min-terminal-width' and
           (height (max height mistty-min-terminal-height)))
       (mistty--with-live-buffer mistty-term-buffer
         (set-process-window-size mistty-proc height width)
-        (mistty-raw-resize height width)))))
+        (mistty-raw-resize width height)))))
 
 (defun mistty--enter-fullscreen (proc)
   "Enter fullscreen mode for PROC."
