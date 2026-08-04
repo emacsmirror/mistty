@@ -479,44 +479,53 @@ This function returns the newly-created buffer."
     term-buffer))
 
 (defun mistty--term-postprocess-changed ()
-  "Process mistty-maybe-skip text properties.
+  "Process mistty-clear text properties.
 
-This function turns mistty-maybe-skip into mistty-skip properties on the
+This function turns mistty-clear into mistty-skip properties on the
 lines that have changed since this processor was last rn."
-  (if mistty-bracketed-paste
-    (when-let* ((change-start
-                 (text-property-any (point-min) (point-max) 'mistty-updated t)))
-      (mistty--term-postprocess change-start mistty-raw-width))
-    (remove-text-properties (point-min) (point-max) 'mistty-updated nil)))
+  (when-let* ((change-start
+               (text-property-any (point-min) (point-max) 'mistty-updated t)))
+      (mistty--term-postprocess (point-min) mistty-raw-width)))
 
 (defun mistty--term-postprocess (region-start window-width)
   "Set mistty-skip and yank handlers after REGION-START.
 
 WINDOW-WIDTH is used to detect right prompts.
 
-This sets properties from the mistty-maybe-skip properties,
+This sets properties from the mistty-clear properties,
 detecting regions looking at a complete line."
   (save-excursion
-    (goto-char region-start)
-    (goto-char (pos-bol))
     (let ((inhibit-read-only t)
           (inhibit-modification-hooks t))
+      (goto-char region-start)
+      (goto-char (pos-bol))
+      (setq region-start (point))
       (remove-text-properties
        region-start (point-max)
        '(mistty-skip nil yank-handler nil mistty-updated nil))
-      (while
-          (progn
-            (let ((bol (pos-bol))
-                  (eol (pos-eol)))
-              (when (> eol bol)
-                (unless (mistty--detect-right-prompt bol eol window-width)
-                  (let ((end (or (mistty--detect-continue-prompt bol)
-                                 (mistty--detect-indent bol eol))))
-                    (mistty--detect-trailing-spaces end eol)))))
+      (let ((region-end (point-max)))
+        (goto-char (point-max))
+        (while (and (> (point) region-start)
+                    (or (= (pos-bol) (pos-eol))
+                        (not (text-property-not-all (pos-bol) (pos-eol) 'mistty-clear t))))
+          (setq region-end (pos-eol 0))
+          (forward-line -1))
+        (when (< region-end (point-max))
+          (put-text-property region-end (point-max) 'mistty-skip 'empty-lines-at-eob))
+        (goto-char region-start)
+        (while
+            (progn
+              (let ((bol (pos-bol))
+                    (eol (pos-eol)))
+                (when (> eol bol)
+                  (unless (mistty--detect-right-prompt bol eol window-width)
+                    (let ((end (or (mistty--detect-continue-prompt bol)
+                                   (mistty--detect-indent bol eol))))
+                      (mistty--detect-trailing-spaces end eol)))))
 
-            ;; process next line?
-            (forward-line 1)
-            (not (eobp)))))))
+              ;; process next line?
+              (forward-line 1)
+              (< (point) region-end)))))))
 
 (defun mistty--detect-right-prompt (bol eol window-width)
   "Detect right prompt and return its left position or nil.
@@ -525,14 +534,14 @@ BOL and EOL define the region to look in. WINDOW-WIDTH must be the width
 of the terminal, usually `mistty-raw-width'."
   (let ((pos (1- eol)))
     (when (and (>= 3 (- window-width (mistty--line-width)))
-               (not (get-text-property pos 'mistty-maybe-skip)))
-      (when-let* ((first-maybe-skip (previous-single-property-change eol 'mistty-maybe-skip nil bol)))
+               (not (get-text-property pos 'mistty-clear)))
+      (when-let* ((first-maybe-skip (previous-single-property-change eol 'mistty-clear nil bol)))
         (when (and (eq (char-before first-maybe-skip) ?\ )
                    (> first-maybe-skip bol))
           (setq pos (1- first-maybe-skip))
           (while (and (>= pos bol)
                       (eq (char-after pos) ?\ )
-                      (get-text-property pos 'mistty-maybe-skip))
+                      (get-text-property pos 'mistty-clear))
             (cl-decf pos))
           (cl-incf pos)
           (add-text-properties
@@ -563,7 +572,7 @@ BOL define the start of the region to look in."
 BOL and EOL define the region to look in."
   (let ((pos bol))
     (while (and (eq (char-after pos) ?\ )
-                (get-text-property pos 'mistty-maybe-skip))
+                (get-text-property pos 'mistty-clear))
       (cl-incf pos))
     (when (> pos bol)
       (when (= pos eol)
@@ -579,7 +588,7 @@ BOL and EOL define the region to look in."
   (let ((pos (1- eol)))
     (while (and (>= pos bol)
                 (eq (char-after pos) ?\ )
-                (get-text-property pos 'mistty-maybe-skip))
+                (get-text-property pos 'mistty-clear))
       (cl-decf pos))
     (cl-incf pos)
 

@@ -35,9 +35,9 @@
 
 (ert-deftest mistty-test-postprocess-indent-and-end ()
   (ert-with-test-buffer ()
-    (insert (concat "$ for i in a b c " (propertize "    " 'mistty-maybe-skip t) "\n"))
-    (insert (concat (propertize "    " 'mistty-maybe-skip t) "echo ok " (propertize "  " 'mistty-maybe-skip t) "\n"))
-    (insert (concat "end" (propertize "    " 'mistty-maybe-skip t)))
+    (insert (concat "$ for i in a b c " (propertize "    " 'mistty-clear t) "\n"))
+    (insert (concat (propertize "    " 'mistty-clear t) "echo ok " (propertize "  " 'mistty-clear t) "\n"))
+    (insert (concat "end" (propertize "    " 'mistty-clear t)))
 
     (mistty--term-postprocess (point-min) 80)
 
@@ -54,13 +54,13 @@
 (ert-deftest mistty-test-postprocess-indent-empty-lines ()
   (ert-with-test-buffer ()
     (insert "$ for i in a b c\n")
-    (insert (concat (propertize "    " 'mistty-maybe-skip t) "\n"))
-    (insert (concat (propertize "    " 'mistty-maybe-skip t) "echo foo\n"))
-    (insert (concat (propertize "" 'mistty-maybe-skip t) "\n"))
-    (insert (concat (propertize "    " 'mistty-maybe-skip t) "echo bar\n"))
-    (insert (concat (propertize "                       " 'mistty-maybe-skip t) "\n"))
-    (insert (concat (propertize "                       " 'mistty-maybe-skip t) "\n"))
-    (insert (concat "end" (propertize "    " 'mistty-maybe-skip t)))
+    (insert (concat (propertize "    " 'mistty-clear t) "\n"))
+    (insert (concat (propertize "    " 'mistty-clear t) "echo foo\n"))
+    (insert (concat (propertize "" 'mistty-clear t) "\n"))
+    (insert (concat (propertize "    " 'mistty-clear t) "echo bar\n"))
+    (insert (concat (propertize "                       " 'mistty-clear t) "\n"))
+    (insert (concat (propertize "                       " 'mistty-clear t) "\n"))
+    (insert (concat "end" (propertize "    " 'mistty-clear t)))
 
     (mistty--term-postprocess (point-min) 80)
 
@@ -86,7 +86,7 @@
 
 (ert-deftest mistty-test-postprocess-ignore-skip-in-the-middle ()
   (ert-with-test-buffer ()
-    (insert (concat "$ echo " (propertize "  " 'mistty-maybe-skip t) "ok " (propertize "    " 'mistty-maybe-skip t) "\n"))
+    (insert (concat "$ echo " (propertize "  " 'mistty-clear t) "ok " (propertize "    " 'mistty-clear t) "\n"))
 
     (mistty--term-postprocess (point-min) 80)
 
@@ -95,7 +95,7 @@
 
 (ert-deftest mistty-test-postprocess-ignore-nonws ()
   (ert-with-test-buffer ()
-    (insert (propertize "$ echo foo bar" 'mistty-maybe-skip t))
+    (insert (propertize "$ echo foo bar" 'mistty-clear t))
 
     (mistty--term-postprocess (point-min) 80)
 
@@ -113,7 +113,7 @@
            (right-prompt " < right ")
            (spaces (- w (length left-prompt) (length right-prompt))))
       (insert left-prompt)
-      (insert (propertize (make-string spaces ?\ ) 'mistty-maybe-skip t))
+      (insert (propertize (make-string spaces ?\ ) 'mistty-clear t))
       (insert right-prompt)
       (should (= (current-column) w))
       (insert "\n")
@@ -135,7 +135,7 @@
            (right-prompt " < right ")
            (spaces (- w (length left-prompt) (length right-prompt) 2)))
       (insert left-prompt)
-      (insert (propertize (make-string spaces ?\ ) 'mistty-maybe-skip t))
+      (insert (propertize (make-string spaces ?\ ) 'mistty-clear t))
       (insert right-prompt)
       (insert "\n")
 
@@ -154,7 +154,7 @@
     (let* ((w 80)
            (right-prompt " < right ")
            (spaces (- w (length right-prompt))))
-      (insert (propertize (make-string spaces ?\ ) 'mistty-maybe-skip t))
+      (insert (propertize (make-string spaces ?\ ) 'mistty-clear t))
       (insert right-prompt)
       (should (= (current-column) w))
       (insert "\n")
@@ -168,9 +168,9 @@
 
 (ert-deftest mistty-test-postprocess-ipython-continue-prompt ()
   (ert-with-test-buffer ()
-    (insert (concat "In [3]: for i in (1, 2, 3):" (propertize "    " 'mistty-maybe-skip t) "\n"))
-    (insert (concat "   ...:   if i > 1:  " (propertize "    " 'mistty-maybe-skip t) "\n"))
-    (insert (concat "   ...:     print(i)  " (propertize "    " 'mistty-maybe-skip t) "\n"))
+    (insert (concat "In [3]: for i in (1, 2, 3):" (propertize "    " 'mistty-clear t) "\n"))
+    (insert (concat "   ...:   if i > 1:  " (propertize "    " 'mistty-clear t) "\n"))
+    (insert (concat "   ...:     print(i)  " (propertize "    " 'mistty-clear t) "\n"))
     (insert (concat "In [133]: for i in (1, 2, 3):\n"))
     (insert (concat "     ...:     print(i)\n"))
 
