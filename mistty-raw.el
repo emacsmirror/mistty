@@ -95,8 +95,10 @@ process."
     (error "A process is already attached to the buffer."))
   (mistty-log "LAUNCH %s %s" program args)
   (let ((process-environment
-         (list (concat "TERM=" (mistty-raw--TERM))
-               (concat "INSIDE_EMACS=" emacs-version)))
+         (nconc
+          (list (concat "TERM=" (mistty-raw--TERM))
+                (concat "INSIDE_EMACS=" emacs-version))
+          process-environment))
         (process-connection-type t)
 	(inhibit-eol-conversion t)
 	(coding-system-for-read 'binary))
@@ -115,10 +117,14 @@ process."
                            "/system/bin/sh"
                          "/bin/sh")
                        "-c"
-	               (format "stty -nl echo rows %d columns %d sane 2>%s;\
+	               (format "stty -nl echo rows %d columns %d sane erase %s 2>%s;\
 if [ $1 = .. ]; then shift; fi; exec \"$@\""
                                ;; term-height term-width null-device
-		               height width "/dev/null")
+		               height width
+                               (pcase mistty-del
+                                       ("\C-h" "^H")
+                                       ("\d" "^?"))
+                               "/dev/null")
 	               ".."
 	               program args)))
       ;; Window size must be adjusted manually with mistty-raw--resize
