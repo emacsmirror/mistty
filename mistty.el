@@ -32,7 +32,6 @@
 ;; https://mistty.readthedocs.io/en/latest/
 ;;
 
-(require 'term)
 (require 'seq)
 (require 'subr-x)
 (require 'pcase)
@@ -40,6 +39,7 @@
 (require 'fringe)
 (require 'cl-lib)
 (require 'imenu)
+(require 'shell)
 (eval-when-compile
   (require 'files-x) ; with-connection-local-variables
   (require 'minibuffer))
@@ -53,8 +53,7 @@
 (require 'mistty-log)
 (require 'mistty-queue)
 (require 'mistty-undo)
-
-(defvar term-width) ; defined in term.el
+(require 'mistty-raw)
 
 ;;; Code:
 
@@ -503,7 +502,6 @@ are sent directly to the terminal."
   "<right>" #'mistty-send-last-key)
 
 (defvar-keymap mistty-fullscreen-map
-  :parent term-raw-map
   :doc "Keymap active while in fullscreen mode.
 
 While in fullscreen mode, the buffer is a `term-mode' with its
@@ -863,10 +861,6 @@ fullscreen mode.")
 (defvar-local mistty--point-marker nil
   "Marker (re)used by mistty--sync-buffer on Emacs 31 and later.")
 
-(eval-when-compile
-  ;; defined in term.el
-  (defvar term-home-marker))
-
 (defconst mistty-min-terminal-width 8
   "Minimum terminal width.
 
@@ -1035,15 +1029,13 @@ buffer and `mistty-proc' to that buffer's process."
       (setq mistty-work-buffer work-buffer)
       (setq mistty-term-buffer term-buffer)
       (unless mistty-sync-marker
-        (setq mistty-sync-marker (copy-marker term-home-marker))))
+        (setq mistty-sync-marker (copy-marker mistty-raw--home))))
 
     (when proc
       (let ((accum (process-filter proc)))
         (mistty--accum-reset accum)
         (mistty--add-prompt-detection accum)
-        (mistty--add-da1 accum)
         (mistty--add-osc-detection accum)
-        (mistty--add-skip-unsupported accum)
         (mistty--add-toggle-cursor accum work-buffer)
         (mistty--add-sync-buffers accum work-buffer term-buffer)
 
@@ -1112,7 +1104,7 @@ Returns M or a new marker."
   (when mistty-proc
     (let ((accum (process-filter mistty-proc)))
       (mistty--accum-reset accum))
-    (set-process-sentinel mistty-proc #'term-sentinel)
+    (set-process-sentinel mistty-proc #'mistty-raw--sentinel)
     (setq mistty-proc nil)))
 
 (defun mistty--kill-term-buffer ()
@@ -1421,7 +1413,7 @@ a special string describing the new process state."
     (cond
      ((and (buffer-live-p term-buffer)
            (buffer-live-p work-buffer))
-      (term-sentinel proc msg)
+      (mistty-raw--sentinel proc msg)
       (mistty--with-live-buffer work-buffer
         (mistty--needs-refresh) ;; term-buffer was modified by term-sentinel
         (save-restriction
@@ -1474,9 +1466,9 @@ special string describing the new process state."
      ((and process-dead (not (buffer-live-p term-buffer)) (buffer-live-p work-buffer))
       (let ((kill-buffer-query-functions nil))
         (kill-buffer (process-get proc 'mistty-work-buffer)))
-      (term-sentinel proc msg)
+      (mistty-raw--sentinel proc msg)
       (mistty--run-after-process-end-hooks work-buffer proc))
-     (t (term-sentinel proc msg)))))
+     (t (mistty-raw--sentinel proc msg)))))
 
 (defun mistty--add-sync-buffers (accum work-buffer term-buffer)
   "Sync the terminal region of WORK-BUFFER with TERM-BUFFER.
@@ -1741,7 +1733,7 @@ Also updates prompt and point."
                         (text-property-search-forward 'term-line-wrap t t)))
              (when (save-excursion
                      (goto-char (prop-match-beginning prop-match))
-                     (zerop (% (current-column) term-width)))
+                     (zerop (% (current-column) mistty-raw-width)))
                (add-text-properties
                 (prop-match-beginning prop-match)
                 (prop-match-end prop-match)
@@ -1821,20 +1813,10 @@ Also updates prompt and point."
          (unless mistty--active-prompt
            (mistty--with-live-buffer mistty-term-buffer
              ;; Next time, only sync the visible portion of the terminal.
-             (when (< mistty-sync-marker term-home-marker)
+             (when (< mistty-sync-marker mistty-raw--home)
                (let ((scrolline (mistty--term-scrolline-at-screen-start)))
                  (mistty--with-live-buffer mistty-work-buffer
-                   (mistty--maybe-move-sync-mark scrolline))))
-
-             ;; Truncate the term buffer, since scrolling back is available on
-             ;; the work buffer anyways. This has to be done now, after syncing
-             ;; the marker, and not in term-emulate-terminal, which is why
-             ;; term-buffer-maximum-size is set to 0.
-             (mistty--adjust-scrolline-base)
-             (save-excursion
-               (goto-char term-home-marker)
-               (forward-line -5)
-               (delete-region (point-min) (point)))))
+                   (mistty--maybe-move-sync-mark scrolline))))))
 
          ;; Move the point to the cursor, if necessary.
          (when (process-live-p mistty-proc)
@@ -2201,7 +2183,7 @@ just tend to cause issues."
         (inhibit-read-only t))
     (mistty--mark-scrollines beg scrolline end)
     (when (not mistty--inhibit-fake-nl-cleanup)
-      (mistty--remove-fake-newlines beg end term-width))))
+      (mistty--remove-fake-newlines beg end mistty-raw-width))))
 
 (defun mistty--mark-scrollines (beg scrolline end)
   "Add text property \\='mistty-scrolline to scrollines from BEG to END.
@@ -3675,7 +3657,7 @@ Width and height are limited to `mistty-min-terminal-width' and
           (height (max height mistty-min-terminal-height)))
       (mistty--with-live-buffer mistty-term-buffer
         (set-process-window-size mistty-proc height width)
-        (term-reset-size height width)))))
+        (mistty-raw-resize height width)))))
 
 (defun mistty--enter-fullscreen (proc)
   "Enter fullscreen mode for PROC."
@@ -3696,9 +3678,7 @@ Width and height are limited to `mistty-min-terminal-width' and
     (let ((accum (process-filter proc))
           (end (copy-marker (point-max))))
       (mistty--accum-reset accum)
-      (mistty--add-da1 accum)
       (mistty--add-osc-detection accum)
-      (mistty--add-skip-unsupported accum)
       (mistty--add-toggle-cursor accum mistty-term-buffer)
       (mistty--accum-add-processor
        accum

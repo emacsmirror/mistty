@@ -17,13 +17,7 @@
 ;;; Commentary:
 ;;
 ;; This file collects helpers for mistty.el that deal with the
-;; terminal and the `term-mode' buffer. term.el would be a better fit
-;; for many of these.
-
-(require 'term)
-(defvar term-width) ; defined in term.el
-(defvar term-height) ; defined in term.el
-(defvar term-home-marker) ; defined in term.el
+;; terminal buffer.
 
 (require 'pcase)
 (require 'subr-x)
@@ -36,6 +30,7 @@
 (eval-when-compile
   (require 'mistty-accum-macros))
 (require 'mistty-kbd)
+(require 'mistty-raw)
 
 ;;; Code:
 
@@ -64,11 +59,11 @@
     ("133" . mistty-osc133))
   "Hook run when unknown OSC sequences have been received.
 
-This hook is run on the `term-mode' buffer. It is passed the OSC code as
+This hook is run on the terminal buffer. It is passed the OSC code as
 a string and the content of OSC sequence - everything between OSC (ESC
 ]) and ST (ESC \\ or \\a) and may choose to handle them.
 
-The current buffer a`term-mode' buffer. The hook is allowed to
+The current buffer is a terminal buffer. The hook is allowed to
 modify it, to add text properties, for example. In such case,
 consider using `mistty-register-text-properties'.
 
@@ -140,33 +135,6 @@ definition, because it doesn't allow editing what's above."
 (defconst mistty-down-str "\eOB"
   "Sequence to send to the process when the left arrow is pressed.")
 
-(defcustom mistty-term-mode-hook (list #'mistty-call-term-mode-hook)
-  "Hook run in in term-mode buffers created by MisTTY.
-
-This hook overrides `term-mode-hook' for term buffers started by MisTTY
-to allow configuring MisTTY's term buffers differently from normal term
-buffers.
-
-The default includes `mistty-call-term-mode-hook', which calls the
-original `term-mode-hook'.
-
-If you'd like to have completely different configuration for normal term-mode
-buffers and term-mode buffers started by Mistty, call:
-
-  (remove-hook \\='mistty-term-mode-hook \\='mistty-call-term-mode-hook)
-
-You might want to execute the above command as well if you have reasons
-to think that some term-mode customization are interfering with MisTTY's
-operations."
-  :group 'mistty
-  :type 'hook)
-
-(defvar mistty-shadowed-term-mode-hook nil
-  "Special variable under which hooks found it `term-mode-hook' are stored.
-
-This is allows running `term-mode-hook' or not, from
-`mistty-term-mode-hook'.")
-
 (defvar-local mistty-bracketed-paste nil
   "Whether bracketed paste is enabled in the terminal.
 
@@ -174,12 +142,6 @@ This variable evaluates to true when bracketed paste is turned on
 by the command that controls, to false otherwise.
 
 This variable is available in both the work and term buffers.")
-
-(defvar-local mistty--term-changed nil
-  "Non-nil if the terminal was changed since last postprocess.
-
-This is used to decide whether and on what region of the buffer
-to call `mistty--term-postprocess'.")
 
 (defvar-local mistty--term-properties-to-add-alist nil
   "An alist of id to text properties to add to the term buffer.
@@ -198,11 +160,6 @@ local value. `mistty--show-cursor' then restores the global
 value.
 
 Used in `mistty--hide-cursor' and `mistty--show-cursor'.")
-
-(defvar-local mistty--scrolline-home nil
-  "Base of scrolline numbers.")
-(defvar-local mistty--scrolline-base nil
-  "Scrolline number of `mistty--scrolline-home'.")
 
 (defvar-local mistty--prompt-cell nil
   "A `mistty--prompt-cell' instance.
@@ -303,71 +260,8 @@ The old value, if any, is pushed into `mistty--prompt-archive'."
   "Handle process output as a terminal would.
 
 This function accepts output from PROC included into STR and forwards
-them to `term-emulate-terminal' with some modified functions, fix some
-issues.
-
-It also logs everything it receives to mistty-log.
-
-This is meant as a drop-in replacement for `term-emulate-terminal' in
-all situations, even when no work buffer is available."
-  (cl-letf ((inhibit-read-only t) ;; allow modifications in char mode
-            ;; Using term-buffer-vertical-motion causes strange
-            ;; issues; avoid it. Additionally, it's not actually
-            ;; necessary since term.el adds newlines instead of
-            ;; relying on Emacs wrapping lines. Mistty makes sure of
-            ;; that by forcing term-suppress-hard-newline off.
-            ((symbol-function 'term-buffer-vertical-motion)
-             (lambda (count)
-               (let ((start-point (point))
-                     (res (forward-line count)))
-                 ;; Convert forward-line return value (lines left to
-                 ;; go through) to vertical-motion's (lines gone
-                 ;; through) with a workaround for forward-line
-                 ;; special handling of the last line.
-                 (setq res (- count res))
-                 (when (and (> count 0)
-                            (= (point) (point-max))
-                            (> (point) start-point)
-                            (not (eq ?\n (char-before (point-max)))))
-                   (cl-decf res))
-                 res)))
-            ((symbol-function 'term--handle-colors-list)
-             (let ((real-handle-colors-list (symbol-function 'term--handle-colors-list)))
-               (lambda (parameters)
-                 (funcall real-handle-colors-list parameters)
-                 (setq term-current-face
-                       (mistty--clear-term-face-value term-current-face))))))
-    (mistty-log "RECV %S" str)
-    (term-emulate-terminal proc str)
-
-    ;; MisTTY always wants the point at process mark, no matter what.
-    ;; term-mode is not so categorical and might sometimes lose sync
-    ;; during resizes.
-    (mistty--with-live-buffer (process-buffer proc)
-        (goto-char (process-mark proc)))))
-
-(defun mistty--add-skip-unsupported (accum)
-  "Skip some unsupported terminal sequences that confuse term.el.
-
-This function adds processors to ACCUM to skip Application
-Keypad (DECPAM) / Normal Keypad (DECPNM) Issued by Fish 4+ but just
-ecoed by term.el."
-  (mistty--accum-add-processor
-   accum
-   '(seq ESC (char "=>")) #'ignore))
-
-(defun mistty--add-da1 (accum)
-  "Handle DA1 Primary Device Detection code.
-
-This implementation detects and answers primary device detection
-requests from the application attached to the terminal. This is
-here mostly to keep fish 4.1 and later happy."
-  (mistty--accum-add-processor
-   accum
-   '(seq CSI (or "0c" "c"))
-   (lambda (_ _)
-     (process-send-string (get-buffer-process (current-buffer))
-                          "\e[?64;1;18;21;22c"))))
+them to the virtual terminal."
+  (mistty-raw--process-filter proc str))
 
 (defun mistty--add-osc-detection (accum)
   "Handle OSC code in ACCUM.
@@ -427,7 +321,7 @@ Detected prompts can be found in `mistty-prompt'."
                ;; paste is on; mark past sections of the prompt
                ;; as changed, including to the eol to cover
                ;; right prompts, also written before.
-               (mistty--changed real-start eol))
+               (add-text-properties real-start eol '(mistty-updated t)))
              (setq scrolline (mistty--term-scrolline-at real-start)))
            (setq prompt (mistty--make-prompt 'bracketed-paste scrolline))
            (mistty--term-remove-prompt_sp prompt)
@@ -473,7 +367,7 @@ Detected prompts can be found in `mistty-prompt'."
      ;; buffer just before the \r is taken into account.
      (when (string= "        " (mistty--accum-ctx-look-back ctx))
        (mistty--accum-ctx-flush ctx)
-       (when (or (and (= (1- term-width) (term-current-column))
+       (when (or (and (= (1- mistty-raw-width) (mistty-raw--cursor-column))
                       (eq ?\  (char-before (point))))
                  (and (get-text-property (pos-eol 0) 'term-line-wrap)
                       (string-match "^ *$" (buffer-substring (pos-bol) (pos-eol)))))
@@ -482,23 +376,7 @@ Detected prompts can be found in `mistty-prompt'."
                (pos (pos-eol 0)))
            (put-text-property pos (1+ pos) 'mistty-prompt-sp t))))
 
-     (mistty--accum-ctx-push-down ctx "\r")))
-
-  ;; Detect and mark moves with mistty-maybe-skip
-  (mistty--accum-add-around-process-filter
-   accum
-   (lambda (func)
-     (cl-letf ((inhibit-modification-hooks nil) ;; run mistty--after-change-on-term
-               ((symbol-function 'term-delete-chars)
-                (lambda (count)
-                  (let ((save-point (point)))
-                    (move-to-column (+ (term-current-column) count) t)
-                    (delete-region save-point (point)))))
-               ((symbol-function 'move-to-column)
-                (let ((orig (symbol-function 'move-to-column)))
-                  (lambda (&rest args)
-                    (apply #'mistty--around-move-to-column orig args)))))
-       (funcall func)))))
+     (mistty--accum-ctx-push-down ctx "\r"))))
 
 (defun mistty--term-remove-prompt_sp (prompt)
   "Clear the mistty-prompt-sp property in PROMPT.
@@ -586,182 +464,30 @@ reported to the remote process.
 This function returns the newly-created buffer."
   (let ((term-buffer (generate-new-buffer name 'inhibit-buffer-hooks)))
     (with-current-buffer term-buffer
-      (let* ((mistty-shadowed-term-mode-hook term-mode-hook)
-             (term-mode-hook mistty-term-mode-hook))
-        (term-mode))
-      (font-lock-mode -1)
-      (jit-lock-mode nil)
-      (setq-local term-char-mode-buffer-read-only t)
-      (setq-local term-char-mode-point-at-process-mark t)
-      (setq-local term-buffer-maximum-size 0)
-      (setq-local term-set-terminal-size t)
-      (setq-local term-width width)
-      (setq-local term-height height)
-      (setq-local term-command-function #'mistty--term-command-hook)
-      (setq-local mistty--scrolline-home (copy-marker (point-min)))
-      (setq-local mistty--scrolline-base 0)
+      (mistty-raw-mode)
       (setq-local mistty--prompt-cell (mistty--make-prompt-cell))
       (setq-local scroll-margin 0)
 
-      ;; This makes sure the obsolete option, if it still exists,
-      ;; term-suppress-hard-newline is not set, as MisTTY relies on
-      ;; term.el inserting fake newlines marked with term-line-wrap.
-      (with-suppressed-warnings ((obsolete term-suppress-hard-newline))
-        (setq-local term-suppress-hard-newline nil))
-
-      (mistty-term--exec program args)
+      (mistty-raw-exec name program args width height)
       (let ((proc (get-buffer-process term-buffer)))
-        ;; TRAMP sets adjust-window-size-function to #'ignore, which
-        ;; prevents normal terminal resizing from working. This turns
-        ;; it on again.
-        (process-put proc 'adjust-window-size-function nil)
-        (set-process-window-size proc height width)
         (set-process-filter proc (mistty--make-accumulator
                                   #'mistty--emulate-terminal)))
-      (setq-local term-raw-map local-map)
-      (term-char-mode)
-      (add-hook 'after-change-functions #'mistty--after-change-on-term nil t))
+
+      (when local-map
+        (use-local-map local-map)))
 
     term-buffer))
-
-(defun mistty-term--exec (program args)
-  "Execute PROGRAM with ARGS in the terminal buffer.
-
-Must be called from the term buffer."
-  (let ((buffer (current-buffer))
-        (name (buffer-name))
-        ;; Bash versions older than 4.4 only turn on directory
-        ;; tracking if the env variable EMACS is set and contains
-        ;; "term". To deal with that, term.el detects whether a
-        ;; version of bash older than 4.4 is installed and if it is,
-        ;; set this variable to 43. This logic doesn't work well on
-        ;; remote hosts. MisTTY disables that and replaces it with
-        ;; mistty-set-EMACS.
-        (term--bash-needs-EMACS-status 0)
-        (process-environment
-         (if (with-connection-local-variables mistty-set-EMACS)
-             (cons (format "EMACS=%s (term:%s)"
-                           emacs-version term-protocol-version)
-                   process-environment)
-           process-environment)))
-
-    (cl-letf*
-        ;; On MacOS, the length of the termcap entry, heavily
-        ;; escaped by TRAMP, plus the other env variables is enough
-        ;; to hit the 1024 byte limit of the tty cache used in
-        ;; canonical mode (on Linux, it is 4095, so there's no
-        ;; problem.) Adding a newline to the termcap entry avoids
-        ;; hitting that limit while remaining valid. An alternative
-        ;; would be to have TRAMP disable canonical mode with stty
-        ;; -icanon before sending out the command.
-        ((term-termcap-format (concat term-termcap-format "\n"))
-
-         ;; term.el calls start-process, which doesn't support starting
-         ;; processes with TRAMP. The following intercepts replace
-         ;; start-process with start-file process, which does support
-         ;; TRAMP.
-         (real-start-process (symbol-function 'start-process))
-         (called nil)
-         ((symbol-function 'start-process)
-          (lambda (name buffer program &rest program-args)
-            (if called
-                (apply real-start-process name buffer program program-args)
-              (setq called t)
-              ;; Set erase to ^H or ^? to stty so the terminal is
-              ;; expecting the right delete value. Issue #12
-              (when-let* ((stty-command (nth 1 program-args))
-                         (erase-char (pcase mistty-del
-                                       ("\C-h" "^H")
-                                       ("\d" "^?"))))
-                (setq program-args (cl-copy-list program-args))
-                (when (string-match "stty.*?sane" stty-command)
-                  (setf (nth 1 program-args)
-                        (concat (match-string 0 stty-command)
-                                " erase "
-                                erase-char
-                                (substring stty-command (match-end 0))))))
-              (let* ((process-environment
-                      ;; TERMINFO references a local file. This is
-                      ;; not useful on a remote host, so let's
-                      ;; remove it. A description of the terminal is
-                      ;; available in TERMCAP.
-                      (if (file-remote-p default-directory)
-                          (delq nil
-                                (mapcar (lambda (var)
-                                          (if (string-prefix-p "TERMINFO=" var)
-                                              nil
-                                            var))
-                                        process-environment))
-                        process-environment))
-                     (proc (apply #'start-file-process name buffer program program-args)))
-
-                ;; start-file-process doesn't always respect
-                ;; coding-system-for-read set by term.el. Force it.
-                (set-process-coding-system proc 'binary (cdr (process-coding-system proc)))
-                proc)))))
-      (term-exec buffer name program nil args))))
-
-(defun mistty--after-change-on-term (beg end _old-length)
-  "Function registered to `after-change-functions' by `mistty--create-term'.
-
-BEG and END define the region that was modified."
-  (let ((inhibit-modification-hooks t))
-    (when (and mistty--term-properties-to-add-alist (> end beg))
-      (when-let* ((props (apply #'append
-                               (mapcar #'cdr mistty--term-properties-to-add-alist))))
-        ;; Merge sections with same properties separated by
-        ;; whitespaces. The problem with setting text properties based
-        ;; on term state is that the terminal might just reuse spaces
-        ;; or newlines that already exist - visually, it doesn't
-        ;; matter - even though they're in a section that should get
-        ;; these properties.
-        (save-excursion
-          (goto-char beg)
-          (when (and (/= 0 (skip-chars-backward " \t\n"))
-                     (> (point) (point-min))
-                     (mistty--has-text-properties (1- (point)) props))
-            (add-text-properties (point) beg props)))
-        (add-text-properties beg end props)))
-
-    (when mistty-bracketed-paste
-      (mistty--changed beg end))))
-
-(defun mistty--changed (beg end)
-  "Mark text between BEG and END as changed, forcing postprocess."
-  (setq mistty--term-changed (if mistty--term-changed
-                                 (min mistty--term-changed beg)
-                               beg))
-  (let ((beg (mistty--bol beg))
-        (end (mistty--eol end)))
-    (when (> end beg)
-      (put-text-property beg end 'mistty-changed t))))
-
-(defun mistty--around-move-to-column (orig-fun &rest args)
-  "Add property \\='mistty-maybe-skip t to spaces added when just moving.
-
-ORIG-FUN is the original `move-to-column' function and ARGS are its
-arguments."
-  (let ((initial-end (line-end-position)))
-    (apply orig-fun args)
-    (when (> (point) initial-end)
-      (put-text-property
-       initial-end (point) 'mistty-maybe-skip t))))
 
 (defun mistty--term-postprocess-changed ()
   "Process mistty-maybe-skip text properties.
 
 This function turns mistty-maybe-skip into mistty-skip properties on the
-lines that have changed, as detected by `mistty--term-changed'."
-  (when (and mistty--term-changed (< mistty--term-changed (point-min)))
-    (setq mistty--term-changed (point-min)))
-  (when (and mistty--term-changed (>= mistty--term-changed (point-max)))
-    (setq mistty--term-changed nil))
-  (when-let* ((change-start
-              (when mistty--term-changed
-                (text-property-any
-                 mistty--term-changed (point-max) 'mistty-changed t))))
-    (mistty--term-postprocess change-start term-width))
-  (setq mistty--term-changed nil))
+lines that have changed since this processor was last rn."
+  (if mistty-bracketed-paste
+    (when-let* ((change-start
+                 (text-property-any (point-min) (point-max) 'mistty-updated t)))
+      (mistty--term-postprocess change-start mistty-raw-width))
+    (remove-text-properties (point-min) (point-max) 'mistty-updated nil)))
 
 (defun mistty--term-postprocess (region-start window-width)
   "Set mistty-skip and yank handlers after REGION-START.
@@ -777,7 +503,7 @@ detecting regions looking at a complete line."
           (inhibit-modification-hooks t))
       (remove-text-properties
        region-start (point-max)
-       '(mistty-skip nil yank-handler nil mistty-changed nil))
+       '(mistty-skip nil yank-handler nil mistty-updated nil))
       (while
           (progn
             (let ((bol (pos-bol))
@@ -790,14 +516,13 @@ detecting regions looking at a complete line."
 
             ;; process next line?
             (forward-line 1)
-            (not (eobp))))
-      (setq mistty--term-changed nil))))
+            (not (eobp)))))))
 
 (defun mistty--detect-right-prompt (bol eol window-width)
   "Detect right prompt and return its left position or nil.
 
 BOL and EOL define the region to look in. WINDOW-WIDTH must be the width
-of the terminal, usually `term-width'."
+of the terminal, usually `mistty-raw-width'."
   (let ((pos (1- eol)))
     (when (and (>= 3 (- window-width (mistty--line-width)))
                (not (get-text-property pos 'mistty-maybe-skip)))
@@ -894,33 +619,6 @@ bracketed paste brackets around it."
      ((not (string-match "[[:cntrl:]]" str)) str)
      (t (concat "\e[200~" str "\e[201~")))))
 
-(defun mistty--term-command-hook (string)
-  "TRAMP-aware alternative to `term-command-hook'.
-
-This function is meant to be bound to `term-command-function' to
-catch Emacs-specific control sequences \\032...\\n. The STRING
-argument includes everything between \\032 and \\n.
-
-When `default-directory' is remote, this function interprets paths
-sent by the terminal as being local to the TRAMP connection. The
-result is that it sends remote paths to `cd'.
-
-This works well with Bash which, by default, sends out directory paths
-with every prompt if the env variable INSIDE_EMACS is set."
-  (if (= (aref string 0) ?/)
-      (let ((path (substring string 1)))
-        (unless (file-remote-p path)
-          (when-let* ((prefix (file-remote-p default-directory)))
-            (setq path (concat prefix path))))
-        ;; Not using cd here, to avoid a remote connection being made to
-        ;; check the path.
-        (setq path (file-name-as-directory path))
-        (setq path (expand-file-name path))
-        (setq default-directory path))
-
-    ;; unknown or unsupported Emacs-specific control sequence.
-    (term-command-hook string)))
-
 (defun mistty--hide-cursor ()
   "Temporarily hide the cursor.
 
@@ -996,20 +694,8 @@ Detected dead spaces are marked with the text property \\='mistty-skip
 This is useful after a reset, where scrolline have been lost. Generally,
 this allows arbitrarily manipulating the alignment between the work and
 terminal buffers. To avoid issues with prompt locations, it should only
-be used to increase the value of `mistty--scrolline-base'."
-  (setq mistty--scrolline-base scrolline)
-  (move-marker mistty--scrolline-home
-               (or (marker-position term-home-marker)
-                   (point-min))))
-
-(defun mistty--adjust-scrolline-base ()
-  "Move the scrolline base to `term-home-marker'.
-
-Call this before deleting any region before `term-home-marker'."
-  (when (/= mistty--scrolline-home term-home-marker)
-    (let ((delta (mistty--count-scrollines mistty--scrolline-home term-home-marker)))
-      (setq mistty--scrolline-base (+ mistty--scrolline-base delta)))
-    (move-marker mistty--scrolline-home (marker-position term-home-marker))))
+be used to increase the value of `mistty-raw--home'."
+  (setq mistty-raw--home-scrolline scrolline))
 
 (defun mistty--term-scrolline ()
   "Return the current scrolline.
@@ -1029,21 +715,20 @@ and doesn't change as the buffer scrolls up or the terminal size
 changes.
 
 Before using a scrolline, convert it to a screen row or point."
-  (+ mistty--scrolline-base (mistty--count-scrollines mistty--scrolline-home pos)))
+  (+ mistty-raw--home-scrolline (mistty--count-scrollines mistty-raw--home pos)))
 
 (defun mistty--term-scrolline-pos (scrolline)
   "Return the char position of the beginning of SCROLLINE.
 
 Return nil if the row isn't reachable on the terminal."
   (save-excursion
-    (goto-char mistty--scrolline-home)
-    (when (zerop (mistty--go-down-scrollines (- scrolline mistty--scrolline-base)))
+    (goto-char mistty-raw--home)
+    (when (zerop (mistty--go-down-scrollines (- scrolline mistty-raw--home-scrolline)))
       (point))))
 
 (defun mistty--term-scrolline-at-screen-start()
   "Scrolline at the top of the screen."
-  (mistty--adjust-scrolline-base)
-  mistty--scrolline-base)
+  mistty-raw--home-scrolline)
 
 (defun mistty-osc133 (_ osc-seq)
   "Handle OSC 133 codes.
@@ -1059,7 +744,7 @@ MisTTY supports code A-D:
  - D marks the end of the command.
 
 Everything else is ignored."
-  (when (and (length> osc-seq 0) (not (term-using-alternate-sub-buffer)))
+  (when (and (length> osc-seq 0) (not (mistty-raw--alt-screen-p)))
     (let ((command-char (aref osc-seq 0)))
       (pcase command-char
         (?A ;; start a new command
@@ -1077,7 +762,7 @@ Everything else is ignored."
          (when-let* ((prompt (mistty--prompt)))
            (setf (mistty--prompt-user-input-start prompt)
                  (cons (mistty--term-scrolline)
-                       (term-current-column)))))
+                       (mistty-raw--cursor-column)))))
 
         (?C ;; start of command output
          (when-let* ((prompt (mistty--prompt)))
