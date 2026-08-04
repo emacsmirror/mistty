@@ -86,6 +86,10 @@ scrollback lines.")
 
 Call `mistty-raw-exec' to create the virtual terminal and start the
 process."
+  ;; Face is set manually; disable font-lock mode
+  (font-lock-mode -1)
+  (jit-lock-mode nil)
+
   (use-local-map mistty-raw-mode-map))
 
 (defun mistty-raw-exec (name program args width height)
