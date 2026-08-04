@@ -98,7 +98,9 @@ process."
   (when (get-buffer-process (current-buffer))
     (error "A process is already attached to the buffer."))
   (mistty-log "LAUNCH %s %s" program args)
-  (let ((process-environment
+  (let ((width (or width 80))
+        (height (or height 24))
+        (process-environment
          (nconc
           (list (concat "TERM=" (mistty-raw--TERM))
                 (concat "INSIDE_EMACS=" emacs-version))
