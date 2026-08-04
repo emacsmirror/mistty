@@ -1708,7 +1708,7 @@ Also updates prompt and point."
                                    (= (point) mistty--cursor-after-last-refresh)))
           on-prompt)
       (mistty--copy-buffer-local-variables
-       (cons 'mistty-bracketed-paste (cons 'term-width mistty-variables-to-copy))
+       (cons 'mistty-bracketed-paste (cons 'mistty-raw-width mistty-variables-to-copy))
        mistty-term-buffer)
       (mistty--inhibit-undo
        (save-restriction
