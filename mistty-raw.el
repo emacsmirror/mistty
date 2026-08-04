@@ -30,6 +30,23 @@
 
 (defvar explicit-shell-file-name) ;; defined in shell
 
+(defcustom mistty-term-name nil
+  "Value for the TERM env variable for the virtual terminal.
+
+This should be set to alacritty or alacritty-direct, as long as the
+alacritty terminal definition is installed. This is necessary for
+truecolor (24bit) support.
+
+See https://github.com/alacritty/alacritty/blob/master/INSTALL.md#terminfo
+
+For backward compatibility, you may want set it to xterm-256color or
+even xterm.
+
+If this is nil, MisTTY checks whether the alacritty terminfo is present
+on the system and automatically falls back to xterm-256color."
+  :group 'mistty
+  :type 'string)
+
 (defvar-local mistty-raw--vterm nil
   "Virtual terminal tied to the buffer, from mistty-mod.")
 
@@ -78,13 +95,14 @@ process."
     (error "A process is already attached to the buffer."))
   (mistty-log "LAUNCH %s %s" program args)
   (let ((process-environment
-         (list "TERM=xterm-256color"
+         (list (concat "TERM=" (mistty-raw--TERM))
                (concat "INSIDE_EMACS=" emacs-version)))
         (process-connection-type t)
 	(inhibit-eol-conversion t)
 	(coding-system-for-read 'binary))
     (setq mistty-raw--cursor (copy-marker (point-min)))
     (setq mistty-raw--home (copy-marker (point-min)))
+    (set-marker-insertion-type mistty-raw--home nil)
     (setq mistty-raw--home-scrolline 0)
     (setq mistty-raw-width width)
     (setq mistty-raw-height height)
@@ -178,6 +196,10 @@ The current buffer must have a virtual terminal associated."
      (floor (window-screen-lines)))))
 
 (defun mistty-raw-send-self (&optional n key)
+  "Send KEY N times to the process connected to the terminal.
+
+The key is translated to something a terminal application may
+understand using `mistty-translate-key'."
   (interactive "p")
   (if-let ((proc (get-buffer-process (current-buffer))))
       (let* ((key (or key (this-command-keys-vector)))
@@ -185,6 +207,15 @@ The current buffer must have a virtual terminal associated."
         (mistty-log "SEND KEY %s %s %S" n key translated-key)
         (process-send-string proc translated-key))
     (self-insert-command n key)))
+
+(defun mistty-raw--TERM ()
+  "Choose a value for the TERM env variable.
+
+This is controlled by the custom variable `mistty-term-name'"
+  (cond
+   (mistty-term-name mistty-term-name)
+   ((shell-command-to-string "infocmp alacritty") "alacritty")
+   (t "xterm-256color")))
 
 (provide 'mistty-raw)
 
