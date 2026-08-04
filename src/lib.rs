@@ -6,6 +6,7 @@ use crate::vterm::VTerm;
 use alacritty_terminal::{
     grid::Dimensions,
     index::{Column, Line, Point},
+    term::TermMode,
 };
 use emacs::{Env, IntoLisp, Result, Value, Vector, defun};
 use std::{fmt::Debug, ops::RangeBounds};
@@ -144,10 +145,22 @@ fn last_column(term: &VTerm) -> Result<usize> {
 ///
 /// COLUMN is a column number between 0 and `mistty-mod-last-column`.
 #[defun]
-fn cursor_point<'a>(env: &'a Env, term: &VTerm) -> Result<Value<'a>> {
+fn cursor<'a>(env: &'a Env, term: &VTerm) -> Result<Value<'a>> {
     let point = term.cursor_point();
 
     env.cons(point.line.0, point.column.0)
+}
+
+/// Check whether the alternate screen is in use.
+#[defun]
+fn alt_screen_p(term: &VTerm) -> Result<bool> {
+    Ok(term.inner().mode().contains(TermMode::ALT_SCREEN))
+}
+
+/// Check whether bracketed paste is enabled.
+#[defun]
+fn bracketed_paste_p(term: &VTerm) -> Result<bool> {
+    Ok(term.inner().mode().contains(TermMode::BRACKETED_PASTE))
 }
 
 /// Return the character count within [start, end).

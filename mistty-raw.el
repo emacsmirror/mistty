@@ -141,6 +141,18 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
         (mistty-mod-resize vterm width height)
         (set-process-window-size proc height width))))
 
+(defun mistty-raw--alt-screen-p ()
+  (mistty-mod-alt-screen-p mistty-raw--vterm))
+
+(defun mistty-raw--cursor-linecol ()
+  (mistty-mod-cursor mistty-raw--vterm))
+
+(defun mistty-raw--cursor-column ()
+  (cdr (mistty-mod-cursor mistty-raw--vterm)))
+
+(defun mistty-raw--cursor-line ()
+  (car (mistty-mod-cursor mistty-raw--vterm)))
+
 (defun mistty-raw--process-filter (proc str)
   (mistty-log "RECV %S" str)
   (mistty--with-live-buffer (process-buffer proc)
