@@ -123,11 +123,11 @@ process."
                        "-c"
 	               (format "stty -nl echo rows %d columns %d sane erase %s 2>%s;\
 if [ $1 = .. ]; then shift; fi; exec \"$@\""
-                               ;; term-height term-width null-device
 		               height width
                                (pcase mistty-del
                                        ("\C-h" "^H")
                                        ("\d" "^?"))
+                               ;; TODO: choose appropriate null-device
                                "/dev/null")
 	               ".."
 	               program args)))
