@@ -114,6 +114,7 @@ process."
     (setq mistty-raw--home-scrolline 0)
     (setq mistty-raw-width width)
     (setq mistty-raw-height height)
+    (mistty-log "MAKE VTERM %s lines, %s colums" height width)
     (setq mistty-raw--vterm (mistty-mod-make-vterm width height))
     (mistty-mod-enable-scrollback mistty-raw--vterm)
     (let ((proc (apply #'start-file-process name (current-buffer)
@@ -151,6 +152,7 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
   (if (or (/= mistty-raw-width width) (/= mistty-raw-height height))
       (when-let* ((vterm mistty-raw--vterm)
                   (proc (get-buffer-process (current-buffer))))
+        (mistty-log "RESIZE: %s lines %s columns" height width)
         (mistty-mod-resize vterm width height)
         (set-process-window-size proc height width))))
 
@@ -191,18 +193,21 @@ The current buffer must have a virtual terminal associated."
   (when-let* ((vterm mistty-raw--vterm))
     (save-excursion
       (goto-char mistty-raw--home)
-      (cl-incf mistty-raw--home-scrolline (mistty-mod-clear-scrollback vterm))
-      (mistty-log "RENDER @%s" mistty-raw--home-scrolline)
+      (cl-incf mistty-raw--home-scrolline (mistty-mod-write-scrollback vterm))
+      (set-marker mistty-raw--home (point))
       (mistty-mod-render-damaged vterm (point) (point-max) mistty-raw--cursor)
+      (mistty-log "RENDER @%s" mistty-raw--home-scrolline)
       (when-let ((proc (get-buffer-process (current-buffer))))
         (when (process-live-p proc)
           (set-marker (process-mark proc) mistty-raw--cursor))))
     (goto-char mistty-raw--cursor)))
 
-(defun mistty-raw--sentinel (proc _msg)
+(defun mistty-raw--sentinel (proc msg)
   (when (memq (process-status proc) '(signal exit))
     (mistty--with-live-buffer (process-buffer proc)
-      (setq mistty-raw--vterm nil))
+      (save-excursion
+        (goto-char (point-max))
+        (insert "\nProcess %s" msg)))
     (set-process-buffer proc nil)
     (delete-process proc)))
 
