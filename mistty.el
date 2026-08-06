@@ -1607,15 +1607,43 @@ the point being visible."
 This function detects FUNC moving the sync mark in TERM-BUFFER and
 triggers realignment with the work buffer when that happens."
   (let ((old-sync-position (mistty--with-live-buffer term-buffer
-                             (marker-position mistty-sync-marker))))
+                             (marker-position mistty-sync-marker)))
+        sync-scrolline)
     ;; Reminder: call func with no buffer set, to avoid strange
     ;; breakages when the term buffer is killed.
     (funcall func)
+    (setq sync-scrolline (mistty--with-live-buffer mistty-work-buffer
+                           mistty--sync-marker-scrolline))
     (mistty--with-live-buffer term-buffer
-      (when (/= mistty-sync-marker old-sync-position)
+      (cond
+       ((< sync-scrolline mistty-raw--home-scrolline)
+        (mistty-log "Detected rapid scroll (sync @%s, home now @%s). Catching up."
+                    sync-scrolline mistty-raw--home-scrolline)
+        (let* ((home-scrolline mistty-raw--home-scrolline)
+               (catchup-lines (- home-scrolline sync-scrolline))
+               (catchup-start (save-excursion
+                                (goto-char mistty-raw--home)
+                                (pos-bol (1+ (- catchup-lines)))))
+               (catchup-end (marker-position mistty-raw--home)))
+          (mistty-log "Catchup [%s-%s] %s lines" catchup-start catchup-end catchup-lines)
+          (mistty--with-live-buffer mistty-work-buffer
+            (goto-char mistty-sync-marker)
+            (let ((inhibit-modification-hooks t))
+              (delete-region mistty-sync-marker (point-max))
+              (insert-buffer-substring mistty-term-buffer catchup-start catchup-end))
+            (mistty--set-sync-mark (point-max) home-scrolline)
+            (setq mistty--need-refresh t))))
+       ((/= mistty-sync-marker old-sync-position)
         (mistty-log "Detected terminal change above sync mark, at scrolline %s"
                     mistty--sync-marker-scrolline)
-        (mistty--realign-buffers)))))
+        (mistty--realign-buffers)))
+
+      ;; TODO: delete unnecessary scrollback data. Will it invalidate stored positions?
+
+      ;; We don't need scrollback on term anymore
+      ;; (when (> mistty-raw--home (point))
+      ;;   (delete-region (point-min) mistty-raw--home))
+      )))
 
 (defun mistty-goto-cursor ()
   "Move the point to the terminal's cursor."
