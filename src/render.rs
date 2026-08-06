@@ -293,10 +293,7 @@ pub fn render_damaged(
         // of term_start - term_end even when the buffer content isn't
         // as expected.
 
-        let mut all_damage: Vec<Line> = iter
-            .filter(|d| d.is_damaged() && d.right > d.left)
-            .map(|d| Line(d.line as i32))
-            .collect();
+        let mut all_damage: Vec<Line> = iter.map(|d| Line(d.line as i32)).collect();
         all_damage.sort_unstable();
         all_damage.dedup();
         // damage is sorted by line, one damage per line.

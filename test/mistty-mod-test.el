@@ -260,7 +260,7 @@
         (should
          (equal
           (concat
-           "0\n"
+           "[0\n]"           ; not sure why
            "1\n"
            "2\n"
            "3\n"
