@@ -47,7 +47,7 @@ buffer."
     (goto-char pos)
     (pos-eol n)))
 
-(defun mistty--line-width ()
+(defun mistty--column-count ()
   "Return the column number at EOL."
   (save-excursion
     (goto-char (pos-eol))

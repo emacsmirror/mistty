@@ -532,13 +532,15 @@ detecting regions looking at a complete line."
 
 BOL and EOL define the region to look in. WINDOW-WIDTH must be the width
 of the terminal, usually `mistty-raw-width'."
-  (let ((pos (1- eol)))
-    (when (and (>= 3 (- window-width (mistty--line-width)))
-               (not (get-text-property pos 'mistty-clear)))
-      (when-let* ((first-maybe-skip (previous-single-property-change eol 'mistty-clear nil bol)))
-        (when (and (eq (char-before first-maybe-skip) ?\ )
-                   (> first-maybe-skip bol))
-          (setq pos (1- first-maybe-skip))
+
+  (let ((pos (1- eol))
+        in-prompt)
+  (when (and (< (abs (- window-width (mistty--column-count))) 3)
+             (setq in-prompt (text-property-not-all (max bol (- eol 3)) eol 'mistty-clear t)))
+      (when-let* ((rightmost-nonclear (previous-single-property-change in-prompt 'mistty-clear nil bol)))
+        (when (and (eq (char-before rightmost-nonclear) ?\ )
+                   (> rightmost-nonclear bol))
+          (setq pos (1- rightmost-nonclear))
           (while (and (>= pos bol)
                       (eq (char-after pos) ?\ )
                       (get-text-property pos 'mistty-clear))

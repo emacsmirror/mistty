@@ -3333,7 +3333,7 @@
                           (mistty-test-content :show (point))))
     (should (string-match "^\\$ echo \\[ +< right\\]$"
                           (mistty-test-content :show-property '(mistty-skip right-prompt))))
-    (should (string-match "^\\$ echo  +< right\\[\n\\]$"
+    (should (string-match "^\\$ echo  +< right\\[\n+\\]$"
                           (mistty-test-content :show-property '(mistty-skip empty-lines-at-eob))))))
 
 (ert-deftest mistty-test-fish-right-prompt-command-for-output()
@@ -3382,8 +3382,8 @@
     (goto-char (point-min))
     (search-forward "echo foo")
     (should (equal "$ echo foo"
-                   (buffer-substring-no-properties (line-beginning-position)
-                                                   (line-end-position))))))
+                   (string-trim-right (buffer-substring-no-properties (line-beginning-position)
+                                                                      (line-end-position)))))))
 
 (ert-deftest mistty-test-zsh-right-prompt-skip-empty-spaces-empty-prompt ()
   (mistty-with-test-buffer (:shell zsh :selected t :init mistty-test-zsh-right-prompt)
@@ -3426,9 +3426,9 @@
     (mistty-wait-for-output :str "echo")
     (should (string-match "^\\$ echo <> +< right$"
                           (mistty-test-content :show (point))))
-    (should (string-match "^\\$ echo \\[ +< right\\]$"
+    (should (string-match "^\\$ echo \\[ +< right ?\\]$"
                           (mistty-test-content :show-property '(mistty-skip right-prompt))))
-    (should (string-match "^\\$ echo  +< right\\[\n\\]$"
+    (should (string-match "^\\$ echo  +< right ?\\[\n+\\]$"
                           (mistty-test-content :show-property '(mistty-skip empty-lines-at-eob))))))
 
 (ert-deftest mistty-test-zsh-right-prompt-command-for-output()
@@ -5554,7 +5554,7 @@ function prompt {
     (should (equal "$ prompt\n====\n<>Prompt: foo"
                    (mistty-test-content :show mistty-sync-marker)))
     (mistty-send-command)
-    (mistty-wait-for-output :regexp "foo\n\\$ ")
+    (mistty-wait-for-output :regexp "foo *\n\\$ ")
     (should (equal "$ prompt\n====\nGot: foo\n$"
                    (mistty-test-content)))))
 
@@ -6166,7 +6166,7 @@ function prompt {
     ;; It might take some time for the shell to fully refresh
     ;; everything and put the right prompt where it belongs, so wait
     ;; for that not just for foo or bar.
-    (mistty-wait-for-output :regexp " echo foo.*right$")
+    (mistty-wait-for-output :regexp " echo foo.*right ?$")
 
     (mistty-run-command
      (mistty-test-goto "echo foo"))

@@ -122,7 +122,7 @@
     (goto-char (point-min))
     (while (= 0 (forward-line 1))
       (should (equal (length (buffer-substring (pos-bol) (pos-eol)))
-                     (mistty--line-width))))))
+                     (mistty--column-count))))))
 
 (ert-deftest mistty-util-has-text-pproperties ()
   (ert-with-test-buffer ()
