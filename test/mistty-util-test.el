@@ -76,7 +76,7 @@
   (let ((fake-nl (propertize "\n" 'term-line-wrap t)))
     (insert fake-nl "abc" fake-nl fake-nl "def" fake-nl "gh" fake-nl "i\n" fake-nl )
 
-    (mistty--remove-fake-newlines
+    (mistty--cleanup-scrollback
      (mistty-test-pos "abc") (mistty-test-pos "gh"))
     (should (equal (concat fake-nl "abcdefgh" fake-nl "i\n" fake-nl)
                    (buffer-string)))))
@@ -86,7 +86,7 @@
     (insert "abc" fake-nl "def" fake-nl "gh" fake-nl "i" fake-nl)
 
     ;; Only fake-nl at column 3 are removed.
-    (mistty--remove-fake-newlines (point-min) (point-max) 3)
+    (mistty--cleanup-scrollback (point-min) (point-max) 3)
     (should (equal "abcdefgh\ni\n" (buffer-string)))))
 
 (ert-deftest mistty-util-test-remove-skipped-spaces ()

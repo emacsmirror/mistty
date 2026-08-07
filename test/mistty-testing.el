@@ -122,7 +122,7 @@ Defaults to 80x24"
                (mistty-backlog-size 500)
                (mistty-test-ok nil)
                (mistty-test-had-issues nil)
-               (mistty--inhibit-fake-nl-cleanup t)
+               (mistty--inhibit-scrollback-cleaup t)
                (mistty-test-prompt-re nil)
                (mistty-after-process-start-hook nil)
                (mistty-after-process-end-hook nil)

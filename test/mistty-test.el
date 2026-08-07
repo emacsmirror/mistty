@@ -1500,7 +1500,7 @@
 
 (ert-deftest mistty-test-delete-fake-nl-after-long-prompts ()
   (mistty-with-test-buffer (:term-size '(20 . 20))
-    (let ((mistty--inhibit-fake-nl-cleanup nil))
+    (let ((mistty--inhibit-scrollback-cleaup nil))
       (mistty-run-command
        (insert "echo one two three four five six seven eight nine"))
       (mistty-wait-for-output :str "nine" :cursor-at-end t)
@@ -4813,7 +4813,7 @@
 
 (turtles-ert-deftest mistty-test-terminal-accepts-min-terminal-size ()
   (mistty-with-test-buffer (:selected t :term-size 'window)
-    (let ((mistty--inhibit-fake-nl-cleanup nil))
+    (let ((mistty--inhibit-scrollback-cleaup nil))
       (should (equal 8 mistty-min-terminal-width))
       (should (equal 4 mistty-min-terminal-height))
 
@@ -4823,7 +4823,7 @@
 
 (turtles-ert-deftest mistty-test-min-terminal-size ()
   (mistty-with-test-buffer (:selected t :term-size 'window)
-    (let ((mistty--inhibit-fake-nl-cleanup nil))
+    (let ((mistty--inhibit-scrollback-cleaup nil))
       (mistty-set-terminal-size 8 4)
 
       (mistty--send-string mistty-proc "for i in $(seq 0 10); do echo hello, world; done")
@@ -5338,7 +5338,7 @@
                               (mistty-test-pos "$ echo one")))))))
 
 (ert-deftest mistty-test-recovery-despite-fakenl-cleanup ()
-  (let ((mistty--inhibit-fake-nl-cleanup nil))
+  (let ((mistty--inhibit-scrollback-cleaup nil))
     (mistty-with-test-buffer (:term-size '(20 . 20))
       ;; Insert text that'll be too long for the window, so term
       ;; inserts fake newlines, which later get cleaned up when the

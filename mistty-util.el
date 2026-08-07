@@ -123,7 +123,7 @@ If PRED is unspecified, remove any PROP with a non-nil value."
             (delete-region pos next-pos)
           (setq pos next-pos))))))
 
-(defun mistty--remove-fake-newlines (start end &optional column-width)
+(defun mistty--cleanup-scrollback (start end &optional column-width)
   "Remove newlines marked \\='term-line-wrap between START and END.
 
 COLUMN-WIDTH is the number of columns of the terminal. This is used to double

@@ -806,7 +806,7 @@ This is a list of symbols, that represent the reason why normal
 operations are inhibited. This allows dealing with more than one
 running command at a time.")
 
-(defvar mistty--inhibit-fake-nl-cleanup nil
+(defvar mistty--inhibit-scrollback-cleaup nil
   "Inhibit deletion of fake newline when moving the sync marker.
 
 Normally, fake newlines are removed by mistty--set-sync-mark,
@@ -2210,8 +2210,8 @@ just tend to cause issues."
   (let ((inhibit-modification-hooks t)
         (inhibit-read-only t))
     (mistty--mark-scrollines beg scrolline end)
-    (when (not mistty--inhibit-fake-nl-cleanup)
-      (mistty--remove-fake-newlines beg end mistty-raw-columns))))
+    (when (not mistty--inhibit-scrollback-cleaup)
+      (mistty--cleanup-scrollback beg end mistty-raw-columns))))
 
 (defun mistty--mark-scrollines (beg scrolline end)
   "Add text property \\='mistty-scrolline to scrollines from BEG to END.
