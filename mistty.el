@@ -2211,7 +2211,7 @@ just tend to cause issues."
         (inhibit-read-only t))
     (mistty--mark-scrollines beg scrolline end)
     (when (not mistty--inhibit-scrollback-cleaup)
-      (mistty--cleanup-scrollback beg end mistty-raw-columns))))
+      (mistty--cleanup-scrollback beg end))))
 
 (defun mistty--mark-scrollines (beg scrolline end)
   "Add text property \\='mistty-scrolline to scrollines from BEG to END.

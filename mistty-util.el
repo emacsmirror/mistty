@@ -123,21 +123,31 @@ If PRED is unspecified, remove any PROP with a non-nil value."
             (delete-region pos next-pos)
           (setq pos next-pos))))))
 
-(defun mistty--cleanup-scrollback (start end &optional column-width)
-  "Remove newlines marked \\='term-line-wrap between START and END.
+(defun mistty--cleanup-scrollback (start end)
+  "Cleanup portions of the screen before transitioning to scrollback.
 
-COLUMN-WIDTH is the number of columns of the terminal. This is used to double
-check that a newline is indeed a line-wrap."
+Cleanup means:
+ - remove newlines marked \\='term-line-wrap between START and END.
+ - remove trailing spaces, marked with \\='mistty-skip set to \\='trailing"
   (save-excursion
     (goto-char start)
     (while (search-forward "\n" end 'noerror)
-      (when (save-excursion
-              (goto-char (1- (point)))
-              (and (get-text-property (point) 'term-line-wrap)
-                   (or (null column-width)
-                       (zerop (% (current-column) column-width)))))
-        (setq end (1- end))
-        (replace-match "" nil t)))))
+      (let ((nl (match-beginning 0)))
+        (if (get-text-property nl 'term-line-wrap)
+            ;; If it's a line wrap delete it and don't worry about
+            ;; spaces; they're not trailing spaces.
+            (progn
+              (replace-match "" nil t)
+              (cl-decf end))
+          ;; If it's a real newline, look for trailing spaces and
+          ;; delete them.
+          (let ((pos nl))
+            (while (and (eq ?  (char-before pos))
+                        (eq 'trailing (get-text-property (1- pos) 'mistty-skip)))
+              (cl-decf pos))
+            (when (> nl pos)
+              (delete-region pos nl)
+              (cl-decf end (- nl pos)))))))))
 
 (defun mistty-self-insert-p (key)
   "Return non-nil if KEY is a key that is normally just inserted."

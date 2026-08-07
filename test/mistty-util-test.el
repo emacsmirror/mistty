@@ -65,29 +65,48 @@
                   (mistty-test-pos "d"))))))
 
 (ert-deftest mistty-util-test-remove-fake-nl ()
-  (let ((fake-nl (propertize "\n" 'term-line-wrap t)))
+  (ert-with-test-buffer ()
+    (let ((fake-nl (propertize "\n" 'term-line-wrap t)))
     (insert fake-nl "abc" fake-nl fake-nl "def" fake-nl "ghi\n" fake-nl )
 
     (mistty--remove-text-with-property 'term-line-wrap)
     (should (equal "abcdefghi\n"
-                   (mistty--safe-bufstring (point-min) (point-max))))))
+                   (mistty--safe-bufstring (point-min) (point-max)))))))
 
-(ert-deftest mistty-util-test-remove-fake-nl-in-range ()
-  (let ((fake-nl (propertize "\n" 'term-line-wrap t)))
-    (insert fake-nl "abc" fake-nl fake-nl "def" fake-nl "gh" fake-nl "i\n" fake-nl )
+(ert-deftest mistty-util-test-cleanup-fake-nl-for-scrollback ()
+  (ert-with-test-buffer ()
+    (let ((fake-nl (propertize "\n" 'term-line-wrap t)))
+      (insert fake-nl "abc" fake-nl fake-nl "def" fake-nl "gh" fake-nl "i\n" fake-nl )
+
+      (mistty--cleanup-scrollback
+       (mistty-test-pos "abc") (mistty-test-pos "gh"))
+      (should (equal (concat fake-nl "abcdefgh" fake-nl "i\n" fake-nl)
+                     (buffer-string))))))
+
+(ert-deftest mistty-util-test-cleanup-trailing-spaces-for-scrollback ()
+  (ert-with-test-buffer ()
+    (insert "ignore before start" (propertize "    " 'mistty-skip 'trailing) "\n")
+    (insert "hello " (propertize "     " 'mistty-skip 'trailing) "\n")
+    (insert "world" (propertize "     " 'mistty-skip 'trailing) "\n")
+    ;; The line below is incorrect on purpose. It makes sure that only trailing
+    ;; spaces are deleted.
+    (insert (propertize " !     " 'mistty-skip 'trailing) "\n")
+    ;; The line below makes sure that unmarked spaces are left alone.
+    (insert "  \n")
+    (insert "ignore after end" (propertize "    " 'mistty-skip 'trailing) "\n")
 
     (mistty--cleanup-scrollback
-     (mistty-test-pos "abc") (mistty-test-pos "gh"))
-    (should (equal (concat fake-nl "abcdefgh" fake-nl "i\n" fake-nl)
-                   (buffer-string)))))
+     (mistty-test-pos "hello") (mistty-test-pos "ignore after end"))
 
-(ert-deftest mistty-util-test-leave-misplaced-fake-nl ()
-  (let ((fake-nl (propertize "\n" 'term-line-wrap t)))
-    (insert "abc" fake-nl "def" fake-nl "gh" fake-nl "i" fake-nl)
-
-    ;; Only fake-nl at column 3 are removed.
-    (mistty--cleanup-scrollback (point-min) (point-max) 3)
-    (should (equal "abcdefgh\ni\n" (buffer-string)))))
+    (should
+     (equal
+      (concat "ignore before start    \n"
+              "hello \n"
+              "world\n"
+              " !\n"
+              "  \n"
+              "ignore after end    \n")
+      (buffer-substring-no-properties (point-min) (point-max))))))
 
 (ert-deftest mistty-util-test-remove-skipped-spaces ()
   (insert (propertize "   " 'mistty-skip t) "abc "
