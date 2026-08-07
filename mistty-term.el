@@ -367,7 +367,7 @@ Detected prompts can be found in `mistty-prompt'."
      ;; buffer just before the \r is taken into account.
      (when (string= "        " (mistty--accum-ctx-look-back ctx))
        (mistty--accum-ctx-flush ctx)
-       (when (or (and (= (1- mistty-raw-width) (mistty-raw--cursor-column))
+       (when (or (and (= (1- mistty-raw-columns) (mistty-raw--cursor-column))
                       (eq ?\  (char-before (point))))
                  (and (get-text-property (pos-eol 0) 'term-line-wrap)
                       (string-match "^ *$" (buffer-substring (pos-bol) (pos-eol)))))
@@ -485,7 +485,7 @@ This function turns mistty-clear into mistty-skip properties on the
 lines that have changed since this processor was last rn."
   (when-let* ((change-start
                (text-property-any (point-min) (point-max) 'mistty-updated t)))
-      (mistty--term-postprocess (point-min) mistty-raw-width)))
+      (mistty--term-postprocess (point-min) mistty-raw-columns)))
 
 (defun mistty--term-postprocess (region-start window-width)
   "Set mistty-skip and yank handlers after REGION-START.
@@ -531,7 +531,7 @@ detecting regions looking at a complete line."
   "Detect right prompt and return its left position or nil.
 
 BOL and EOL define the region to look in. WINDOW-WIDTH must be the width
-of the terminal, usually `mistty-raw-width'."
+of the terminal, usually `mistty-raw-columns'."
 
   (let ((pos (1- eol))
         in-prompt)

@@ -61,10 +61,10 @@ scrollback lines.")
 (defvar-local mistty-raw--home-scrolline nil
   "Scrolline that correspond to `mistty-raw--home'")
 
-(defvar-local mistty-raw-width nil
+(defvar-local mistty-raw-columns nil
   "Width of the terminal, in columns. Set by `mistty-raw-resize'.")
 
-(defvar-local mistty-raw-height nil
+(defvar-local mistty-raw-lines nil
   "Height of the terminal, in lines. Set by `mistty-raw-resize'.")
 
 (defvar-keymap mistty-raw-mode-map
@@ -112,8 +112,8 @@ process."
     (setq mistty-raw--home (copy-marker (point-min)))
     (set-marker-insertion-type mistty-raw--home nil)
     (setq mistty-raw--home-scrolline 0)
-    (setq mistty-raw-width width)
-    (setq mistty-raw-height height)
+    (setq mistty-raw-columns width)
+    (setq mistty-raw-lines height)
     (mistty-log "MAKE VTERM %s lines, %s colums" height width)
     (setq mistty-raw--vterm (mistty-mod-make-vterm width height))
     (mistty-mod-enable-scrollback mistty-raw--vterm)
@@ -149,7 +149,7 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
 
 (defun mistty-raw-resize (width height)
   "Resize the terminal and pty to WIDTH x HEIGHT."
-  (if (or (/= mistty-raw-width width) (/= mistty-raw-height height))
+  (if (or (/= mistty-raw-columns width) (/= mistty-raw-lines height))
       (when-let* ((vterm mistty-raw--vterm)
                   (proc (get-buffer-process (current-buffer))))
         (mistty-log "RESIZE: %s lines %s columns" height width)

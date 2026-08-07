@@ -1736,7 +1736,7 @@ Also updates prompt and point."
                                    (= (point) mistty--cursor-after-last-refresh)))
           on-prompt)
       (mistty--copy-buffer-local-variables
-       (cons 'mistty-bracketed-paste (cons 'mistty-raw-width mistty-variables-to-copy))
+       (cons 'mistty-bracketed-paste (cons 'mistty-raw-columns mistty-variables-to-copy))
        mistty-term-buffer)
       (mistty--inhibit-undo
        (save-restriction
@@ -1761,7 +1761,7 @@ Also updates prompt and point."
                         (text-property-search-forward 'term-line-wrap t t)))
              (when (save-excursion
                      (goto-char (prop-match-beginning prop-match))
-                     (zerop (% (current-column) mistty-raw-width)))
+                     (zerop (% (current-column) mistty-raw-columns)))
                (add-text-properties
                 (prop-match-beginning prop-match)
                 (prop-match-end prop-match)
@@ -2211,7 +2211,7 @@ just tend to cause issues."
         (inhibit-read-only t))
     (mistty--mark-scrollines beg scrolline end)
     (when (not mistty--inhibit-fake-nl-cleanup)
-      (mistty--remove-fake-newlines beg end mistty-raw-width))))
+      (mistty--remove-fake-newlines beg end mistty-raw-columns))))
 
 (defun mistty--mark-scrollines (beg scrolline end)
   "Add text property \\='mistty-scrolline to scrollines from BEG to END.
