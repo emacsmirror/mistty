@@ -1867,7 +1867,7 @@ Fields allow the like of `beginning-of-line' and `end-of-line' to ignore
 prompt and right prompts."
   (when-let* ((start (mistty--prompt-user-input-start prompt))
              (bol (mistty--scrolline-pos (car start)))
-             (eol (mistty--eol bol)))
+             (end (mistty--eol bol)))
     (when (> (cdr start) 0)
       (add-text-properties
        bol (+ bol (cdr start))
@@ -1875,15 +1875,31 @@ prompt and right prompts."
                inhibit-line-move-field-capture t
                front-sticky (field inhibit-line-move-field-capture)
                rear-nonsticky t)))
-    (when-let* ((right-prompt-start (text-property-any bol eol 'mistty-skip 'right-prompt)))
+    (when-let* ((right-prompt-start (text-property-any (cdr start) end 'mistty-skip 'right-prompt)))
       ;; Give room for the point to go one column past the beginning
       ;; of the right prompt to not confuse field-aware commands
       ;; such as backward-word.
       (cl-incf right-prompt-start)
-      (when (> eol right-prompt-start)
+      (when (> end right-prompt-start)
         (add-text-properties
-         right-prompt-start eol
+         right-prompt-start end
          '(field right-prompt
+                 inhibit-line-move-field-capture t
+                 front-sticky (field inhibit-line-move-field-capture)
+                 rear-nonsticky t)))
+        (setq end right-prompt-start))
+    (let ((pos end))
+      (while (and (eq ?  (char-before pos))
+                  (eq 'trailing (get-text-property (1- pos) 'mistty-skip)))
+        (cl-decf pos))
+      (when (> end pos)
+        ;; Give room to allow the cursor to go to the end of the line
+        ;; and continue typing without leaving the field.
+        (cl-incf pos))
+      (when (> end pos)
+        (add-text-properties
+         pos end
+         '(field trailing
                  inhibit-line-move-field-capture t
                  front-sticky (field inhibit-line-move-field-capture)
                  rear-nonsticky t))))))

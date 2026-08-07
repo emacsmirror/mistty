@@ -6485,7 +6485,7 @@ precmd_functions+=(prompt_header)
                    (mistty-test-content
                     :show (point)
                     :show-property '(field prompt))))
-    (should (equal "echo foobar"
+    (should (equal "echo foobar "
                    (buffer-substring-no-properties
                     (line-beginning-position)
                     (line-end-position))))))
@@ -6496,7 +6496,7 @@ precmd_functions+=(prompt_header)
     ;; Fields are set on both prompts so line-beginning/end cover only
     ;; the command.
     (mistty-send-text "echo foobar")
-    (should (equal "echo foobar"
+    (should (equal "echo foobar "
                    (buffer-substring-no-properties
                     (line-beginning-position)
                     (line-end-position))))
@@ -6505,7 +6505,7 @@ precmd_functions+=(prompt_header)
     ;; The same thing happen when text is in the scrollback area
     (goto-char (point-min))
     (search-forward "echo foobar")
-    (should (equal "echo foobar"
+    (should (equal "echo foobar "
                    (buffer-substring-no-properties
                     (line-beginning-position)
                     (line-end-position))))))
