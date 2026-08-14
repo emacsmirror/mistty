@@ -154,6 +154,8 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
                   (proc (get-buffer-process (current-buffer))))
         (mistty-log "RESIZE: %s lines %s columns" height width)
         (mistty-mod-resize vterm width height)
+        (setq mistty-raw-columns width)
+        (setq mistty-raw-lines height)
         (set-process-window-size proc height width))))
 
 (defun mistty-raw--alt-screen-p ()
