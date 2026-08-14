@@ -152,9 +152,9 @@ pub fn clear_scrollback(term: &mut VTerm) -> Result<usize> {
 /// terminal to the current buffer at the current point and leaves the
 /// point at the end of the written lines.
 ///
-/// It returns the number of terminal lines written. This might be
-/// larger that the number of lines actually written to the buffer if
-/// some lines were wrapped.
+/// It returns the number of lines written. This might be smaller that
+/// the number of the corresponding terminal lines if some lines were
+/// wrapped.
 ///
 /// If scrollback is disabled on the virtual terminal, this call
 /// always returns 0 and does nothing.
@@ -186,6 +186,7 @@ pub fn write_scrollback(env: &Env, term: &mut VTerm) -> Result<usize> {
     let origin = BufferPos::point(env)?;
     let mut tracker = PropertyTracker::new(origin, ToggleProperty::ON_SCROLLBACK);
     let mut pos = origin;
+    let mut scrollines = 0;
     for line in topmost_line.0..0 {
         let line = Line(line);
         let row = &grid[line];
@@ -202,6 +203,7 @@ pub fn write_scrollback(env: &Env, term: &mut VTerm) -> Result<usize> {
         if !row[last_column].flags.contains(Flags::WRAPLINE) {
             as_string.push('\n');
             pos += 1;
+            scrollines += 1;
         }
     }
     env.call(insert, (as_string,))?;
@@ -215,7 +217,7 @@ pub fn write_scrollback(env: &Env, term: &mut VTerm) -> Result<usize> {
         )?;
     }
 
-    return Ok(history_size);
+    return Ok(scrollines);
 }
 
 /// Return the column of the last cell that isn't clear.

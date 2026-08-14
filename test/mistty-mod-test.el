@@ -541,7 +541,7 @@
 
     (ert-with-test-buffer ()
       (goto-char (point-min))
-      (should (equal 6 (mistty-mod-write-scrollback term)))
+      (should (equal 3 (mistty-mod-write-scrollback term)))
       (equal
        (concat
         "Baa, baa, black sheep have you any wool? Yes sir, yes sir, three bags full!\n"
