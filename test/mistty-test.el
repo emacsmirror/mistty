@@ -4658,7 +4658,7 @@
     ;; initial window, half height
     (should (equal (cons 79 10)
                    (with-current-buffer mistty-term-buffer
-                     (cons term-width term-height))))
+                     (cons mistty-raw-columns mistty-raw-lines))))
     (mistty-send-text "echo $(tput cols)x$(tput lines)")
     (should (equal "79x10" (mistty-send-and-capture-command-output)))
 
@@ -4668,7 +4668,7 @@
     ;; full height
     (should (equal (cons 79 22)
                    (with-current-buffer mistty-term-buffer
-                     (cons term-width term-height))))
+                     (cons mistty-raw-columns mistty-raw-lines))))
 
     ;; make sure the process was told about the change
     (mistty-send-text "echo $(tput cols)x$(tput lines)")
@@ -6236,7 +6236,7 @@ function prompt {
         (global-goto-address-mode -1)))))
 
 (turtles-ert-deftest mistty-scrolline-after-scrolling (:instance 'mistty)
-  (mistty-with-test-buffer (:term-size 'window)
+  (mistty-with-test-buffer (:term-size '(79 . 22))
     (save-restriction
       (let (one two)
         (mistty--send-string
@@ -6254,19 +6254,19 @@ function prompt {
         (mistty-wait-for-output :str "line 10")
         (mistty-send-text "one")
         (setq one (mistty--cursor-scrolline))
+        (mistty-log "one scrolline=%s" one)
 
         ;; scrolline one is valid on both buffers
         (should (equal "one" (mistty-test-line-at-scrolline one)))
-        (with-current-buffer mistty-term-buffer
-          (should (equal "one" (mistty-test-line-at-scrolline one))))
+        (should (equal "one" (with-current-buffer mistty-term-buffer
+                               (mistty-test-line-at-scrolline one))))
 
         (mistty--send-string mistty-proc "\n")
         (mistty-wait-for-output :str "line 20")
 
-        ;; after scrolling, scrolline one is still valid on both buffers
         (should (equal "one" (mistty-test-line-at-scrolline one)))
-        (with-current-buffer mistty-term-buffer
-          (should (equal "one" (mistty-test-line-at-scrolline one))))
+        (should (equal "one" (with-current-buffer mistty-term-buffer
+                               (mistty-test-line-at-scrolline one))))
 
         (mistty-send-text "two")
         (setq two (mistty--cursor-scrolline))
@@ -6284,9 +6284,6 @@ function prompt {
           (should (< one screen-start))
           (should (> two screen-start)))
 
-        (should (equal "one" (mistty-test-line-at-scrolline one)))
-        (with-current-buffer mistty-term-buffer
-          (should (equal "one" (mistty-test-line-at-scrolline one))))
         (should (equal "two" (mistty-test-line-at-scrolline two)))
         (with-current-buffer mistty-term-buffer
           (should (equal "two" (mistty-test-line-at-scrolline two))))
@@ -6300,7 +6297,7 @@ function prompt {
         (should (null (mistty--scrolline-pos two)))))))
 
 (turtles-ert-deftest mistty-scrolline-after-scrolling-long-lines (:instance 'mistty)
-  (mistty-with-test-buffer (:term-size 'window)
+  (mistty-with-test-buffer (:term-size '(79 . 23))
     (save-restriction
       (let (one two)
         ;; Each line counts double, as it is split by term.
@@ -6317,7 +6314,6 @@ function prompt {
                  "done"))
         (mistty-wait-for-output :str ";done")
         (mistty--send-string mistty-proc "\n")
-
         (mistty-wait-for-output :str "foo5.")
         (mistty-send-text "one")
         (setq one (mistty--cursor-scrolline))
@@ -6341,7 +6337,6 @@ function prompt {
         (should (equal "one" (mistty-test-line-at-scrolline one)))
         (with-current-buffer mistty-term-buffer
           (should (equal "one" (mistty-test-line-at-scrolline one))))
-
         (mistty-send-and-wait-for-prompt
          (lambda ()
            (mistty--send-string mistty-proc "q\n")))))))

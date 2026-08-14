@@ -42,7 +42,11 @@
                                                              mistty-test-log))
   "Emacs instance that runs mistty tests."
   (clear-minibuffer-message)
-  (setq mistty-log-to-messages t))
+  (setq mistty-log-to-messages t)
+
+  ;; Prevent minibuffer window from changing size and interfering with
+  ;; window size tests
+  (setq resize-mini-windows nil))
 
 (defvar mistty-wait-for-output-timeout-s
   (if noninteractive 10 3)
@@ -367,8 +371,8 @@ require the cursor to be at the end of the matched string."
           (if on-error
               (funcall on-error)
             (mistty-test-report-issue
-             (format "condition not met after %ss (wait-for-output %s)"
-                     mistty-wait-for-output-timeout-s condition-descr))))
+             (format "condition not met after %ss (wait-for-output@%s %s)"
+                     mistty-wait-for-output-timeout-s start condition-descr))))
         (if (process-live-p proc)
             (when (accept-process-output proc 0 100 t)
               (while (accept-process-output proc 0 0 t)))
@@ -407,7 +411,7 @@ buffer to a new region at the beginning of the new prompt."
 
 Puts the point at the end of the prompt and return the position
 of the beginning of the prompt."
-  (let ((before-send (point)))
+  (let ((before-send (mistty-cursor)))
     (funcall (or send-command-func #'mistty-send-command))
     (mistty-wait-for-output
      :regexp (or (if prompt (concat "^" (regexp-quote prompt)))
@@ -434,7 +438,7 @@ This is meant to be assigned to `mistty--report-issue-function'
                      issue
                      (mistty-test-content
                       :show-property '(mistty-skip t)
-                      :show (list (point) (ignore-errors (mistty-cursor)))))))
+                      :show (list (point) (ignore-errors (mistty-cursor)) mistty-sync-marker)))))
         (mistty-log error-message)
         ;; Errors might get caught. This makes sure
         (setq mistty-test-had-issues t)
@@ -745,7 +749,7 @@ This simulates what happens in the command loop."
                (mistty--scrolline (point-max))
                (mistty-test-content :start mistty-sync-marker)))
       (goto-char pos)
-      (buffer-substring-no-properties (pos-bol) (pos-eol)))))
+      (string-trim-right (buffer-substring-no-properties (pos-bol) (pos-eol))))))
 
 (defun mistty-test-all-inputs ()
   "Returns the position of all input, from point-min to point-max."
