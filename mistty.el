@@ -3681,8 +3681,7 @@ To go back to tracking window size, call
 (defun mistty--set-process-window-size-from-windows ()
   "Adjust process terminal size based on the windows displaying it."
   (when (process-live-p mistty-proc)
-    (let* ((adjust-func (or (process-get mistty-proc 'adjust-window-size-function)
-                            window-adjust-process-window-size-function))
+    (let* ((adjust-func window-adjust-process-window-size-function)
            (size (funcall adjust-func mistty-proc
                           (append
                            (get-buffer-window-list mistty-work-buffer nil t)
@@ -3702,8 +3701,8 @@ Width and height are limited to `mistty-min-terminal-width' and
     (let ((width (max width mistty-min-terminal-width))
           (height (max height mistty-min-terminal-height)))
       (mistty--with-live-buffer mistty-term-buffer
-        (set-process-window-size mistty-proc height width)
-        (mistty-raw-resize width height)))))
+        (mistty-raw-resize width height)
+        (set-process-window-size mistty-proc height width)))))
 
 (defun mistty--enter-fullscreen (proc)
   "Enter fullscreen mode for PROC."
