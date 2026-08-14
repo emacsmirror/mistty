@@ -1626,6 +1626,8 @@ triggers realignment with the work buffer when that happens."
                                 (pos-bol (1+ (- catchup-lines)))))
                (catchup-end (marker-position mistty-raw--home)))
           (mistty-log "Catchup [%s-%s] %s lines" catchup-start catchup-end catchup-lines)
+          (move-marker mistty-sync-marker catchup-end)
+          (setq mistty--sync-marker-scrolline home-scrolline)
           (mistty--with-live-buffer mistty-work-buffer
             (goto-char mistty-sync-marker)
             (let ((inhibit-modification-hooks t))
