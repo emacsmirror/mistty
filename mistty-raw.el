@@ -108,6 +108,7 @@ process."
         (process-connection-type t)
 	(inhibit-eol-conversion t)
 	(coding-system-for-read 'binary))
+    (jit-lock-mode nil) ;; in case this was turned on by a hook
     (setq mistty-raw--cursor (copy-marker (point-min)))
     (setq mistty-raw--home (copy-marker (point-min)))
     (set-marker-insertion-type mistty-raw--home nil)

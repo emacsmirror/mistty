@@ -406,18 +406,19 @@ buffer to a new region at the beginning of the new prompt."
       (mistty-test-narrow next-prompt-start))
     output))
 
-(defun mistty-send-and-wait-for-prompt (&optional send-command-func prompt)
+(defun mistty-send-and-wait-for-prompt (&optional send-command-func prompt proc)
   "Send the current command line and wait for a prompt to appear.
 
 Puts the point at the end of the prompt and return the position
 of the beginning of the prompt."
-  (let ((before-send (mistty-cursor)))
+  (let ((before-send (if mistty-proc (mistty-cursor) (point))))
     (funcall (or send-command-func #'mistty-send-command))
     (mistty-wait-for-output
      :regexp (or (if prompt (concat "^" (regexp-quote prompt)))
                  mistty-test-prompt-re
                  (error "mistty-test-prompt-re not set"))
-     :start before-send)
+     :start before-send
+     :proc (or proc mistty-proc))
     (match-beginning 0)))
 
 (defun mistty-test-report-issue (issue)

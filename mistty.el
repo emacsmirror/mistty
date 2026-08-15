@@ -501,52 +501,18 @@ are sent directly to the terminal."
   "<left>" #'mistty-send-last-key
   "<right>" #'mistty-send-last-key)
 
-(defvar-keymap mistty-fullscreen-map
-  :doc "Keymap active while in fullscreen mode.
+(defvar-keymap mistty-fullscreen-mode-map
+  :doc "Keymap active on the terminal buffer while fullscreen."
+  "C-c C-j" #'mistty-toggle-buffers)
 
-While in fullscreen mode, the buffer is a `term-mode' with its
-own keymaps (`term-mod-map' and `term-raw-map')
+(define-minor-mode mistty-fullscreen-mode
+  "Minor mode active on the terminal buffer while fullscreen.
 
-This map is applied in addition to these as a way of making key
-mapping somewhat consistent between fullscreen and normal mode."
-
-    "C-q" mistty-send-last-key-map
-    "C-c C-q" #'mistty-send-key-sequence
-
-    ;; Mirror keybindings from mistty-mode-map, for consistency.
-    "C-c C-c" #'mistty-send-last-key
-    "C-c C-z" #'mistty-send-last-key
-    "C-c C-\\" #'mistty-send-last-key
-    "C-c C-g" #'mistty-send-last-key
-
-    ;; Overwrite mapping from term-raw-map so they can be remapped
-    ;; with mistty-term-key-map, if necessary.
-    "<up>" #'mistty-send-key
-    "<down>" #'mistty-send-key
-    "<right>" #'mistty-send-key
-    "<left>" #'mistty-send-key
-    "C-<up>" #'mistty-send-key
-    "C-<down>" #'mistty-send-key
-    "C-<right>" #'mistty-send-key
-    "C-<left>" #'mistty-send-key
-    "<delete>" #'mistty-send-key
-    "<deletechar>" #'mistty-send-key
-    "<backspace>" #'mistty-send-key
-    "<home>" #'mistty-send-key
-    "<end>" #'mistty-send-key
-    "<insert>" #'mistty-send-key
-    "<prior>" #'mistty-send-key
-    "<next>" #'mistty-send-key
-
-    ;; This only applies if term-bind-function-keys is non-nil.
-    "<remap> <term-send-function-key>" #'mistty-send-key
-
-    ;; Disable the "Terminal" menu; nothing that it contains should be
-    ;; used on Term buffers used by MisTTY.
-    "<menu-bar> <terminal>" nil
-
-    ;; switching the term buffer to line mode would cause issues.
-    "<remap> <term-line-mode>" #'mistty-toggle-buffers)
+The keybindings in `mistty-fullscreen-mode-map' are active while this
+mode is enabled."
+  :group 'mistty
+  :lighter nil
+  :keymap mistty-fullscreen-mode-map)
 
 ;; Variables:
 
@@ -999,8 +965,6 @@ window."
     (mistty--attach
      (mistty--create-term
       (concat " mistty tty " (buffer-name)) command args
-      ;; local-map
-      mistty-fullscreen-map
       width height)))
   (mistty--wrap-capf-functions)
   (mistty--update-mode-lines)
@@ -3711,9 +3675,7 @@ Width and height are limited to `mistty-min-terminal-width' and
     (let ((bufname (buffer-name)))
       (rename-buffer (generate-new-buffer-name (concat bufname " scrollback")))
       (with-current-buffer mistty-term-buffer
-        (rename-buffer bufname)
-        (jit-lock-mode t)
-        (turn-on-font-lock)))
+        (rename-buffer bufname)))
     (mistty--swap-buffer-in-windows mistty-work-buffer mistty-term-buffer)
 
     (let ((msg (mistty--fullscreen-message)))
@@ -3748,6 +3710,7 @@ Width and height are limited to `mistty-min-terminal-width' and
     (mistty--set-process-window-size-from-windows)
     (setq mistty-fullscreen t)
     (mistty--with-live-buffer mistty-term-buffer
+      (mistty-fullscreen-mode 1)
       (setq mistty-fullscreen t))
     (run-hooks 'mistty-entered-fullscreen-hook)
     (mistty-log "Entered fullscreen mode")))
@@ -3771,7 +3734,7 @@ This function looks into the maps to find the key bindings for
                     #'mistty-toggle-buffers mistty-mode-map
                     'firstonly 'noindirect))
         (from-term (where-is-internal
-                    #'mistty-toggle-buffers mistty-fullscreen-map
+                    #'mistty-toggle-buffers mistty-fullscreen-mode-map
                     'firstonly 'noindirect))
         (keybinding-descr nil))
     (cond
@@ -3806,13 +3769,10 @@ This function looks into the maps to find the key bindings for
         (rename-buffer bufname))
 
       (mistty--swap-buffer-in-windows mistty-term-buffer mistty-work-buffer)
-      (with-current-buffer mistty-term-buffer
-        (font-lock-mode -1)
-        (jit-lock-mode nil))
-
       (mistty--update-mode-lines proc)
       (setq mistty-fullscreen nil)
       (mistty--with-live-buffer mistty-term-buffer
+        (mistty-fullscreen-mode -1)
         (setq mistty-fullscreen nil))
       (run-hooks 'mistty-left-fullscreen-hook)
       (mistty-log "Left fullscreen mode"))))

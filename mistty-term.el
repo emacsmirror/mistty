@@ -451,7 +451,7 @@ the last set of properties to be registered is applied."
           (delq cell
                 mistty--term-properties-to-add-alist))))
 
-(defun mistty--create-term (name program args local-map width height)
+(defun mistty--create-term (name program args width height)
   "Create a new term buffer with name NAME.
 
 The buffer runs PROGRAM with the given ARGS.
@@ -471,10 +471,7 @@ This function returns the newly-created buffer."
       (mistty-raw-exec name program args width height)
       (let ((proc (get-buffer-process term-buffer)))
         (set-process-filter proc (mistty--make-accumulator
-                                  #'mistty--emulate-terminal)))
-
-      (when local-map
-        (use-local-map local-map)))
+                                  #'mistty--emulate-terminal))))
 
     term-buffer))
 

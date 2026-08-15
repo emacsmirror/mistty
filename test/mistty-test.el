@@ -1550,19 +1550,20 @@
        :proc proc
        :test
        (lambda ()
-         (buffer-local-value 'mistty-fullscreen work-buffer)))
+         (with-current-buffer work-buffer mistty-fullscreen)))
       (should (eq mistty-term-buffer (window-buffer (selected-window))))
       (should (equal (concat bufname " scrollback") (buffer-name work-buffer)))
       (should (equal bufname (buffer-name term-buffer)))
       (with-current-buffer term-buffer
-        (should (eq mistty-fullscreen-map (current-local-map))))
-
+        (should mistty-fullscreen-mode))
       (execute-kbd-macro (kbd ": q ! RET"))
       (mistty-wait-for-output
        :proc proc
        :test
        (lambda ()
          (not (buffer-local-value 'mistty-fullscreen work-buffer))))
+      (with-current-buffer term-buffer
+        (should-not mistty-fullscreen-mode))
       (should (eq mistty-work-buffer (window-buffer (selected-window))))
       (should (equal (concat " mistty tty " bufname) (buffer-name term-buffer)))
       (should (equal bufname (buffer-name work-buffer))))))
