@@ -1568,7 +1568,7 @@
       (should (equal (concat " mistty tty " bufname) (buffer-name term-buffer)))
       (should (equal bufname (buffer-name work-buffer))))))
 
-(defun mistty-test-enter-fullscreen (on-seq off-seq)
+(defun mistty-test-enter-fullscreen (on-seq off-seq &optional clear-screen)
   (let ((work-buffer mistty-work-buffer)
         (proc mistty-proc))
 
@@ -1593,6 +1593,7 @@
     (should (equal (concat
                     (format "$ printf '\\e%sPress ENTER: ' && read && printf '\\e%sfullscreen off'\n"
                             on-seq off-seq)
+                    (unless clear-screen "Press ENTER:\n")
                     "fullscreen off$ <>")
                    (mistty-test-content :show (mistty-cursor))))))
 
@@ -1610,7 +1611,7 @@
 
 (ert-deftest mistty-test-enter-fullscreen-1049 ()
   (mistty-with-test-buffer (:selected t)
-    (mistty-test-enter-fullscreen "[?1049h" "[?1049l")))
+    (mistty-test-enter-fullscreen "[?1049h" "[?1049l" 'clear-screen)))
 
 (ert-deftest mistty-test-call-fullscreen-hooks ()
   (mistty-with-test-buffer (:selected t)

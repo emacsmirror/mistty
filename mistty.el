@@ -1007,10 +1007,10 @@ buffer and `mistty-proc' to that buffer's process."
         (mistty--accum-add-processor
          accum
          '(seq CSI (or "47" "?47" "?1047" "?1049") ?h)
-         (lambda (ctx _str)
+         (lambda (ctx str)
            (mistty--accum-ctx-flush ctx)
            (mistty--enter-fullscreen proc)
-           (mistty--accum-ctx-push-down ctx "\e[47h"))))
+           (mistty--accum-ctx-push-down ctx str))))
       (set-process-sentinel proc #'mistty--process-sentinel))
 
     (add-hook 'kill-buffer-hook #'mistty--kill-term-buffer nil t)
@@ -3690,8 +3690,8 @@ Width and height are limited to `mistty-min-terminal-width' and
       (mistty--accum-add-processor
        accum
        '(seq CSI (or "47" "?47" "?1047" "?1049") ?l)
-       (lambda (ctx _str)
-         (mistty--accum-ctx-push-down ctx "\e[47l")
+       (lambda (ctx str)
+         (mistty--accum-ctx-push-down ctx str)
          (mistty--accum-ctx-flush ctx)
          ;; When handling CSI 47 h, term.el sometimes add a newline
          ;; that is not removed after handling CSI 47 l. This
