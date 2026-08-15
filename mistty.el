@@ -1020,8 +1020,10 @@ buffer and `mistty-proc' to that buffer's process."
 
     (if-let* ((size mistty--terminal-size))
         (mistty--set-process-window-size (car size) (cdr size))
-      (mistty--set-process-window-size-from-windows)
-      (add-hook 'window-size-change-functions #'mistty--window-size-change nil t))))
+      (add-hook 'window-size-change-functions #'mistty--window-size-change nil t)
+      ;; window sizes might not be reliable without a redisplay
+      (redisplay t)
+      (mistty--set-process-window-size-from-windows))))
 
 (defun mistty--add-toggle-cursor (accum buf)
   "Configure ACCUM to show/hide cursor in BUF."
