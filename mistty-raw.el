@@ -58,7 +58,7 @@ operation.")
   "Marker that tracks the position of the top of the screen, following
 scrollback lines.")
 
-(defvar-local mistty-raw--home-scrolline nil
+(defvar-local mistty-raw--home-scrolline 0
   "Scrolline that correspond to `mistty-raw--home'")
 
 (defvar-local mistty-raw-columns nil
