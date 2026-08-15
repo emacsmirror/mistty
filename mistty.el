@@ -1093,6 +1093,7 @@ The buffer might be a `mistty-mode' buffer in non-fullscreen mode or a
    (buffer-live-p buffer)
    (pcase (buffer-local-value 'major-mode buffer)
      ('mistty-mode (not (buffer-local-value 'mistty-fullscreen buffer)))
+     ('mistty-raw-mode (buffer-local-value 'mistty-fullscreen buffer))
      ('term-mode (buffer-local-value 'mistty-fullscreen buffer)))
 
    ;; returns
@@ -3707,9 +3708,9 @@ Width and height are limited to `mistty-min-terminal-width' and
          (mistty--leave-fullscreen proc))))
     (set-process-sentinel proc #'mistty--fs-process-sentinel)
     (mistty--update-mode-lines proc)
-    (mistty--set-process-window-size-from-windows)
     (setq mistty-fullscreen t)
     (mistty--with-live-buffer mistty-term-buffer
+      (mistty-raw-auto-resize t)
       (mistty-fullscreen-mode 1)
       (setq mistty-fullscreen t))
     (run-hooks 'mistty-entered-fullscreen-hook)
@@ -3758,6 +3759,7 @@ This function looks into the maps to find the key bindings for
       (widen)
       (overlay-put mistty--sync-ov 'after-string nil)
 
+      (mistty-raw-auto-resize nil)
       (mistty--attach (process-buffer proc))
       (mistty--refresh)
       (when (and proc (process-live-p proc))

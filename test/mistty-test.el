@@ -1573,7 +1573,7 @@
         (proc mistty-proc))
 
     (mistty--send-string proc
-     (format "printf '\\e%sPress ENTER: ' && read && printf '\\e%sfullscreen off'"
+     (format "printf '\\e%sPress ENTER: ' && read && printf '\\e%sfullscreen off\\n'"
              on-seq off-seq))
     (mistty-send-command)
     (mistty-wait-for-output
@@ -1591,10 +1591,11 @@
        (not (buffer-local-value 'mistty-fullscreen work-buffer))))
     (should (eq mistty-work-buffer (window-buffer (selected-window))))
     (should (equal (concat
-                    (format "$ printf '\\e%sPress ENTER: ' && read && printf '\\e%sfullscreen off'\n"
+                    (format "$ printf '\\e%sPress ENTER: ' && read && printf '\\e%sfullscreen off\\n'\n"
                             on-seq off-seq)
                     (unless clear-screen "Press ENTER:\n")
-                    "fullscreen off$ <>")
+                    "fullscreen off\n"
+                    "$ <>")
                    (mistty-test-content :show (mistty-cursor))))))
 
 (ert-deftest mistty-test-enter-fullscreen-47 ()
@@ -1629,7 +1630,7 @@
                 (lambda ()
                   (push `(leave ,(not mistty-fullscreen)) calls)))
 
-      (mistty-test-enter-fullscreen "[?47h" "[?47l")
+      (mistty-test-enter-fullscreen "[?1049h" "[?1049l" 'clear-screen)
 
       (should (equal '((enter t) (leave t)) (nreverse calls))))))
 
@@ -4348,17 +4349,17 @@
 
 (ert-deftest mistty-test-fullscreen-message ()
   (let ((mistty-mode-map (make-sparse-keymap))
-        (mistty-fullscreen-map (make-sparse-keymap)))
+        (mistty-fullscreen-mode-map (make-sparse-keymap)))
     (should (equal "Fullscreen mode ON" (mistty--fullscreen-message)))
 
     (keymap-set mistty-mode-map "C-c C-a" #'mistty-toggle-buffers)
-    (keymap-set mistty-fullscreen-map "C-c C-a" #'mistty-toggle-buffers)
+    (keymap-set mistty-fullscreen-mode-map "C-c C-a" #'mistty-toggle-buffers)
 
     (should (equal
              "Fullscreen mode ON. C-c C-a switches between terminal and scrollback buffers."
              (mistty--fullscreen-message)))
 
-    (keymap-set mistty-fullscreen-map "C-c C-b" #'mistty-toggle-buffers)
+    (keymap-set mistty-fullscreen-mode-map "C-c C-b" #'mistty-toggle-buffers)
     (should (equal
              "Fullscreen mode ON. C-c C-a goes to terminal, C-c C-b to scrollback."
              (mistty--fullscreen-message)))))
@@ -4779,13 +4780,13 @@
          (buffer-local-value 'mistty-fullscreen work-buffer)))
 
       ;; In fullscreen mode, terminal size should come from the window
-      (should (equal 79 (buffer-local-value 'term-width term-buffer)))
-      (should (equal 22 (buffer-local-value 'term-height term-buffer)))
+      (should (equal 79 (buffer-local-value 'mistty-raw-columns term-buffer)))
+      (should (equal 22 (buffer-local-value 'mistty-raw-lines term-buffer)))
 
-      (split-window)
+      (split-window-vertically)
       (should (redisplay t))
-      (should (equal 79 (buffer-local-value 'term-width term-buffer)))
-      (should (equal 10 (buffer-local-value 'term-height term-buffer)))
+      (should (equal 79 (buffer-local-value 'mistty-raw-columns term-buffer)))
+      (should (equal 10 (buffer-local-value 'mistty-raw-lines term-buffer)))
 
       ;; Leave fullscreen
       (mistty--send-string proc "\n")
@@ -6221,6 +6222,8 @@ function prompt {
             (let ((proc mistty-proc)
                   (workbuf mistty-work-buffer)
                   (termbuf mistty-term-buffer))
+              (with-current-buffer termbuf
+                (should-not jit-lock-mode))
               (mistty-send-text "echo OK | less")
               (mistty-send-command)
               (mistty-wait-for-output
@@ -6229,9 +6232,11 @@ function prompt {
                (lambda ()
                  (buffer-local-value 'mistty-fullscreen workbuf)))
               (with-current-buffer termbuf
-                (should jit-lock-mode))
+                (should-not jit-lock-mode))
               (mistty-send-and-wait-for-prompt
-               (lambda () (process-send-string proc "q")))
+               (lambda () (process-send-string proc "q"))
+               nil
+               proc)
               (with-current-buffer termbuf
                 (should-not jit-lock-mode)))))
       (unless was-enabled

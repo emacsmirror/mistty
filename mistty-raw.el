@@ -148,6 +148,37 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
       (set-process-sentinel proc #'mistty-raw--sentinel)
       (set-process-filter proc #'mistty-raw--process-filter))))
 
+(defun mistty-raw-auto-resize (enabled)
+  "Track window size and automatically resize the terminal.
+
+Enabling auto-resize might trigger an immediate resize if the terminal
+doesn't match the desired window size.
+
+Set ENABLED to non-nil to enable automatic resize to nil to disable it."
+  (when-let* ((proc (get-buffer-process (current-buffer))))
+    (if enabled
+        (progn
+          (process-put proc 'adjust-window-size-function #'mistty-raw--resize-from-window)
+          (when-let ((wins (get-buffer-window-list)))
+            (mistty-raw--resize-from-window proc wins)))
+      (process-put proc 'adjust-window-size-function #'ignore))))
+
+(defun mistty-raw--resize-from-window (proc win)
+  "Choose window size and apply it to the virtual terminal.
+
+This is meant to be used as adjust-process-window-size function on the
+process. PROC is the process, WIN the set of windows displaying the
+process buffer. The current buffer is the process buffer.
+
+This function updates the virtual terminal size and returns the new
+size.
+
+Calls `window-adjust-process-window-size' to choose the appropriate size
+given the set of windows."
+  (when-let* ((size (funcall window-adjust-process-window-size-function proc win)))
+    (mistty-raw-resize (car size) (cdr size))
+    size))
+
 (defun mistty-raw-resize (width height)
   "Resize the terminal and pty to WIDTH x HEIGHT."
   (if (or (/= mistty-raw-columns width) (/= mistty-raw-lines height))
