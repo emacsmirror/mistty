@@ -6201,7 +6201,7 @@ function prompt {
     (mistty-send-key 1 "\C-c")
 
     ;; Wait for the next prompt
-    (mistty-wait-for-output :regexp "^\\$ $")))
+    (mistty-wait-for-output :start (point-min) :regexp "^\\$ *$")))
 
 (ert-deftest mistty-test-self-insert-command ()
   (mistty-with-test-buffer ()
