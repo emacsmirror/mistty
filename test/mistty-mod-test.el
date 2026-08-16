@@ -1066,3 +1066,79 @@
                        "\n"
                        "\n")
                (mistty-test-content :trim nil))))))
+
+
+(ert-deftest mistty-mod-clear-to-eol ()
+  (let ((term (mistty-mod-make-vterm 20 10))
+        (cursor (make-marker)))
+    (ert-with-test-buffer ()
+      (mistty-mod-process-bytes term (vconcat "foo     \r\nbar          \r\n"))
+      (mistty-mod-render term (point-min) (point-max) cursor)
+      (should (equal
+               (concat "foo     \n"
+                       "bar          \n"
+                       "<>\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n")
+               (mistty-test-content
+                :trim nil
+                :show cursor
+                :show-property '(mistty-clear t))))
+
+      (mistty-mod-clear-to-eol term 0 5)
+      (mistty-mod-clear-to-eol term 1 3)
+      (mistty-mod-render term (point-min) (point-max) cursor)
+
+      (should (equal
+               (concat "foo  \n"
+                       "bar\n"
+                       "<>\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n")
+               (mistty-test-content
+                :trim nil
+                :show cursor
+                :show-property '(mistty-clear t)))))))
+
+(ert-deftest mistty-mod-clear-to-eol-unicode ()
+  (let ((term (mistty-mod-make-vterm 20 10))
+        (cursor (make-marker)))
+    (ert-with-test-buffer ()
+      ;; This makes sure the unicode characters don't mess up the
+      ;; char-to-column computations.
+
+      ;; wide char (1 char, 2 columns)
+      (mistty-mod-process-bytes term (vconcat "\xF0\x9F\x9F\xA7(1)    \r\n"))
+      ;; combining chars (2 chars, 1 column)
+      (mistty-mod-process-bytes term (vconcat "e\xcc\x81te\xcc\x81(2)    \r\n"))
+      (mistty-mod-render term (point-min) (point-max) cursor)
+
+      (let ((one (mistty-test-pos-after "(1)"))
+            (two (mistty-test-pos-after "(2)")))
+        (mistty-mod-clear-to-eol term 0 (- one (mistty--bol one)))
+        (mistty-mod-clear-to-eol term 1 (- two (mistty--bol two)))
+        (mistty-mod-render term (point-min) (point-max) cursor)
+
+        (should (equal
+                 (concat
+                  "\U0001F7E7(1)\n"
+                  "e\u0301te\u0301(2)\n"
+                  "\n"
+                  "\n"
+                  "\n"
+                  "\n"
+                  "\n"
+                  "\n"
+                  "\n"
+                  "\n")
+                 (mistty-test-content :trim nil)))))))

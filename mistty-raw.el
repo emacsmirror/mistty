@@ -284,6 +284,14 @@ This is controlled by the custom variable `mistty-term-name'"
    ((shell-command-to-string "infocmp alacritty") "alacritty")
    (t "xterm-256color")))
 
+(defun mistty-raw--clear-to-eol (pos)
+  "Mark spaces from POS to the end of the line as clear."
+  (when-let* ((vterm mistty-raw--vterm))
+    (when (> pos mistty-raw--home)
+      (mistty-mod-clear-to-eol vterm
+                               (mistty--count-lines mistty-raw--home pos)
+                               (- pos (mistty--bol pos))))))
+
 (provide 'mistty-raw)
 
 ;;; mistty-raw.el ends here

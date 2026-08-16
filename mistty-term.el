@@ -692,8 +692,10 @@ Detected dead spaces are marked with the text property \\='mistty-skip
               (let ((inhibit-read-only t)
                     (inhibit-modification-hooks t))
                 (when (> eol (point))
-                  (mistty-log "@%s %s dead spaces, %s real"
-                              eol (- eol (point)) real-trailing-ws)
+                  (mistty-log "@%s [%s-%s) %s dead spaces, %s real"
+                              (point) (pos-bol) eol (- eol (point)) real-trailing-ws)
+                  (mistty-raw--clear-to-eol (point))
+                  ;; in case the buffer is accessed before rendering again
                   (put-text-property (point) eol 'mistty-skip 'dead))))))))))
 
 (defun mistty--term-reset-scrolline (scrolline)

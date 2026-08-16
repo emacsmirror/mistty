@@ -2,11 +2,11 @@ mod render;
 mod types;
 mod vterm;
 
-use crate::vterm::VTerm;
+use crate::{render::cell_char_count, vterm::VTerm};
 use alacritty_terminal::{
     grid::Dimensions,
     index::{Column, Line, Point},
-    term::TermMode,
+    term::{TermMode, cell::Flags},
 };
 use emacs::{Env, IntoLisp, Result, Value, Vector, defun};
 use std::{fmt::Debug, ops::RangeBounds};
@@ -245,6 +245,22 @@ fn count_unwrapped_lines(env: &Env, term: &VTerm, start: i32, end: i32) -> Resul
     }
 
     Ok(term.count_unwrapped_lines(start, end))
+}
+
+/// Mark spaces at the given line between beg_chars and end_chars as clear.
+#[defun]
+fn clear_to_eol(env: &Env, term: &mut VTerm, line: i32, beg_chars: usize) -> Result<()> {
+    let line = line_range_check(env, line, term)?;
+
+    let mut chars = 0;
+    for cell in &mut term.inner_mut().grid_mut()[line] {
+        if chars >= beg_chars && cell.c == ' ' {
+            cell.flags.set(Flags::DIM, false);
+        }
+        chars += cell_char_count(cell);
+    }
+
+    Ok(())
 }
 
 /// Create a `Column` that's guaranteed to be a valid column for the
