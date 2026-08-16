@@ -359,7 +359,11 @@ pub fn render_lines<'a>(
     for line in beg.0..end.0 {
         let line = Line(line);
         let row = &grid[line];
-        for col in 0..=last_column.0 {
+        let mut end_col = last_written_cell(row).map(|c| c + 1).unwrap_or(Column(0));
+        if line == cursor_point.line && end_col < cursor_point.column {
+            end_col = cursor_point.column;
+        }
+        for col in 0..end_col.0 {
             let col = Column(col);
             let cell = &row[col];
             let cell_pos = pos;
@@ -375,6 +379,11 @@ pub fn render_lines<'a>(
             }
         }
         // end of line
+        if cursor_point.line == line && cursor_point.column == end_col {
+            if let Some(cursor_pos) = &mut cursor_pos {
+                **cursor_pos = Some(pos);
+            }
+        }
 
         // A NL is never clear
         tracker.set_toggle(pos, ToggleProperty::Clear, false);

@@ -51,19 +51,19 @@
          (equal
           (concat
            "terminal:\n"
-           "0                   \n"
-           "1                   \n"
-           "2                   \n"
-           "3                   \n"
-           "4                   \n"
-           "5                   \n"
-           "6                   \n"
-           "7                   \n"
-           "8                   \n"
-           "9                   \n"
+           "0 \n"
+           "1\n"
+           "2\n"
+           "3\n"
+           "4\n"
+           "5\n"
+           "6\n"
+           "7\n"
+           "8\n"
+           "9<>\n"
            "\n"
            "end.")
-          (buffer-string)))))))
+          (mistty-test-content :trim nil :show cursor)))))))
 
 (ert-deftest mistty-mod-set-cursor ()
   (let ((term (mistty-mod-make-vterm 20 10)))
@@ -87,8 +87,8 @@
            "6\n"
            "7\n"
            "8\n"
-           "9<>")
-          (mistty-test-content :show cursor)))
+           "9<>\n")
+          (mistty-test-content :trim nil :show cursor)))
 
         ;; move cursor 3 lines up, 2 columns right
         (mistty-mod-process-bytes term (vconcat "\e[3A\e[2C"))
@@ -105,8 +105,10 @@
            "6  <>\n"
            "7\n"
            "8\n"
-           "9")
-          (mistty-test-content :show cursor)))))))
+           "9\n")
+          (mistty-test-content
+           :trim nil
+           :show cursor)))))))
 
 (turtles-ert-deftest mistty-mod-set-color (:instance 'mistty)
  (ert-with-test-buffer ()
@@ -381,16 +383,16 @@
         (should
          (equal
           (concat
-           "0                   \n"
-           "1                   \n"
-           "2                   \n"
-           "3                   \n"
-           "4                   \n"
-           "5                   \n"
-           "6                   \n"
-           "7                   \n"
-           "8                   \n"
-           "9                   \n")
+           "0\n"
+           "1\n"
+           "2\n"
+           "3\n"
+           "4\n"
+           "5\n"
+           "6\n"
+           "7\n"
+           "8\n"
+           "9\n")
           (mistty-test-content :trim nil)))
 
         (mistty-mod-process-bytes term (vconcat "\r\n10"))
@@ -407,16 +409,16 @@
           (concat
            "0\n"
            "1\n"
-           "<>2                   \n"
-           "3                   \n"
-           "4                   \n"
-           "5                   \n"
-           "6                   \n"
-           "7                   \n"
-           "8                   \n"
-           "9                   \n"
-           "10                  \n"
-           "11                  \n")
+           "<>2\n"
+           "3\n"
+           "4\n"
+           "5\n"
+           "6\n"
+           "7\n"
+           "8\n"
+           "9\n"
+           "10\n"
+           "11\n")
           (mistty-test-content :show screen-top
                                :trim nil)))
 
@@ -438,16 +440,16 @@
            "2\n"
            "3\n"
            "4\n"
-           "<>5                   \n"
-           "6                   \n"
-           "7                   \n"
-           "8                   \n"
-           "9                   \n"
-           "10                  \n"
-           "11                  \n"
-           "12                  \n"
-           "13                  \n"
-           "14                  \n")
+           "<>5\n"
+           "6\n"
+           "7\n"
+           "8\n"
+           "9\n"
+           "10\n"
+           "11\n"
+           "12\n"
+           "13\n"
+           "14\n")
           (mistty-test-content :show screen-top
                                :trim nil)))))))
 
@@ -487,16 +489,16 @@
         (should
          (equal
           (concat
-           "0                   \n"
-           "1                   \n"
-           "2                   \n"
-           "3                   \n"
-           "4                   \n"
-           "5                   \n"
-           "6                   \n"
-           "7                   \n"
-           "8                   \n"
-           "9                   \n")
+           "0\n"
+           "1\n"
+           "2\n"
+           "3\n"
+           "4\n"
+           "5\n"
+           "6\n"
+           "7\n"
+           "8\n"
+           "9\n")
           (mistty-test-content :trim nil)))
 
         (mistty-mod-process-bytes term (vconcat "\r\n10"))
@@ -509,16 +511,16 @@
         (should
          (equal
           (concat
-           "2                   \n"
-           "3                   \n"
-           "4                   \n"
-           "5                   \n"
-           "6                   \n"
-           "7                   \n"
-           "8                   \n"
-           "9                   \n"
-           "10                  \n"
-           "11                  \n")
+           "2\n"
+           "3\n"
+           "4\n"
+           "5\n"
+           "6\n"
+           "7\n"
+           "8\n"
+           "9\n"
+           "10\n"
+           "11\n")
           (mistty-test-content :trim nil)))
 
         ))))
@@ -908,51 +910,62 @@
     (ert-with-test-buffer ()
       (mistty-mod-render term (point-min) (point-max) cursor)
       (should (equal
-               (concat "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]")
-               (mistty-test-content :show-property '(mistty-clear t))))
+               (concat "<>\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n")
+               (mistty-test-content
+                :trim nil
+                :show cursor
+                :show-property '(mistty-clear t))))
 
       ;; mistty-clear identifies cells that have been explicitly
       ;; written to. It allows telling cells that contain space from
-      ;; cells that are just empty.
+      ;; cells that are just empty. It is only written for clear
+      ;; spaces within the line, as clear, trailing spaces are just
+      ;; removed, unless the cursor is on that point.
       (mistty-mod-process-bytes term (vconcat "\e[2Chello,  \e[2Cworld. \r\n"))
       (mistty-mod-render term (point-min) (point-max) cursor)
       (should (equal
-               (concat "[  ]hello,  [  ]world. [ ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]")
-               (mistty-test-content :show-property '(mistty-clear t))))
+               (concat "[  ]hello,  [  ]world. \n"
+                       "<>\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n")
+               (mistty-test-content
+                :trim nil
+                :show cursor
+                :show-property '(mistty-clear t))))
 
       ;; mistty-clear must be reset when cells are cleared
       (mistty-mod-process-bytes term (vconcat "\e[H\e[2J"))
       (mistty-mod-render term (point-min) (point-max) cursor)
       (should (equal
-               (concat "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]")
-               (mistty-test-content :show-property '(mistty-clear t))))
+               (concat "<>\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n")
+               (mistty-test-content
+                :trim nil
+                :show cursor
+                :show-property '(mistty-clear t))))
       )))
 
 (ert-deftest mistty-mod-render-mistty-clear-not-dim ()
@@ -967,17 +980,20 @@
       (mistty-mod-render term (point-min) (point-max) cursor)
 
       (should (equal
-               (concat "foo[                 ]\n"
-                       "bar[                 ]\n"
-                       "not dim[             ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]\n"
-                       "[                    ]")
-               (mistty-test-content :show-property '(mistty-clear t))))
+               (concat "foo\n"
+                       "bar\n"
+                       "not dim\n"
+                       "<>\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n")
+               (mistty-test-content
+                :trim nil
+                :show cursor
+                :show-property '(mistty-clear t))))
       (should (equal
                (concat "[f]oo\n"
                        "[b]ar\n"
@@ -1028,25 +1044,25 @@
       (should (equal
                (concat "Baa, baa, black shee\n"
                        "p have you any wool?\n"
-                       "                    \n"
-                       "                    \n"
-                       "                    \n"
-                       "                    \n"
-                       "                    \n"
-                       "                    \n"
-                       "                    \n"
-                       "                    \n")
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n")
                (mistty-test-content :trim nil)))
 
       (mistty-mod-resize term 30 8)
       (mistty-mod-render term (point-min) (point-max) cursor)
       (should (equal
                (concat "Baa, baa, black sheep have you\n"
-                       " any wool?                    \n"
-                       "                              \n"
-                       "                              \n"
-                       "                              \n"
-                       "                              \n"
-                       "                              \n"
-                       "                              \n")
+                       " any wool?\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n"
+                       "\n")
                (mistty-test-content :trim nil))))))
