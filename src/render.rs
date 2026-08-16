@@ -1,8 +1,8 @@
 use crate::types::BufferPos;
 use crate::vterm::VTerm;
 use alacritty_terminal::{
-    grid::{Dimensions, Indexed, Row},
-    index::{Column, Line, Point},
+    grid::{Dimensions, Row},
+    index::{Column, Line},
     term::{
         TermDamage,
         cell::{Cell, Flags},
@@ -10,7 +10,7 @@ use alacritty_terminal::{
     vte::ansi::{Color, NamedColor},
 };
 use emacs::{Env, Result, Value, defun};
-use std::{collections::HashMap, ops::Deref};
+use std::collections::HashMap;
 
 emacs::use_functions! {
     add_face_text_property
@@ -248,12 +248,16 @@ pub fn render(
     term_end: Value,
     cursor_marker: Value,
 ) -> Result<()> {
-    let content = term.inner().renderable_content();
     let mut cursor_pos = None;
-
     env.call(goto_char, (term_start,))?;
     env.call(delete_region, (term_start, term_end))?;
-    render_region(env, term, content.display_iter, Some(&mut cursor_pos))?;
+    render_lines(
+        env,
+        term,
+        Line(0),
+        term.bottommost_line() + 1,
+        Some(&mut cursor_pos),
+    )?;
 
     if let Some(cursor_pos) = cursor_pos {
         env.call(set_marker, (cursor_marker, cursor_pos))?;
@@ -300,32 +304,22 @@ pub fn render_damaged(
         all_damage.dedup();
         // damage is sorted by line, one damage per line.
 
-        let grid = term.inner().grid();
         for line in all_damage {
             env.call(goto_char, (term_start,))?;
             let line_pos = BufferPos::bol(env, line)?;
-            let row = &grid[line];
-
             env.call(goto_char, (line_pos,))?;
             let next_line_pos = BufferPos::bol(env, Line(1))?;
             env.call(delete_region, (line_pos, next_line_pos))?;
-            render_region(
-                env,
-                term,
-                row[..].iter().enumerate().map(|(i, c)| Indexed {
-                    point: Point::new(line, Column(i)),
-                    cell: c,
-                }),
-                Some(&mut cursor_pos),
-            )?;
+            render_lines(env, term, line, line + 1, Some(&mut cursor_pos))?;
         }
     } else {
         env.call(goto_char, (term_start,))?;
         env.call(delete_region, (term_start, term_end))?;
-        render_region(
+        render_lines(
             env,
             term,
-            term.inner().renderable_content().display_iter,
+            Line(0),
+            term.bottommost_line() + 1,
             Some(&mut cursor_pos),
         )?;
     }
@@ -341,51 +335,54 @@ pub fn render_damaged(
 
 /// Render the display or a subset of the display.
 ///
-/// `iter` should return the cells to render. [`term_start`,
-/// `term_end`)] defines the region of the buffer to be replaced with
-/// the content of `iter`.
+/// Write lines [`beg`, `end`) including the newlines to the
+/// current buffer at the current position.
 ///
-/// If `iter` contains the cursor and `cursor_pos` is `Some`, the
-/// function sets the cursor position, otherwise it leaves it alone.
-pub fn render_region<'a, I>(
+/// If the lines contain `cursor_pos` the function sets the cursor position, as a buffer
+/// position, otherwise it leaves it alone.
+pub fn render_lines<'a>(
     env: &Env,
     term: &'a VTerm,
-    mut iter: I,
+    beg: Line,
+    end: Line,
     mut cursor_pos: Option<&mut Option<BufferPos>>,
-) -> Result<()>
-where
-    I: Iterator<Item = Indexed<&'a Cell>>,
-{
-    let last_column = term.inner().grid().last_column();
-    let cursor_point = term.inner().grid().cursor.point;
+) -> Result<()> {
+    let grid = term.inner().grid();
+    let last_column = grid.last_column();
+    let cursor_point = grid.cursor.point;
     let origin = BufferPos::point(env)?;
     let mut tracker = PropertyTracker::new(origin, ToggleProperty::ON_TERMINAL);
     tracker.set_toggle(origin, ToggleProperty::Updated, true);
 
-    let mut as_string = string_with_capacity_for(&iter);
+    let mut as_string = String::with_capacity((end.0 - beg.0) as usize * (last_column.0 + 1));
     let mut pos = origin;
-    while let Some(cur) = iter.next() {
-        let cell_pos = pos;
-        pos += append_cell_to_string(&cur.cell, &mut as_string);
-        tracker.track_change(cell_pos, cur.deref());
+    for line in beg.0..end.0 {
+        let line = Line(line);
+        let row = &grid[line];
+        for col in 0..=last_column.0 {
+            let col = Column(col);
+            let cell = &row[col];
+            let cell_pos = pos;
+            pos += append_cell_to_string(cell, &mut as_string);
+            tracker.track_change(cell_pos, cell);
 
-        // Have we found the cursor? If yes, we now know its
-        // (upcoming) buffer position.
-        if cur.point == cursor_point {
-            if let Some(cursor_pos) = &mut cursor_pos {
-                **cursor_pos = Some(cell_pos);
+            // Have we found the cursor? If yes, we now know its
+            // (upcoming) buffer position.
+            if cursor_point.line == line && cursor_point.column == col {
+                if let Some(cursor_pos) = &mut cursor_pos {
+                    **cursor_pos = Some(cell_pos);
+                }
             }
         }
+        // end of line
 
-        if cur.point.column == last_column {
-            // A NL is never clear
-            tracker.set_toggle(pos, ToggleProperty::Clear, false);
-            if cur.flags.contains(Flags::WRAPLINE) {
-                tracker.set_toggle(pos, ToggleProperty::Wrapline, true);
-            }
-            as_string.push('\n');
-            pos += 1;
+        // A NL is never clear
+        tracker.set_toggle(pos, ToggleProperty::Clear, false);
+        if row[last_column].flags.contains(Flags::WRAPLINE) {
+            tracker.set_toggle(pos, ToggleProperty::Wrapline, true);
         }
+        as_string.push('\n');
+        pos += 1;
     }
 
     env.call(insert, (as_string,))?;
@@ -453,26 +450,6 @@ fn append_cell_to_string(cell: &Cell, dest: &mut String) -> usize {
 fn is_spacer(cell: &Cell) -> bool {
     cell.flags
         .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER)
-}
-
-/// Build a string with enough capacity for storing the content of
-/// `iter`, assuming one character per element.
-fn string_with_capacity_for<'a, I>(iter: &I) -> String
-where
-    I: Iterator<Item = Indexed<&'a Cell>>,
-{
-    let max = 8192;
-    let (low, high) = iter.size_hint();
-    if let Some(high) = high
-        && high < max
-    {
-        return String::with_capacity(high);
-    }
-    if low < max {
-        return String::with_capacity(low);
-    }
-
-    return String::new();
 }
 
 /// Track cell flags and apply them Emacs-side as text properties.
