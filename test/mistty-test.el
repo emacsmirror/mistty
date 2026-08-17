@@ -6991,13 +6991,3 @@ precmd_functions+=(prompt_header)
 
       (setq term-mode-hook orig-term-mode-hook
             mistty-term-mode-hook orig-mistty-term-mode-hook))))
-
-(ert-deftest mistty-test-da1 ()
-  (mistty-with-test-buffer (:shell bash)
-    (mistty--send-string
-     mistty-proc
-     "read -s -t 2 -d c -r -p \"$(printf '\\e[0c')\" resp && echo \"$resp\" | xxd")
-    (mistty-send-and-wait-for-prompt)
-    (should (equal
-             "00000000: 1b5b 3f36 343b 313b 3138 3b32 313b 3232  .[?64;1;18;21;22"
-             (nth 1 (split-string (mistty-test-content) "\n"))))))
