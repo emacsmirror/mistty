@@ -1473,68 +1473,44 @@ terminal region of WORK-BUFFER in sync with TERM-BUFFER."
        (mistty--dequeue mistty--queue 'intermediate)
        (mistty--dequeue-with-timer mistty--queue 'stable))))
 
-  ;; Realign buffers after a clear or reset
   (mistty--accum-add-processor
-   accum
-   '(or (seq ESC ?c)
-        (seq CSI ?H CSI (? ?0) ?J)
-        (seq CSI ?2 ?J))
+   accum '(seq ESC ?c) ;; Reset (incl. clear scrollback)
    (lambda (ctx str)
+     (mistty--accum-ctx-push-down ctx str)
      (mistty--accum-ctx-flush ctx)
-     (mistty--reset)
-     (mistty--accum-ctx-push-down ctx str))))
+     (if mistty-allow-clearing-scrollback
+         (mistty--clear-scrollback)
+       (mistty--scroll-after-reset))))
 
-(defun mistty--reset ()
-  "Reset the link between work and term buffer.
+  (mistty--accum-add-processor
+   accum '(seq CSI ?2 ?J) ;; Clear screen
+   (lambda (ctx str)
+     (mistty--accum-ctx-push-down ctx str)
+     (mistty--accum-ctx-flush ctx)
+     (mistty--scroll-after-reset)))
 
-This should be called just before reseting the terminal."
-  (let ((reset-scrolline nil)
-        (home-pos nil))
-    (mistty--with-live-buffer mistty-work-buffer
-      (mistty--cancel-queue mistty--queue)
-      (while-let ((cs (car mistty--changesets)))
-        (mistty--release-changeset cs))
-      (setq mistty--inhibit-refresh nil)
-      (setq mistty--need-refresh t)
-      (mistty--refresh)
-      (mistty--prepare-end-for-reset)
-      (setq reset-scrolline (mistty--scrolline (point-max)))
-      (setq home-pos (point-max)))
-    (mistty--with-live-buffer mistty-term-buffer
-      (mistty--term-reset-scrolline reset-scrolline)
-      (setq mistty-bracketed-paste nil))
-    (mistty--with-live-buffer mistty-work-buffer
-      (setq mistty-bracketed-paste nil)
-      (mistty--set-sync-mark (point-max) reset-scrolline)
-      (mistty-log "RESET terminal at scrolline %s" reset-scrolline))
+  (mistty--accum-add-processor
+   accum '(seq CSI ?3 ?J) ;; Clear scrollback
+   (lambda (ctx str)
+     (when mistty-allow-clearing-scrollback
+       (mistty--accum-ctx-push-down ctx str)
+       (mistty--accum-ctx-flush ctx)
+       (mistty--clear-scrollback)))))
 
-    (if mistty-allow-clearing-scrollback
-        (mistty--clear-scrollback)
-      ;; Scroll the main window so the region that was cleared is
-      ;; not visible anymore. This way, it looks like the buffer
-      ;; was cleared even though history is kept.
-      (mistty--with-live-buffer mistty-work-buffer
-        (when-let* ((win (get-buffer-window mistty-work-buffer)))
-          (with-selected-window win
-            (set-window-start win (mistty--bol home-pos) 'noforce)))))))
+(defun mistty--scroll-after-reset ()
+  "Scroll the main window to the top of the screen.
 
-(defun mistty--prepare-end-for-reset ()
-  "Prepare work buffer to put terminal region at (point-max).
-
-This function might erase whitespaces at the end of the buffer."
-  (mistty--require-work-buffer)
-  (save-excursion
-    (let ((inhibit-modification-hooks t))
-      ;; If there's a current prompt, clear it. This allows the shell
-      ;; to send reset to clear a prompt, as recent versions of fish
-      ;; do.
-      (when-let* ((prompt mistty--active-prompt)
-                  (pos (mistty--scrolline-pos (mistty--prompt-start prompt))))
-        (delete-region pos (point-max)))
-      (goto-char (mistty--last-non-ws))
-      (delete-region (point) (point-max))
-      (unless (memq (char-before (point-max)) '(nil ?\n))
-        (insert "\n")))))
+This way, it looks like the buffer was cleared even though history is
+kept."
+  (when-let*
+      ((win (get-buffer-window mistty-work-buffer))
+       (screen-start-scrolline
+        (mistty--with-live-buffer mistty-term-buffer
+          (mistty--term-scrolline-at-screen-start)))
+       (screen-start-pos
+        (mistty--with-live-buffer mistty-work-buffer
+          (mistty--scrolline-pos screen-start-scrolline))))
+    (set-window-start win screen-start-pos 'noforce)))
 
 (defun mistty--clear-scrollback ()
   "Clear the work buffer above `mistty-sync-marker'."

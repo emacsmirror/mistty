@@ -2,7 +2,7 @@ use crate::render;
 use alacritty_terminal::{
     Term,
     event::{Event, EventListener},
-    grid::Dimensions,
+    grid::{Dimensions, Row},
     index::{Column, Line, Point},
     term::{
         Config,
@@ -20,12 +20,17 @@ emacs::use_symbols! {
     pty_write_sym => "pty-write"
 }
 
+/// Size of the scrollback, in lines. There needs to be enough space
+/// to keep scrollback between calls to `write_scrollback`, to not lose data.
+const SCROLLBACK_SIZE: usize = 100000;
+
 /// Virtual Terminal for MisTTY that keeps its data in memory.
 pub struct VTerm {
     inner: Term<EventAccumulator>,
     processor: Processor,
     events: Rc<RefCell<VecDeque<Event>>>,
     start_with_wrapped_line: bool,
+    scrollback_enabled: bool,
 }
 
 impl VTerm {
@@ -41,13 +46,14 @@ impl VTerm {
         let processor = Processor::new();
 
         // See comment on HandlerProxy
-        inner.grid_mut().cursor.template.flags |= Flags::DIM;
+        init_grid(inner.grid_mut());
 
         Self {
             inner,
             processor,
             events,
             start_with_wrapped_line: false,
+            scrollback_enabled: false,
         }
     }
 
@@ -60,11 +66,17 @@ impl VTerm {
     }
 
     pub fn enable_scrollback(&mut self) {
-        self.inner.grid_mut().update_history(100000);
+        if !self.scrollback_enabled {
+            self.inner.grid_mut().update_history(SCROLLBACK_SIZE);
+            self.scrollback_enabled = true;
+        }
     }
 
     pub fn disable_scrollback(&mut self) {
-        self.inner_mut().grid_mut().update_history(0);
+        if self.scrollback_enabled {
+            self.inner_mut().grid_mut().update_history(0);
+            self.scrollback_enabled = false;
+        }
     }
 
     pub fn resize(&mut self, width: usize, height: usize) {
@@ -168,8 +180,10 @@ impl VTerm {
 
     /// Parse terminal data and update internal state
     pub fn process_bytes(&mut self, bytes: &[u8]) {
-        self.processor
-            .advance(&mut HandlerProxy::new(&mut self.inner), bytes);
+        self.processor.advance(
+            &mut HandlerProxy::new(&mut self.inner, self.scrollback_enabled),
+            bytes,
+        );
     }
 
     /// Handle accumulated events using the given `env`.
@@ -254,6 +268,10 @@ impl VTerm {
     }
 }
 
+fn init_grid(grid: &mut alacritty_terminal::Grid<Cell>) {
+    grid.cursor.template.flags |= Flags::DIM;
+}
+
 /// Simple dimensions for VTerm.
 struct VTermDimensions {
     width: usize,
@@ -315,11 +333,53 @@ impl EventListener for EventAccumulator {
 /// require allocating a separate flag for that.
 struct HandlerProxy<'a, T> {
     inner: &'a mut Term<T>,
+    scrollback_enabled: bool,
 }
 
 impl<'a, T> HandlerProxy<'a, T> {
-    fn new(inner: &'a mut Term<T>) -> Self {
-        Self { inner }
+    fn new(inner: &'a mut Term<T>, scrollback_enabled: bool) -> Self {
+        Self {
+            inner,
+            scrollback_enabled,
+        }
+    }
+
+    /// Store the scrollback into a vector, so it can later on be recovered.
+    fn keep_scrollback(&mut self) -> Vec<Row<Cell>> {
+        let history_size = self.inner.grid().history_size();
+        let mut history = Vec::with_capacity(history_size);
+        if history_size > 0 && self.scrollback_enabled {
+            let grid = self.inner.grid_mut();
+            for line in grid.topmost_line().0..0 {
+                let line = Line(line);
+                let row = &mut grid[line];
+                let mut copy = Row::new(row.len());
+                std::mem::swap(row, &mut copy);
+                history.push(copy);
+            }
+            grid.clear_history();
+        }
+        history
+    }
+
+    /// Put back scrollback saved by `take_scrollback`.
+    ///
+    /// This assumes an empty screen.
+    fn recover_scrollback(&mut self, scrollback: Vec<Row<Cell>>) {
+        if scrollback.is_empty() {
+            return;
+        }
+        let grid = self.inner.grid_mut();
+
+        let mut line = Line(0);
+        let history_size = scrollback.len();
+        for mut row in scrollback {
+            std::mem::swap(&mut row, &mut grid[line]);
+            line += 1;
+        }
+        grid.update_history(SCROLLBACK_SIZE);
+        // Put written lines into scrollback
+        grid.scroll_up(&(Line(0)..grid.bottommost_line()), history_size);
     }
 }
 
@@ -494,7 +554,16 @@ where
     }
 
     fn clear_screen(&mut self, mode: ansi::ClearMode) {
-        self.inner.clear_screen(mode);
+        match mode {
+            ansi::ClearMode::Saved => {
+                // Refuse to clear the scrollback as this messes up the
+                // buffer. This is handled elisp-side with
+                // mistty-allow-clearing-scrollback.
+            }
+            _ => {
+                self.inner.clear_screen(mode);
+            }
+        }
     }
 
     fn clear_tabs(&mut self, mode: ansi::TabulationClearMode) {
@@ -506,7 +575,15 @@ where
     }
 
     fn reset_state(&mut self) {
+        // The scrollback should resist a reset for MisTTY. A reset of
+        // the scrollback, if desired, can be done elisp-side with
+        // mistty-allow-clearing-scrollback.
+        self.inner.clear_screen(ansi::ClearMode::All);
+        let scrollback = self.keep_scrollback();
+
         self.inner.reset_state();
+        init_grid(self.inner.grid_mut());
+        self.recover_scrollback(scrollback);
     }
 
     fn reverse_index(&mut self) {

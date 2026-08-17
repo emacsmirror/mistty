@@ -1452,9 +1452,8 @@
     (execute-kbd-macro (kbd "DEL"))
     (mistty-wait-for-output :str "`ec'")
     (should (equal "(reverse-i-search)`ec': echo s<>econd" (mistty-test-content :show (mistty-cursor))))
-    (should (equal "second" (mistty-send-and-capture-command-output
-                             (lambda ()
-                               (execute-kbd-macro (kbd "RET"))))))))
+    (execute-kbd-macro (kbd "RET"))
+    (mistty-wait-for-output :regexp "^second")))
 
 (ert-deftest mistty-test-skipped-spaces ()
   (mistty-with-test-buffer (:shell fish)
