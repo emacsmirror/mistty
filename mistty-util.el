@@ -172,6 +172,19 @@ Add an ellipsis if STR is truncated."
     (skip-chars-backward "[:blank:]\n\r")
     (point)))
 
+(defun mistty--blank-end-start ()
+  "Return the position of the last non-empty character in the buffer.
+
+This skips empty newlines at end, the final newline and trailing spaces
+on the last line."
+  (save-excursion
+    (goto-char (point-max))
+    (when (eq (char-before) ?\n)
+      (goto-char (1- (point))))
+    (while (get-text-property (1- (point)) 'mistty-skip)
+      (goto-char (1- (point))))
+    (point)))
+
 (defun mistty--has-text-properties (pos props)
   "Return non-nil if properties at POS include PROPS.
 

@@ -2599,28 +2599,22 @@ returns nil."
 
              (move-marker beg orig-beg)
              (if (< old-length 0)
-                 (let ((end
-                        ;; When looking for the end of the text to be
-                        ;; deleted marked with old-length=-1, ignore the
-                        ;; final \n or anything marked mistty-skip, as
-                        ;; these cannot be deleted.
-                        (save-excursion
-                          (goto-char (point-max))
-                          (when (eq (char-before) ?\n)
-                            (goto-char (1- (point))))
-                          (while (get-text-property (1- (point)) 'mistty-skip)
-                            (goto-char (1- (point))))
-                          (point))))
-                   (setq old-length (if (> end orig-beg) (- end orig-beg) 0))
-                   (move-marker old-end (max orig-beg end)))
-               (move-marker old-end (+ orig-beg old-length)))
+                 (let ((end (max beg (mistty--blank-end-start))))
+                   (setq old-length (- end beg))
+                   (move-marker old-end end))
 
-             ;; never delete the final \n that some shells add.
-             (when (and (> old-length 0)
-                        (= old-end (point-max))
-                        (= ?\n (char-before old-end)))
-               (move-marker old-end (1- old-end))
-               (setq old-length (1- old-length)))
+               (move-marker old-end (+ beg old-length))
+
+               ;; Detect when the end is inside the blank space at the
+               ;; end of the buffer; this is normally neither
+               ;; accessible nor deletable.
+               (when (and (> old-end beg)
+                          (or (get-text-property old-end 'mistty-skip)
+                              (get-text-property (min beg (1- old-end)) 'mistty-skip)))
+                 (let ((end (max beg (mistty--blank-end-start))))
+                   (when (> old-end end)
+                     (move-marker old-end end)
+                     (setq old-length (- end beg))))))
 
              ;; don't even try to move through trailing ws, as they may
              ;; not exist (Issue #34)
