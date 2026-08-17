@@ -205,20 +205,21 @@ Defaults to 80x24"
 
 (defun mistty-test-setup (shell tmpdir init term-size)
   (mistty-mode)
-  (cond
-   ((eq shell 'bash)
-    (mistty-test-setup-bash tmpdir init term-size))
+  (let ((default-directory tmpdir))
+    (cond
+     ((eq shell 'bash)
+      (mistty-test-setup-bash tmpdir init term-size))
 
-   ((eq shell 'zsh)
-    (mistty-test-setup-zsh tmpdir init term-size))
+     ((eq shell 'zsh)
+      (mistty-test-setup-zsh tmpdir init term-size))
 
-   ((eq shell 'fish)
-    (mistty-test-setup-fish tmpdir init term-size))
+     ((eq shell 'fish)
+      (mistty-test-setup-fish tmpdir init term-size))
 
-   ((eq shell 'ipython)
-    (mistty-test-setup-ipython tmpdir init term-size))
+     ((eq shell 'ipython)
+      (mistty-test-setup-ipython tmpdir init term-size))
 
-   (t (error "Unsupported shell %s" shell))))
+     (t (error "Unsupported shell %s" shell)))))
 
 (defun mistty-test-setup-bash (tmpdir init term-size)
   (let ((rcfile (concat tmpdir "bashrc")))
@@ -436,8 +437,10 @@ This is meant to be assigned to `mistty--report-issue-function'
       ;; unexpected
       (save-excursion (mistty-start-log))
       (let ((error-message
-             (format "%s: BUF<<EOF%sEOF"
+             (format "%s: BUF[%s,%s]<<EOF%sEOF"
                      issue
+                     (point-min)
+                     (point-max)
                      (mistty-test-content
                       :show-property '(mistty-skip t)
                       :show (list (point) (ignore-errors (mistty-cursor)) mistty-sync-marker)))))
