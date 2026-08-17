@@ -1478,6 +1478,7 @@ terminal region of WORK-BUFFER in sync with TERM-BUFFER."
    (lambda (ctx str)
      (mistty--accum-ctx-push-down ctx str)
      (mistty--accum-ctx-flush ctx)
+     (mistty-log "RESET")
      (if mistty-allow-clearing-scrollback
          (mistty--clear-scrollback)
        (mistty--scroll-after-reset))))
@@ -1487,6 +1488,7 @@ terminal region of WORK-BUFFER in sync with TERM-BUFFER."
    (lambda (ctx str)
      (mistty--accum-ctx-push-down ctx str)
      (mistty--accum-ctx-flush ctx)
+     (mistty-log "CLEAR SCREEN")
      (mistty--scroll-after-reset)))
 
   (mistty--accum-add-processor
@@ -1495,6 +1497,7 @@ terminal region of WORK-BUFFER in sync with TERM-BUFFER."
      (when mistty-allow-clearing-scrollback
        (mistty--accum-ctx-push-down ctx str)
        (mistty--accum-ctx-flush ctx)
+       (mistty-log "CLEAR SCROLLBACK")
        (mistty--clear-scrollback)))))
 
 (defun mistty--scroll-after-reset ()
