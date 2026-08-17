@@ -1558,9 +1558,9 @@ triggers realignment with the work buffer when that happens."
     ;; Reminder: call func with no buffer set, to avoid strange
     ;; breakages when the term buffer is killed.
     (funcall func)
-    (setq sync-scrolline (mistty--with-live-buffer mistty-work-buffer
-                           mistty--sync-marker-scrolline))
     (mistty--with-live-buffer term-buffer
+      (setq sync-scrolline (mistty--with-live-buffer mistty-work-buffer
+                             mistty--sync-marker-scrolline))
       (cond
        ((< sync-scrolline mistty-raw--home-scrolline)
         (mistty-log "Detected rapid scroll (sync @%s, home now @%s). Catching up."
