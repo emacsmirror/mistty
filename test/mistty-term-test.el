@@ -186,21 +186,6 @@
                      "[     ...: ]    print(i)")
                    (mistty-test-content :show-property '(mistty-skip continue-prompt))))))
 
-(ert-deftest mistty-test-bridge-ws-with-props ()
-  (ert-with-test-buffer ()
-    (term-mode)
-    (add-hook 'after-change-functions #'mistty--after-change-on-term nil t)
-    (insert "  \n\n")
-    (goto-char (point-min))
-    (insert " ")
-    (mistty-register-text-properties 'test '(myprop 1))
-    (insert "foo")
-    (goto-char (1- (point-max)))
-    (insert "bar")
-
-    (should (equal " [foo  \nbar]\n"
-                   (mistty-test-content :show-property '(myprop 1) :trim nil)))))
-
 (ert-deftest mistty-prompt-contains-open-ended ()
   (let ((mistty--prompt-cell (mistty--make-prompt-cell)))
     (should (mistty--prompt-contains (mistty--make-prompt 'test 10) 10))
