@@ -2634,8 +2634,8 @@
     (mistty-send-and-wait-for-prompt :prompt "line 10")
     (should
      (equal
-      "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n"
-      (mistty--safe-bufstring mistty-sync-marker (point-max))))))
+      "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10"
+      (mistty-test-content :start mistty-sync-marker)))))
 
 (ert-deftest mistty-test-end-prompt-multiline-pasted ()
   (mistty-with-test-buffer ()
@@ -2644,8 +2644,8 @@
     (mistty-send-and-wait-for-prompt :prompt "line 10")
     (should
      (equal
-      "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n"
-      (mistty--safe-bufstring mistty-sync-marker (point-max))))))
+      "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10"
+      (mistty-test-content :start mistty-sync-marker)))))
 
 (ert-deftest mistty-test-end-prompt-nobracketed-paste ()
   (mistty-with-test-buffer (:shell bash)
@@ -2657,8 +2657,7 @@
               "$ echo 'hello, world'\n"
               "<>hello, world\n"
               "$")
-             (mistty-test-content
-              :show mistty-sync-marker)))))
+             (mistty-test-content :show mistty-sync-marker)))))
 
 (ert-deftest mistty-test-fish-multiline ()
   (mistty-with-test-buffer (:shell fish)
