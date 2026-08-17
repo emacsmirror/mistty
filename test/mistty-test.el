@@ -4057,6 +4057,9 @@
       (mistty-run-command
        (backward-kill-word 1))
 
+      ;; "echo first" should (eventually) reappear as a match
+      (mistty-wait-for-output :str "► echo first")
+
       (should (equal (concat "$ echo first\n"
                              "first\n"
                              "$ echo second\n"
