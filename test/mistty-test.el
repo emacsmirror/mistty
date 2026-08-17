@@ -487,7 +487,7 @@
   (mistty-with-test-buffer ()
     (should (equal mistty-bracketed-paste t))
     (mistty-send-text "printf '(%s/%s) ? ' y n && read yesorno && echo answer: $yesorno")
-    (mistty-send-and-wait-for-prompt nil "(y/n) ? ")
+    (mistty-send-and-wait-for-prompt :prompt "(y/n) ? ")
     (should (equal mistty-bracketed-paste nil))
     (mistty-send-text "no")
     (should (equal "answer: no" (mistty-send-and-capture-command-output)))))
@@ -2305,7 +2305,8 @@
 
     ;; quit more and go back to the normal prompt
     (mistty-send-and-wait-for-prompt
-     (lambda () (mistty--send-string mistty-proc "q")))))
+     :send (lambda () (mistty--send-string mistty-proc "q"))
+     :start (mistty-test-pos-after "line 23"))))
 
 (ert-deftest mistty-test-last-non-ws ()
   (ert-with-test-buffer ()
@@ -2560,7 +2561,7 @@
 (ert-deftest mistty-reset-during-replay ()
   (mistty-with-test-buffer ()
     (mistty-send-text "echo -n 'read> '; read l; printf 'will reset\\ecreset done\\n'")
-    (mistty-send-and-wait-for-prompt nil "read> ")
+    (mistty-send-and-wait-for-prompt :prompt "read> ")
     (let ((start (mistty--bol (point))))
       (mistty--enqueue
        mistty--queue
@@ -2630,7 +2631,7 @@
 (ert-deftest mistty-test-end-prompt ()
   (mistty-with-test-buffer ()
     (mistty-send-text "for i in {1..10} ; do echo line $i; done && read l")
-    (mistty-send-and-wait-for-prompt nil "line 10")
+    (mistty-send-and-wait-for-prompt :prompt "line 10")
     (should
      (equal
       "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n"
@@ -2640,7 +2641,7 @@
   (mistty-with-test-buffer ()
     (mistty-run-command
      (insert "for i in {1..10} ; do \necho line $i\n done && read l"))
-    (mistty-send-and-wait-for-prompt nil "line 10")
+    (mistty-send-and-wait-for-prompt :prompt "line 10")
     (should
      (equal
       "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n"
@@ -5273,7 +5274,7 @@
      (mistty-test-goto "hello")
      (set-mark (point)))
     (mistty-send-text "hello,")
-    (mistty-send-and-wait-for-prompt #'mistty-send-command)
+    (mistty-send-and-wait-for-prompt :send #'mistty-send-command)
     (should-not mark-active)))
 
 (ert-deftest mistty-test-recovery ()

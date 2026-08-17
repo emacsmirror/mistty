@@ -390,7 +390,8 @@ everything between the two prompts, return it, and narrow the
 buffer to a new region at the beginning of the new prompt."
   (let ((first-prompt-end (point))
         output-start next-prompt-start output)
-    (setq next-prompt-start (mistty-send-and-wait-for-prompt send-command-func prompt))
+    (setq next-prompt-start (mistty-send-and-wait-for-prompt
+                             :send send-command-func :prompt prompt))
     (setq output-start
           (save-excursion
             (goto-char first-prompt-end)
@@ -406,13 +407,13 @@ buffer to a new region at the beginning of the new prompt."
       (mistty-test-narrow next-prompt-start))
     output))
 
-(defun mistty-send-and-wait-for-prompt (&optional send-command-func prompt proc)
+(cl-defun mistty-send-and-wait-for-prompt (&key send prompt proc start)
   "Send the current command line and wait for a prompt to appear.
 
 Puts the point at the end of the prompt and return the position
 of the beginning of the prompt."
-  (let ((before-send (if mistty-proc (mistty-cursor) (point))))
-    (funcall (or send-command-func #'mistty-send-command))
+  (let ((before-send (or start (if mistty-proc (mistty-cursor) (point)))))
+    (funcall (or send #'mistty-send-command))
     (mistty-wait-for-output
      :regexp (or (if prompt (concat "^" (regexp-quote prompt)))
                  mistty-test-prompt-re
