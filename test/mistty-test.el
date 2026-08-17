@@ -3469,6 +3469,13 @@
       (mistty--cursor-skip win)
       (right-char)
       (mistty--cursor-skip win)
+
+      ;; Ideally, we'd be able to put the cursor at the right indentation
+      ;; like fish would do, but:
+      ;; - we don't know what the right indentation is
+      ;;   (it depends on the prompt, which can be dynamic)
+      ;; - when using mistty-mod, there's no space to go to,
+      ;;   not without re-rendering
       (should (string-match
                (concat "\\$ for i in (seq 10)\n"
                        " *<>\n"
@@ -3524,33 +3531,33 @@
       (mistty--cursor-skip win)
       (left-char)
       (mistty--cursor-skip win)
-      (should (equal (concat "$ for i in (seq 10)\n"
-                             "      echo first\n"
-                             "\n"
-                             "      <>\n"
-                             "  end")
-                     (mistty-test-content
-                      :show (point))))
+      (should (string-match
+               (concat "\\$ for i in (seq 10)\n"
+                       "      echo first\n"
+                       "\n"
+                       " *<>\n"
+                       "  end")
+               (mistty-test-content :show (point))))
 
       (left-char)
       (mistty--cursor-skip win)
-      (should (equal (concat "$ for i in (seq 10)\n"
-                             "      echo first\n"
-                             "      <>\n"
-                             "\n"
-                             "  end")
-                     (mistty-test-content
-                      :show (point))))
+      (should (string-match
+               (concat"$ for i in (seq 10)\n"
+                      "      echo first\n"
+                      " *<>\n"
+                      "\n"
+                      "  end")
+               (mistty-test-content :show (point))))
 
       (left-char)
       (mistty--cursor-skip win)
-      (should (equal (concat "$ for i in (seq 10)\n"
-                             "      echo first<>\n"
-                             "\n"
-                             "\n"
-                             "  end")
-                     (mistty-test-content
-                      :show (point)))))))
+      (should (equal
+               (concat "$ for i in (seq 10)\n"
+                       "      echo first<>\n"
+                       "\n"
+                       "\n"
+                       "  end")
+               (mistty-test-content :show (point)))))))
 
 (ert-deftest mistty-test-fish-right-prompt-yank ()
   (mistty-with-test-buffer (:shell fish :init mistty-test-fish-right-prompt)
