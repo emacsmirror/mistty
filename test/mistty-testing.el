@@ -98,7 +98,7 @@ This is handled by `mistty-test-report-issue' and must contain
 the symbol of the expected issues, in order.")
 
 (cl-defmacro mistty-with-test-buffer
-    ((&key (shell 'bash) selected init term-size) &body body)
+    ((&key (shell 'bash) selected init term-size cd) &body body)
   "Run BODY in a MisTTY buffer.
 
 SHELL specifies the program that is run in that buffer, bash,
@@ -111,7 +111,10 @@ window while BODY is running.
 
 TERM-SIZE specifies either 'window, to track window size or a fixed
 terminal size, detached from window size, as (cons WIDTH HEIGHT).
-Defaults to 80x24"
+Defaults to 80x24.
+
+If specified CD is the default directory active during the test. By
+default, the default directory is a temp directory created for the test."
   (declare (indent 1))
   (let ((exec-var (intern (concat "mistty-test-" (symbol-name shell) "-exe"))))
     `(prog1 nil
@@ -137,18 +140,19 @@ Defaults to 80x24"
                (mistty-log mistty-test-log))
            (message "RUNNING: %s" (ert-test-name (ert-running-test)))
            (ert-with-temp-directory mistty-tmpdir
-             (unwind-protect
-                 (prog1
-                     ,(if selected
-                          `(with-selected-window (display-buffer (current-buffer))
+             (let ((default-directory ,(if cd cd 'mistty-tmpdir)))
+               (unwind-protect
+                   (prog1
+                       ,(if selected
+                            `(with-selected-window (display-buffer (current-buffer))
+                               (mistty-test-setup (quote ,shell) mistty-tmpdir ,init ,term-size)
+                               ,@body)
+                          `(progn
                              (mistty-test-setup (quote ,shell) mistty-tmpdir ,init ,term-size)
-                             ,@body)
-                        `(progn
-                           (mistty-test-setup (quote ,shell) mistty-tmpdir ,init ,term-size)
-                           ,@body))
-                   (should-not mistty-test-had-issues)
-                   (setq mistty-test-ok 'ok))
-               (unless mistty-test-ok (mistty-start-log)))))))))
+                             ,@body))
+                     (should-not mistty-test-had-issues)
+                     (setq mistty-test-ok 'ok))
+                 (unless mistty-test-ok (mistty-start-log))))))))))
 
 (cl-defmacro mistty-simulate-scrollback-buffer (&body body)
   "Run BODY in a simulated scrollback buffer."
@@ -206,21 +210,20 @@ Defaults to 80x24"
 
 (defun mistty-test-setup (shell tmpdir init term-size)
   (mistty-mode)
-  (let ((default-directory tmpdir))
-    (cond
-     ((eq shell 'bash)
-      (mistty-test-setup-bash tmpdir init term-size))
+  (cond
+   ((eq shell 'bash)
+    (mistty-test-setup-bash tmpdir init term-size))
 
-     ((eq shell 'zsh)
-      (mistty-test-setup-zsh tmpdir init term-size))
+   ((eq shell 'zsh)
+    (mistty-test-setup-zsh tmpdir init term-size))
 
-     ((eq shell 'fish)
-      (mistty-test-setup-fish tmpdir init term-size))
+   ((eq shell 'fish)
+    (mistty-test-setup-fish tmpdir init term-size))
 
-     ((eq shell 'ipython)
-      (mistty-test-setup-ipython tmpdir init term-size))
+   ((eq shell 'ipython)
+    (mistty-test-setup-ipython tmpdir init term-size))
 
-     (t (error "Unsupported shell %s" shell)))))
+   (t (error "Unsupported shell %s" shell))))
 
 (defun mistty-test-setup-bash (tmpdir init term-size)
   (let ((rcfile (concat tmpdir "bashrc")))
