@@ -335,11 +335,10 @@
      (should-error (call-interactively 'mistty-send-command)))))
 
 (ert-deftest mistty-test-send-command-is-queued ()
-  :expected-result :failed
   (mistty-with-test-buffer ()
     (mistty--enqueue mistty--queue (mistty--stuck-interaction "echo ok"))
     (mistty-send-and-wait-for-prompt
-     (lambda ()
+     :send (lambda ()
        (mistty-send-command)
        ;; send-command is added to the queue. It must not execute, not
        ;; even partially, until 'echo ok' has appeared.
