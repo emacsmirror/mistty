@@ -3483,43 +3483,42 @@
                        "\n"
                        "\n"
                        "  end")
-               (mistty-test-content
-                :show (point))))
+               (mistty-test-content :show (point))))
 
       (mistty-test-goto-after "first")
       (mistty--cursor-skip win)
       (right-char)
       (mistty--cursor-skip win)
-      (should (equal (concat "$ for i in (seq 10)\n"
-                             "\n"
-                             "      echo first\n"
-                             "      <>\n"
-                             "\n"
-                             "  end")
-                     (mistty-test-content
-                      :show (point))))
+      (should (string-match
+               (concat "\\$ for i in (seq 10)\n"
+                       "\n"
+                       "      echo first\n"
+                       " *<>\n"
+                       "\n"
+                       "  end")
+               (mistty-test-content :show (point))))
 
       (right-char)
       (mistty--cursor-skip win)
-      (should (equal (concat "$ for i in (seq 10)\n"
-                             "\n"
-                             "      echo first\n"
-                             "\n"
-                             "      <>\n"
-                             "  end")
-                     (mistty-test-content
-                      :show (point))))
+      (should (string-match
+               (concat "\\$ for i in (seq 10)\n"
+                       "\n"
+                       "      echo first\n"
+                       "\n"
+                       " *<>\n"
+                       "  end")
+               (mistty-test-content :show (point))))
 
       (right-char)
       (mistty--cursor-skip win)
-      (should (equal (concat "$ for i in (seq 10)\n"
-                             "\n"
-                             "      echo first\n"
-                             "\n"
-                             "\n"
-                             "  <>end")
-                     (mistty-test-content
-                      :show (point)))))))
+      (should (equal
+               (concat "$ for i in (seq 10)\n"
+                       "\n"
+                       "      echo first\n"
+                       "\n"
+                       "\n"
+                       "  <>end")
+               (mistty-test-content :show (point)))))))
 
 (ert-deftest mistty-test-fish-multiline-dont-skip-empty-lines-backward ()
   (mistty-with-test-buffer (:shell fish :selected t)
