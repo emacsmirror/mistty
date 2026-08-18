@@ -103,6 +103,7 @@
 
 (ert-deftest mistty-compat-yas-expand-multiline-fish ()
   :expected-result :failed
+  (error "crashes eldev")
   (yas-define-snippets
    'mistty-mode
    ;; (KEY TEMPLATE NAME ...)
