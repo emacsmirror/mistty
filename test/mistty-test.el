@@ -1371,17 +1371,14 @@
 
 ;; https://github.com/szermatt/mistty/issues/33
 (ert-deftest mistty-test-previous-output-zsh ()
-  :expected-result :failed
   (mistty-with-test-buffer (:shell zsh)
     (mistty-test-previous-output)))
 
 (ert-deftest mistty-test-previous-output-bash ()
-  :expected-result :failed
   (mistty-with-test-buffer (:shell bash)
     (mistty-test-previous-output)))
 
 (ert-deftest mistty-test-previous-output-fish ()
-  :expected-result :failed
   (mistty-with-test-buffer (:shell fish)
     (mistty-test-previous-output)))
 
@@ -1392,9 +1389,9 @@
         (insert (format "line %d\n" n))))
     (mistty--send-string mistty-proc (format "cat '%s'" tempfile))
     (mistty-send-and-wait-for-prompt
-     (lambda ()
-       (mistty-run-command
-        (mistty-send-command))))
+     :send (lambda ()
+             (mistty-run-command
+              (mistty-send-command))))
     (mistty-previous-output 1)
     (should (equal
              "<>line 0\nline 1\nline 2"
