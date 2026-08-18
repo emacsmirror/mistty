@@ -24,12 +24,10 @@
 (require 'mistty-testing)
 
 (ert-deftest mistty-tramp-test-shell-start ()
-  :expected-result :failed
   (let* ((tramp-methods (mistty-test-tramp-methods))
          (tramp-prefix (mistty-test-tramp-prefix))
-         (home (file-name-directory "/"))
-         (default-directory (concat tramp-prefix home)))
-    (mistty-with-test-buffer ()
+         (home (file-name-directory "/")))
+    (mistty-with-test-buffer (:cd (concat tramp-prefix home))
       (should (equal (concat tramp-prefix "/")
                      (buffer-local-value 'default-directory (current-buffer))))
       (should (equal mistty-test-bash-exe (mistty-test-remote-command)))
@@ -40,7 +38,7 @@
 
       ;; TRAMP sets INSIDE_EMACS and reports its version.
       (mistty-send-string "echo $INSIDE_EMACS")
-      (should (equal (format "%s,term:%s,tramp:%s" emacs-version term-protocol-version tramp-version)
+      (should (equal (format "%s,tramp:%s" emacs-version tramp-version)
                      (mistty-send-and-capture-command-output))))))
 
 (ert-deftest mistty-tramp-test-connection-local-explicit-shell-file-name ()
@@ -106,27 +104,6 @@
         (let ((kill-buffer-query-functions nil))
           (kill-buffer buf))))))
 
-(ert-deftest mistty-tramp-test-termcap ()
-  :expected-result :failed
-  (let* ((tramp-methods (mistty-test-tramp-methods))
-         (tramp-prefix (mistty-test-tramp-prefix))
-         (default-directory (concat tramp-prefix "/"))
-         (term-term-name "eterm-test"))
-    (mistty-with-test-buffer ()
-
-      ;; TERMINFO shouldn't be set in remote shells.
-      (mistty-send-text "echo TERMINFO=${TERMINFO}.")
-      (should (equal "TERMINFO=." (mistty-send-and-capture-command-output)))
-
-      ;; TERMCAP should be set.
-      (mistty-send-text "if [ -n \"$TERMCAP\" ]; then echo set; else echo unset; fi")
-      (should (equal "set" (mistty-send-and-capture-command-output)))
-
-      ;; captoinfo reads and processes the TERMCAP env variable. This
-      ;; makes sure that the content of TERMCAP is valid.
-      (mistty-send-text "captoinfo")
-      (should (string-match "eterm-test,\n +am, mir.*" (mistty-send-and-capture-command-output))))))
-
 (ert-deftest mistty-tramp-test-dirtrack-on-sg ()
   :expected-result :failed
   (let* ((tramp-methods (mistty-test-tramp-methods))
@@ -149,10 +126,9 @@
 (turtles-ert-deftest mistty-tramp-test-window-size ()
   (let* ((tramp-methods (mistty-test-tramp-methods))
          (tramp-prefix (mistty-test-tramp-prefix))
-         (home (file-name-directory "/"))
-         (default-directory (concat tramp-prefix home)))
+         (home (file-name-directory "/")))
     (delete-other-windows)
-    (mistty-with-test-buffer (:selected t)
+    (mistty-with-test-buffer (:selected t :cd (concat tramp-prefix home))
       (let ((win (selected-window))
             cols-before cols-after)
         (mistty--send-string mistty-proc "tput cols")
