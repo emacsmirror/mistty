@@ -443,7 +443,6 @@
     (mistty-wait-for-term-buffer-and-proc-to-die term-buffer term-proc)))
 
 (ert-deftest mistty-test-kill-term-buffer-but-keep-work-buffer ()
-  :expected-result :failed
   (mistty-with-test-buffer ()
     (let ((calls (list)))
       (add-hook 'mistty-after-process-end-hook
