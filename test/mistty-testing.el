@@ -135,6 +135,7 @@ Defaults to 80x24"
                (mistty-allow-clearing-scrollback nil)
                (mistty-default-terminal-size nil)
                (mistty-log mistty-test-log))
+           (message "RUNNING: %s" (ert-test-name (ert-running-test)))
            (ert-with-temp-directory mistty-tmpdir
              (unwind-protect
                  (prog1
