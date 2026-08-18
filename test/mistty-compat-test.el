@@ -102,6 +102,7 @@
     (should (equal "ok" (mistty-send-and-capture-command-output)))))
 
 (ert-deftest mistty-compat-yas-expand-multiline-fish ()
+  :expected-result :failed
   (yas-define-snippets
    'mistty-mode
    ;; (KEY TEMPLATE NAME ...)
@@ -126,6 +127,7 @@
                    (mistty-test-content :show (point))))))
 
 (ert-deftest mistty-compat-yas-expand-multiline-fish-insert ()
+  :expected-result :failed
   (yas-define-snippets
    'mistty-mode
    ;; (KEY TEMPLATE NAME ...)

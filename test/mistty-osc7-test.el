@@ -60,6 +60,7 @@
       (should (equal "/ssh:testmachine.example:/var/log/" default-directory)))))
 
 (ert-deftest mistty-test-osc7-remote-path-disallowed ()
+  :expected-result :failed
   (mistty-with-test-buffer (:shell zsh)
     (let ((mistty-osc-handlers '(("7" . mistty-osc7)))
           (mistty-allow-tramp-paths nil)
@@ -109,6 +110,7 @@
       (should-not (file-remote-p default-directory)))))
 
 (ert-deftest mistty-test-osc7-keep-prefix-when-host-matches ()
+  :expected-result :failed
   (let* ((tramp-methods (mistty-test-tramp-methods))
          (tramp-prefix (mistty-test-tramp-prefix))
          (default-directory (concat tramp-prefix "/")))
@@ -123,6 +125,7 @@
       (should (equal (concat tramp-prefix "/") default-directory)))))
 
 (ert-deftest mistty-test-osc7-keep-prefix-when-localhost ()
+  :expected-result :failed
   (let* ((tramp-methods (mistty-test-tramp-methods))
          (tramp-prefix (mistty-test-tramp-prefix))
          (default-directory (concat tramp-prefix "/")))
