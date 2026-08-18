@@ -80,7 +80,11 @@ the terminal buffer."
 (defcustom mistty-set-EMACS nil
   "Whether the EMACS env variable should be set, for Bash 4.3 and older.
 
-You only need to set this if:
+NOTE: Bash detecting that it's running under Emacs only works when using
+term.el as Bash wants the TERM env variable to be set to eterm. When
+using the module, only OSC7 work for directory tracking.
+
+You can set set this if:
  - you're stuck using a very old version of Bash (4.3 or older)
  - you don't want to set up directory tracking using OSC7
    as described in the manual
@@ -462,7 +466,11 @@ WIDTH and HEIGHT are the initial dimension of the terminal
 reported to the remote process.
 
 This function returns the newly-created buffer."
-  (let ((term-buffer (generate-new-buffer name 'inhibit-buffer-hooks)))
+  (let ((term-buffer (generate-new-buffer name 'inhibit-buffer-hooks))
+        (process-environment (if mistty-set-EMACS
+                                 (cons (format "EMACS=%s" emacs-version)
+                                       process-environment)
+                               process-environment)))
     (with-current-buffer term-buffer
       (mistty-raw-mode)
       (setq-local mistty--prompt-cell (mistty--make-prompt-cell))

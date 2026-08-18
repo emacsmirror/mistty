@@ -104,25 +104,6 @@
         (let ((kill-buffer-query-functions nil))
           (kill-buffer buf))))))
 
-(ert-deftest mistty-tramp-test-dirtrack-on-sg ()
-  :expected-result :failed
-  (let* ((tramp-methods (mistty-test-tramp-methods))
-         (tramp-prefix (mistty-test-tramp-prefix))
-         (default-directory (concat tramp-prefix "/")))
-    (mistty-with-test-buffer (:shell zsh)
-      ;; Not using bash, because it sends \032 dirtrack, which would
-      ;; interfere with this test.
-
-      (should (equal (concat tramp-prefix "/") default-directory))
-
-      (mistty--send-string mistty-proc "printf '\\032//var/log\\nok\\n'")
-      (should (equal "ok" (mistty-send-and-capture-command-output)))
-      (should (equal (concat tramp-prefix "/var/log/") default-directory))
-
-      (mistty--send-string mistty-proc "printf '\\032//home\\nok\\n'")
-      (should (equal "ok" (mistty-send-and-capture-command-output)))
-      (should (equal (concat tramp-prefix "/home/") default-directory)))))
-
 (turtles-ert-deftest mistty-tramp-test-window-size ()
   (let* ((tramp-methods (mistty-test-tramp-methods))
          (tramp-prefix (mistty-test-tramp-prefix))

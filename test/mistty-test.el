@@ -1419,16 +1419,6 @@
     (mistty-clear 1)
     (should (equal "$" (mistty-test-content)))))
 
-(ert-deftest mistty-test-dirtrack ()
-  :expected-result :failed ;; TODO: support with module
-  (mistty-with-test-buffer ()
-    (mistty-send-text "cd /")
-    (mistty-send-and-wait-for-prompt)
-    (should (equal "/" default-directory))
-    (mistty-send-text "cd ~")
-    (mistty-send-and-wait-for-prompt)
-    (should (equal (file-name-as-directory (getenv "HOME")) default-directory))))
-
 (ert-deftest mistty-test-bash-backward-history-search ()
   (mistty-with-test-buffer (:selected t)
     (mistty-run-command
@@ -5178,7 +5168,6 @@
     (should (equal "*fish*" (mistty-new-buffer-name)))))
 
 (ert-deftest mistty-test-set-EMACS ()
-  :expected-result :failed
   (setenv "EMACS" nil) ;; Sometimes set to run Eldev
 
   (let ((mistty-set-EMACS nil))
@@ -5188,8 +5177,7 @@
   (let ((mistty-set-EMACS t))
     (mistty-with-test-buffer ()
       (mistty-send-text "echo EMACS=${EMACS}")
-      (should (equal (format "EMACS=%s (term:%s)"
-                           emacs-version term-protocol-version)
+      (should (equal (format "EMACS=%s" emacs-version )
                      (mistty-send-and-capture-command-output))))))
 
 (turtles-ert-deftest mistty-test-change-term-colors ( :instance 'mistty)
