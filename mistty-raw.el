@@ -199,6 +199,14 @@ given the set of windows."
 (defun mistty-raw--cursor-column ()
   (cdr (mistty-mod-cursor mistty-raw--vterm)))
 
+(defun mistty-raw--cursor-chars ()
+  "Return char index of the cursor within its line.
+
+Do not confuse it with `mistty-raw--cursor-column'"
+  (- mistty-raw--cursor (save-excursion
+                          (goto-char mistty-raw--cursor)
+                          (pos-bol))))
+
 (defun mistty-raw--cursor-line ()
   (car (mistty-mod-cursor mistty-raw--vterm)))
 

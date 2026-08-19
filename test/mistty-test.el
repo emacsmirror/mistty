@@ -1800,79 +1800,6 @@
       (should (equal bufname (buffer-name work-buffer)))
       (should (not (buffer-local-value 'mistty-fullscreen mistty-work-buffer))))))
 
-(ert-deftest mistty-test-osc ()
-  (mistty-with-test-buffer ()
-    (let* ((osc-list)
-           (mistty-osc-handlers
-            `(("8" . ,(lambda (code text)
-                        (push (cons code text) osc-list))))))
-      (mistty-send-text "printf '\\e]8;;http://www.example.com\\aSome OSC\\e]8;;\\a!\\n'")
-      (should (equal "Some OSC!" (mistty-send-and-capture-command-output)))
-      (should (equal '(("8" . ";http://www.example.com") ("8" . ";")) (nreverse osc-list))))))
-
-(ert-deftest mistty-test-osc-standard-end ()
-  (mistty-with-test-buffer ()
-    (let* ((osc-list)
-           (mistty-osc-handlers
-            `(("8" . ,(lambda (code text)
-                        (push (cons code text) osc-list))))))
-      (mistty-send-text "printf '\\e]8;;http://www.example.com\\e\\\\Some OSC\\e]8;;\\e\\\\!\\n'")
-      (should (equal "Some OSC!" (mistty-send-and-capture-command-output)))
-      (should (equal '(("8" . ";http://www.example.com") ("8" . ";")) (nreverse osc-list))))))
-
-(ert-deftest mistty-test-osc-add-text-properties ()
-  :expected-result :failed
-  (mistty-with-test-buffer ()
-    (let* ((start nil)
-           (mistty-osc-handlers
-            `(("7" . ,(lambda (_ text)
-                        (cond
-                         ((string= "start" text)
-                          (setq start (point)))
-                         ((string= "end" text)
-                          (put-text-property
-                           start (point) 'mistty-test t))
-                         (t (error "unexpected: '%s'" text))))))))
-      (mistty-send-text "printf 'abc \\e]7;start\\adef\\e]7;end\\a ghi\\n'")
-      (should (equal "abc def ghi" (mistty-send-and-capture-command-output)))
-      (mistty-test-goto "abc def ghi")
-      (should (equal "abc [def] ghi"
-                     (mistty-test-content
-                      :start (point)
-                      :show-property '(mistty-test t)
-                      :strip-last-prompt t))))))
-
-(ert-deftest mistty-test-split-osc-sequence ()
-  (mistty-with-test-process (proc)
-    (let* ((accum (mistty--make-accumulator (process-filter proc)))
-           (osc-list nil)
-           (mistty-osc-handlers
-            `(("999" . ,(lambda (_ text)
-                          (push text osc-list))))))
-      (set-process-filter proc accum)
-      (mistty--add-osc-detection accum)
-
-      (funcall accum proc "foo\e]999;he")
-      (funcall accum proc "llo, w")
-      (funcall accum proc "orld\abar")
-      (should (equal "foobar" (mistty-test-content)))
-      (should (equal '("hello, world") osc-list)))))
-
-(ert-deftest mistty-test-osc-detection ()
-  (mistty-with-test-process (proc)
-    (let* ((accum (mistty--make-accumulator (process-filter proc)))
-           (osc-list nil)
-           (mistty-osc-handlers
-            `(("999" . ,(lambda (_ text)
-                          (push text osc-list))))))
-      (set-process-filter proc accum)
-      (mistty--add-osc-detection accum)
-
-      (funcall accum proc "foo\e]999;\xce\xb1\xce\xb2\xce\xb3\abar")
-
-      (should (equal "foobar" (mistty-test-proc-buffer-string proc)))
-      (should (equal '("αβγ") osc-list)))))
-
 (ert-deftest mistty-test-reset ()
   (mistty-with-test-buffer ()
     (mistty-send-text "echo one")
@@ -7013,3 +6940,20 @@ precmd_functions+=(prompt_header)
 
       (setq term-mode-hook orig-term-mode-hook
             mistty-term-mode-hook orig-mistty-term-mode-hook))))
+
+(turtles-ert-deftest mistty-test-osc-10-11 (:instance 'mistty)
+  (mistty-with-test-buffer (:selected t)
+    (set-face-foreground 'default "#ffff00")
+    (set-face-background 'default "#0000ff")
+
+    (mistty--send-string mistty-proc "read -rs -d \\\\ -p $'\\e]10;?\\e\\\\'  fg; ")
+    (mistty--send-string mistty-proc "read -rs -d \\\\ -p $'\\e]11;?\\e\\\\'  bg; ")
+    (mistty-send-and-wait-for-prompt)
+
+    (mistty-send-text "echo $fg | strings")
+    (should (equal "]10;rgb:ffff/ffff/0000"
+                   (mistty-send-and-capture-command-output)))
+
+    (mistty-send-text "echo $bg | strings")
+    (should (equal "]11;rgb:0000/0000/ffff"
+                   (mistty-send-and-capture-command-output)))))

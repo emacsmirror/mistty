@@ -27,55 +27,14 @@
 (require 'mistty-util)
 (require 'mistty-log)
 (require 'mistty-accum)
+
 (eval-when-compile
   (require 'mistty-accum-macros))
 (require 'mistty-kbd)
 (require 'mistty-raw)
+(require 'mistty-osc7)
 
 ;;; Code:
-
-(autoload 'mistty-osc7 "mistty-osc7")
-(autoload 'mistty-osc-query-color "mistty-osc-colors")
-(autoload 'ansi-osc-window-title-handler "ansi-osc")
-(autoload 'ansi-osc-hyperlink-handler "ansi-osc")
-
-(defcustom mistty-osc-handlers
-  '(
-    ;; not using ansi-osc-directory-tracker because it doesn't decode
-    ;; the coding system of the path after percent-decoding it.
-    ;; TODO: propose a fix for ansi-osc
-    ("7" . mistty-osc7)
-
-    ;; These handlers are reasonably compatibly with MisTTY OSC. This
-    ;; isn't necessary going to be the case for all such handlers.
-    ("0" . ansi-osc-window-title-handler)
-    ("2" . ansi-osc-window-title-handler)
-    ("8" . ansi-osc-hyperlink-handler)
-
-    ;; Allow querying foreground and background color. While OSC 10/11
-    ;; normally supports changing color, this isn't supported here.
-    ("10" . mistty-osc-query-color)
-    ("11" . mistty-osc-query-color)
-    ("133" . mistty-osc133))
-  "Hook run when unknown OSC sequences have been received.
-
-This hook is run on the terminal buffer. It is passed the OSC code as
-a string and the content of OSC sequence - everything between OSC (ESC
-]) and ST (ESC \\ or \\a) and may choose to handle them.
-
-The current buffer is a terminal buffer. The hook is allowed to
-modify it, to add text properties, for example. In such case,
-consider using `mistty-register-text-properties'.
-
-Most handlers written for the ansi-osc package (Emacs 29) should
-work here as well.
-
-If you add here a handler that sets a buffer-local variable,
-consider adding that variable to `mistty-variables-to-copy' so
-that its value is available in the main MisTTY buffer, not just
-the terminal buffer."
-  :group 'mistty
-  :type '(alist :key-type string :value-type function))
 
 (defcustom mistty-set-EMACS nil
   "Whether the EMACS env variable should be set, for Bash 4.3 and older.
@@ -272,14 +231,15 @@ them to the virtual terminal."
 
 Known OSC codes are passed down to handlers registered in
 `mistty-osc-handlers'."
+  ;; Intercept just a few OSC sequences not supported by the terminal,
+  ;; let others through.
   (mistty--accum-add-processor-lambda accum
-      (ctx '(seq OSC (let code Ps) ?\; (let text Pt) ST))
-   (when-let* ((handler (cdr (assoc-string code mistty-osc-handlers))))
-     (mistty--accum-ctx-flush ctx)
-     (let ((inhibit-modification-hooks t)
-           (inhibit-read-only t))
-       (funcall handler code
-                (decode-coding-string text locale-coding-system t))))))
+      (_ctx '(seq OSC "7;" (let text Pt) ST))
+    (mistty-osc7 "7" text))
+  (mistty--accum-add-processor-lambda accum
+      (ctx '(seq OSC "133;" (let text Pt) ST))
+    (mistty--accum-ctx-flush ctx) ;; for accurate cursor pos
+    (mistty-osc133 "133" text)))
 
 (defun mistty--add-prompt-detection (accum)
   "Register processors to ACCUM for prompt detection.
@@ -764,9 +724,9 @@ MisTTY supports code A-D:
 Everything else is ignored."
   (when (and (length> osc-seq 0) (not (mistty-raw--alt-screen-p)))
     (let ((command-char (aref osc-seq 0)))
+      (mistty-log "OSC 133 %c@%s" command-char (mistty-raw--cursor-linecol))
       (pcase command-char
         (?A ;; start a new command
-
          ;; Overwrite any other prompt source.
          (let ((prompt (mistty--make-prompt 'osc133 (mistty--term-scrolline))))
            (setf (mistty--prompt) prompt)
@@ -780,7 +740,7 @@ Everything else is ignored."
          (when-let* ((prompt (mistty--prompt)))
            (setf (mistty--prompt-user-input-start prompt)
                  (cons (mistty--term-scrolline)
-                       (mistty-raw--cursor-column)))))
+                       (mistty-raw--cursor-chars)))))
 
         (?C ;; start of command output
          (when-let* ((prompt (mistty--prompt)))

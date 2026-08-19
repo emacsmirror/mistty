@@ -1815,17 +1815,22 @@ Also updates prompt and point."
 
 Fields allow the like of `beginning-of-line' and `end-of-line' to ignore
 prompt and right prompts."
-  (when-let* ((start (mistty--prompt-user-input-start prompt))
-             (bol (mistty--scrolline-pos (car start)))
-             (end (mistty--eol bol)))
-    (when (> (cdr start) 0)
+  (when-let* ((user-input-start (mistty--prompt-user-input-start prompt))
+              (start-scrolline (car user-input-start))
+              (start-chars (cdr user-input-start))
+              (bol (mistty--scrolline-pos start-scrolline))
+              (end (mistty--eol bol))
+              (start-pos (min end (+ bol start-chars))))
+    (when (> start-pos bol)
       (add-text-properties
-       bol (+ bol (cdr start))
+       bol start-pos
        '(field prompt
                inhibit-line-move-field-capture t
                front-sticky (field inhibit-line-move-field-capture)
                rear-nonsticky t)))
-    (when-let* ((right-prompt-start (text-property-any (cdr start) end 'mistty-skip 'right-prompt)))
+    (when-let* ((right-prompt-start
+                 (when (> end start-pos)
+                   (text-property-any start-pos end 'mistty-skip 'right-prompt))))
       ;; Give room for the point to go one column past the beginning
       ;; of the right prompt to not confuse field-aware commands
       ;; such as backward-word.

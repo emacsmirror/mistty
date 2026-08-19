@@ -7,10 +7,10 @@ use alacritty_terminal::{
         TermDamage,
         cell::{Cell, Flags},
     },
-    vte::ansi::{Color, NamedColor},
+    vte::ansi::{Color, NamedColor, Rgb},
 };
 use emacs::{Env, Result, Value, defun};
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 emacs::use_functions! {
     add_face_text_property
@@ -551,21 +551,29 @@ impl PropertyTracker {
         let Self { buf, .. } = self;
         for (prop, start, end) in buf {
             match prop {
+                RenderProperty::Fg(Color::Named(
+                    NamedColor::Foreground
+                    | NamedColor::BrightForeground
+                    | NamedColor::DimForeground,
+                )) => {
+                    // nothing to do
+                }
                 RenderProperty::Fg(color) => {
-                    if let Some(hex) = to_emacs_color(env, color, true)? {
-                        env.call(
-                            add_face_text_property,
-                            (start, end, env.list((foreground_sym, hex))?),
-                        )?;
-                    }
+                    let hex = to_emacs_color(env, color, true)?;
+                    env.call(
+                        add_face_text_property,
+                        (start, end, env.list((foreground_sym, hex))?),
+                    )?;
+                }
+                RenderProperty::Bg(Color::Named(NamedColor::Background)) => {
+                    // nothing to do
                 }
                 RenderProperty::Bg(color) => {
-                    if let Some(hex) = to_emacs_color(env, color, false)? {
-                        env.call(
-                            add_face_text_property,
-                            (start, end, env.list((background_sym, hex))?),
-                        )?;
-                    }
+                    let hex = to_emacs_color(env, color, false)?;
+                    env.call(
+                        add_face_text_property,
+                        (start, end, env.list((background_sym, hex))?),
+                    )?;
                 }
                 RenderProperty::Toggle(ToggleProperty::Italic) => {
                     env.call(add_face_text_property, (start, end, ansi_color_italic))?;
@@ -594,81 +602,123 @@ impl PropertyTracker {
     }
 }
 
+/// Convert a color to a Rgb value if possible
+pub fn to_emacs_color_rgb(env: &Env, color: Color, fg: bool) -> Result<Option<Rgb>> {
+    let mut color_str = to_emacs_color(env, color, fg)?;
+    if color_str == "unspecified-fg" {
+        color_str = face_color(env, default_face, true)?;
+    }
+    if color_str == "unspecified-bg" {
+        color_str = face_color(env, default_face, false)?;
+    }
+    if let Ok(rgb) = Rgb::from_str(&color_str) {
+        Ok(Some(rgb))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Transform a color index from a ColorRequest into a NamedColor, if
+/// possible.
+pub fn named_color_for_color_request(index: usize) -> Option<NamedColor> {
+    match index {
+        0 => Some(NamedColor::Black),
+        1 => Some(NamedColor::Red),
+        2 => Some(NamedColor::Green),
+        3 => Some(NamedColor::Yellow),
+        4 => Some(NamedColor::Blue),
+        5 => Some(NamedColor::Magenta),
+        6 => Some(NamedColor::Cyan),
+        7 => Some(NamedColor::White),
+        8 => Some(NamedColor::BrightBlack),
+        9 => Some(NamedColor::BrightRed),
+        10 => Some(NamedColor::BrightGreen),
+        11 => Some(NamedColor::BrightYellow),
+        12 => Some(NamedColor::BrightBlue),
+        13 => Some(NamedColor::BrightMagenta),
+        14 => Some(NamedColor::BrightCyan),
+        15 => Some(NamedColor::BrightWhite),
+        256 => Some(NamedColor::Foreground),
+        257 => Some(NamedColor::Background),
+        258 => Some(NamedColor::Cursor),
+        259 => Some(NamedColor::DimBlack),
+        260 => Some(NamedColor::DimRed),
+        261 => Some(NamedColor::DimGreen),
+        262 => Some(NamedColor::DimYellow),
+        263 => Some(NamedColor::DimBlue),
+        264 => Some(NamedColor::DimMagenta),
+        265 => Some(NamedColor::DimCyan),
+        266 => Some(NamedColor::DimWhite),
+        267 => Some(NamedColor::BrightForeground),
+        268 => Some(NamedColor::DimForeground),
+        _ => None,
+    }
+}
+
 /// Convert a vte::Color to an emacs color, as a string.
 ///
 /// The color is usually a RGB value starting with #, but it can also
 /// be a color name, `unspecified-bg` or `unspecified-fg`.
-fn to_emacs_color(env: &Env, color: Color, fg: bool) -> Result<Option<String>> {
+fn to_emacs_color(env: &Env, color: Color, fg: bool) -> Result<String> {
     Ok(match color {
         Color::Named(NamedColor::Black | NamedColor::DimBlack) | Color::Indexed(0) => {
-            Some(face_color(env, ansi_color_black, fg)?)
+            face_color(env, ansi_color_black, fg)?
         }
         Color::Named(NamedColor::Red | NamedColor::DimRed) | Color::Indexed(1) => {
-            Some(face_color(env, ansi_color_red, fg)?)
+            face_color(env, ansi_color_red, fg)?
         }
         Color::Named(NamedColor::Green | NamedColor::DimGreen) | Color::Indexed(2) => {
-            Some(face_color(env, ansi_color_green, fg)?)
+            face_color(env, ansi_color_green, fg)?
         }
         Color::Named(NamedColor::Yellow | NamedColor::DimYellow) | Color::Indexed(3) => {
-            Some(face_color(env, ansi_color_yellow, fg)?)
+            face_color(env, ansi_color_yellow, fg)?
         }
         Color::Named(NamedColor::Blue | NamedColor::DimBlue) | Color::Indexed(4) => {
-            Some(face_color(env, ansi_color_blue, fg)?)
+            face_color(env, ansi_color_blue, fg)?
         }
         Color::Named(NamedColor::Magenta | NamedColor::DimMagenta) | Color::Indexed(5) => {
-            Some(face_color(env, ansi_color_magenta, fg)?)
+            face_color(env, ansi_color_magenta, fg)?
         }
         Color::Named(NamedColor::Cyan | NamedColor::DimCyan) | Color::Indexed(6) => {
-            Some(face_color(env, ansi_color_cyan, fg)?)
+            face_color(env, ansi_color_cyan, fg)?
         }
         Color::Named(NamedColor::White | NamedColor::DimWhite) | Color::Indexed(7) => {
-            Some(face_color(env, ansi_color_white, fg)?)
+            face_color(env, ansi_color_white, fg)?
         }
         Color::Named(NamedColor::BrightBlack) | Color::Indexed(8) => {
-            Some(face_color(env, ansi_color_black, fg)?)
+            face_color(env, ansi_color_black, fg)?
         }
         Color::Named(NamedColor::BrightRed) | Color::Indexed(9) => {
-            Some(face_color(env, ansi_color_red, fg)?)
+            face_color(env, ansi_color_red, fg)?
         }
         Color::Named(NamedColor::BrightGreen) | Color::Indexed(10) => {
-            Some(face_color(env, ansi_color_green, fg)?)
+            face_color(env, ansi_color_green, fg)?
         }
         Color::Named(NamedColor::BrightYellow) | Color::Indexed(11) => {
-            Some(face_color(env, ansi_color_yellow, fg)?)
+            face_color(env, ansi_color_yellow, fg)?
         }
         Color::Named(NamedColor::BrightBlue) | Color::Indexed(12) => {
-            Some(face_color(env, ansi_color_blue, fg)?)
+            face_color(env, ansi_color_blue, fg)?
         }
         Color::Named(NamedColor::BrightMagenta) | Color::Indexed(13) => {
-            Some(face_color(env, ansi_color_magenta, fg)?)
+            face_color(env, ansi_color_magenta, fg)?
         }
         Color::Named(NamedColor::BrightCyan) | Color::Indexed(14) => {
-            Some(face_color(env, ansi_color_cyan, fg)?)
+            face_color(env, ansi_color_cyan, fg)?
         }
         Color::Named(NamedColor::BrightWhite) | Color::Indexed(15) => {
-            Some(face_color(env, ansi_color_white, fg)?)
+            face_color(env, ansi_color_white, fg)?
         }
         Color::Named(
             NamedColor::Foreground | NamedColor::BrightForeground | NamedColor::DimForeground,
-        ) => {
-            if fg {
-                // Nothing to set; it's the default
-                None
-            } else {
-                Some(face_color(env, default_face, false)?)
-            }
+        ) => face_color(env, default_face, true)?,
+        Color::Named(NamedColor::Background) => face_color(env, default_face, false)?,
+        Color::Named(NamedColor::Cursor) => face_color(env, cursor_face, fg)?,
+        Color::Spec(rgb) => format!("#{0:02x}{1:02x}{2:02x}", rgb.r, rgb.g, rgb.b),
+        Color::Indexed(code) => {
+            // indexed_to_rgb must return a value, as code 0 - 15 are handled above
+            indexed_to_rgb(code).unwrap()
         }
-        Color::Named(NamedColor::Background) => {
-            if fg {
-                Some(face_color(env, default_face, true)?)
-            } else {
-                // Nothing to set; it's the default
-                None
-            }
-        }
-        Color::Named(NamedColor::Cursor) => Some(face_color(env, cursor_face, fg)?),
-        Color::Spec(rgb) => Some(format!("#{0:02x}{1:02x}{2:02x}", rgb.r, rgb.g, rgb.b)),
-        Color::Indexed(code) => indexed_to_rgb(code),
     })
 }
 

@@ -8,7 +8,7 @@ use alacritty_terminal::{
         Config,
         cell::{Cell, Flags},
     },
-    vte::ansi::{self, Attr, Handler, Processor},
+    vte::ansi::{self, Attr, Color, Handler, Processor},
 };
 use emacs::{Env, IntoLisp, Result, Value};
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
@@ -198,13 +198,21 @@ impl VTerm {
         }
 
         while let Some(event) = events.pop_front() {
-            let event = match event {
-                Event::PtyWrite(data) => Some(env.list((pty_write_sym, data))?),
-                _ => None,
+            match event {
+                Event::PtyWrite(data) => {
+                    result = pty_write(env, result, data)?;
+                }
+                Event::ColorRequest(index, rgb_to_seq) => {
+                    if let Some(named) = render::named_color_for_color_request(index) {
+                        if let Some(color) =
+                            render::to_emacs_color_rgb(env, Color::Named(named), true)?
+                        {
+                            result = pty_write(env, result, rgb_to_seq(color))?;
+                        }
+                    }
+                }
+                _ => {}
             };
-            if let Some(lisp_event) = event {
-                result = env.cons(lisp_event, result)?;
-            }
         }
         result = env.call(nreverse_func, (result,))?;
 
@@ -266,6 +274,10 @@ impl VTerm {
 
         count
     }
+}
+
+fn pty_write<'a>(env: &'a Env, result: Value<'a>, data: String) -> Result<Value<'a>> {
+    env.cons(env.list((pty_write_sym, data))?, result)
 }
 
 fn init_grid(grid: &mut alacritty_terminal::Grid<Cell>) {
