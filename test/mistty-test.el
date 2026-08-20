@@ -2372,25 +2372,28 @@
      (should-error (call-interactively 'mistty-send-key-sequence)))))
 
 (ert-deftest mistty-test-revert-insert-after-prompt ()
-  :expected-result :failed
   (mistty-with-test-buffer (:shell zsh)
     (dotimes (i 3)
       (mistty-send-text (format "function toto%d { echo %d; }" i i))
       (mistty-send-and-wait-for-prompt))
-    (mistty-test-narrow (mistty--bol (point)))
-    (mistty-send-text "toto\t")
+    (let ((start (copy-marker (mistty--bol (mistty-cursor)))))
+      (mistty--send-string mistty-proc "toto\t")
 
-    ;; This test goes outside the prompt on purpose, which is why a
-    ;; timeout is expected.
-    (let ((mistty-expected-issues '(hard-timeout)))
-      (mistty-wait-for-output
-       :test (lambda ()
-               (search-forward-regexp "^toto" nil 'noerror)))
-      (mistty-run-command
-       (insert "foobar")
-       (mistty-test-goto-after "$ toto"))
-      (should (equal "$ toto<>\ntoto0  toto1  toto2"
-                     (mistty-test-content :show (point)))))))
+      ;; This test goes outside the prompt on purpose, which is why a
+      ;; timeout is expected.
+      (let ((mistty-expected-issues '(hard-timeout)))
+        (mistty-wait-for-output
+         :test (lambda ()
+                 (save-excursion
+                   (goto-char (point-min))
+                   (search-forward-regexp "^toto" nil 'noerror))))
+        (mistty-run-command
+         ;; insert foobar within the set of results
+         (mistty-test-goto-after "toto1")
+         (insert "foobar")
+         (mistty-test-goto-after "$ toto"))
+        (should (equal "$ toto<>\ntoto0  toto1  toto2"
+                       (mistty-test-content :start start :show (point))))))))
 
 (ert-deftest mistty-test-revert-replace-after-prompt ()
   (mistty-with-test-buffer (:shell zsh)
