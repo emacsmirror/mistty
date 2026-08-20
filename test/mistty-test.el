@@ -6442,7 +6442,7 @@ precmd_functions+=(prompt_header)
                     (line-end-position))))))
 
 (defconst mistty-test-zsh-osc133-b
-  "function osc133_prompt { PS1='prompt \033]133;B\007'; }")
+  "function osc133_prompt { PS1='prompt \033]133;B\007'; };")
 
 (ert-deftest mistty-osc133-command-for-output ()
   (mistty-with-test-buffer (:shell zsh :init (concat
