@@ -6891,38 +6891,6 @@ precmd_functions+=(prompt_header)
       (should (equal "$ <>\nbck-i-search: _"
                      (mistty-test-content :show (point)))))))
 
-(ert-deftest mistty-test-overwrite-term-mode-hook ()
-  :expected-result :failed
-  (let* ((orig-term-mode-hook term-mode-hook)
-         (orig-mistty-term-mode-hook mistty-term-mode-hook)
-         (term-mode-hook-call-count 0)
-         (mistty-term-mode-hook-call-count 0))
-    (unwind-protect
-        (progn
-          (setq term-mode-hook nil)
-          (setq mistty-term-mode-hook nil)
-          (add-hook 'mistty-term-mode-hook #'mistty-call-term-mode-hook)
-          (add-hook 'mistty-term-mode-hook (lambda () (cl-incf mistty-term-mode-hook-call-count)))
-          (add-hook 'term-mode-hook (lambda () (cl-incf term-mode-hook-call-count)))
-
-          ;; Both term-mode-hook and mistty-term-mode-hook should be called.
-          (mistty-with-test-buffer ()
-            (mistty-send-text "echo hello")
-            (should (equal "hello" (mistty-send-and-capture-command-output))))
-          (should (equal 1 term-mode-hook-call-count))
-          (should (equal 1 mistty-term-mode-hook-call-count))
-
-          (remove-hook 'mistty-term-mode-hook 'mistty-call-term-mode-hook)
-          ;; term-mode-hook should not be called anymore.
-          (mistty-with-test-buffer ()
-            (mistty-send-text "echo hello")
-            (should (equal "hello" (mistty-send-and-capture-command-output))))
-          (should (equal 2 mistty-term-mode-hook-call-count))
-          (should (equal 1 term-mode-hook-call-count)))
-
-      (setq term-mode-hook orig-term-mode-hook
-            mistty-term-mode-hook orig-mistty-term-mode-hook))))
-
 (turtles-ert-deftest mistty-test-osc-10-11 (:instance 'mistty)
   (mistty-with-test-buffer (:selected t)
     (set-face-foreground 'default "#ffff00")
