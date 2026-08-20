@@ -2172,7 +2172,6 @@
         (should (equal "ok." (mistty-send-and-capture-command-output)))))))
 
 (ert-deftest mistty-test-nobracketed-paste-edit-before-prompt ()
-  :expected-result :failed
   (mistty-with-test-buffer (:shell bash)
     (mistty-test-nobracketed-paste)
 
@@ -2185,9 +2184,10 @@
     (mistty-send-text "echo $((5 + 5))")
 
     (mistty-run-command
-     (goto-char (point-min))
-     (while (search-forward "+" nil 'noerror)
-       (replace-match "*")))
+     (save-excursion
+       (goto-char (point-min))
+       (while (search-forward "+" nil 'noerror)
+         (replace-match "*"))))
 
     ;; The last prompt became 5 * 5
     (should (equal "25" (mistty-send-and-capture-command-output)))
