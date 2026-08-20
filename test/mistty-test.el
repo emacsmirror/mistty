@@ -5140,14 +5140,13 @@
       (disable-theme theme))))
 
 (turtles-ert-deftest mistty-test-scroll-window-up ( :instance 'mistty)
-  :expected-result :failed
   (mistty-with-test-buffer (:shell fish :selected t)
     (let ((win (selected-window))
           (testbuf (current-buffer))
           (lastline (lambda (&optional buf)
                       (with-current-buffer (or buf (current-buffer))
                         (save-excursion
-                          (goto-char (point-max))
+                          (goto-char (mistty--blank-end-start))
                           (buffer-substring-no-properties
                            (pos-bol) (pos-eol)))))))
       (delete-other-windows)
