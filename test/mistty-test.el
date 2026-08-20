@@ -6421,9 +6421,9 @@ precmd_functions+=(prompt_header)
                     (line-end-position))))))
 
 (ert-deftest mistty-osc133-right-left-prompt-field ()
-  :expected-result :failed
-  (mistty-with-test-buffer (:init (concat "PS1='$ \\033]133;B\\007'\n"
-                                          mistty-test-zsh-right-prompt))
+  (mistty-with-test-buffer (:shell fish :init (concat
+                                               "function fish_prompt; printf '$ \e]133;B\007'; end\n"
+                                               mistty-test-fish-right-prompt))
     ;; Fields are set on both prompts so line-beginning/end cover only
     ;; the command.
     (mistty-send-text "echo foobar")
