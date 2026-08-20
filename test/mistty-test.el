@@ -4746,7 +4746,7 @@
     (should-error (mistty-exec "/usr/bin/false" :width 2 :height 20))
     (should-error (mistty-exec "/usr/bin/false" :width 80 :height 2))))
 
-(turtles-ert-deftest mistty-test-terminal-accepts-min-terminal-size ()
+(turtles-ert-deftest mistty-test-terminal-accepts-min-terminal-size (:instance 'mistty)
   (mistty-with-test-buffer (:selected t :term-size 'window)
     (let ((mistty--inhibit-scrollback-cleaup nil))
       (should (equal 8 mistty-min-terminal-width))
