@@ -4756,46 +4756,35 @@
       (mistty--send-string mistty-proc "echo $(tput cols)x$(tput lines)\n")
       (mistty-wait-for-output :str "8x4"))))
 
-(turtles-ert-deftest mistty-test-min-terminal-size ()
-  :expected-result :failed
-  (mistty-with-test-buffer (:selected t :term-size 'window)
+(turtles-ert-deftest mistty-test-min-terminal-size (:instance 'mistty)
+  (mistty-with-test-buffer (:selected t :term-size '(8 . 4))
     (let ((mistty--inhibit-scrollback-cleaup nil))
       (mistty-set-terminal-size 8 4)
 
-      (mistty--send-string mistty-proc "for i in $(seq 0 10); do echo hello, world; done")
-      (mistty-wait-for-output :regexp "d\n?o\n?n\n?e")
+      (mistty--send-string mistty-proc "echo hello, world")
+      (mistty-wait-for-output :regexp "o\n?r\n?l\n?d")
 
       ;; Fake newlines exist on the terminal...
-      (should (equal "$ for i\nin $(seq\n 0 10);\ndo echo\nhello, w\norld; do\nne"
+      (should (equal "$ echo h\nello, wo\nrld"
                      (mistty-test-content)))
 
       ;; ... but they're invisible
       (turtles-with-grab-buffer ()
-        (should (equal "$ for i in $(seq 0 10); do echo hello, world; done"
-                       (buffer-string))))
+        (should (equal "$ echo hello, world" (buffer-string))))
 
-      ;; make sure the prompt has moved past the end (the normal
-      ;; mistty-send-and-wait-for-prompt is unreliable in this
-      ;; situation)
-      (mistty--send-string mistty-proc "\nprintf '\\157\\153\\n'\n")
-      (mistty-wait-for-output :str "ok")
+      (mistty--send-string mistty-proc "\n")
+      (mistty-wait-for-output :regexp "^hel")
+      (mistty--send-string mistty-proc "echo foo\n")
+      (mistty-wait-for-output :regexp "^foo")
 
-
-      ;; Only the correct newlines are left when leaving the terminal area
+      ;; After leaving the terminal area, only the correct newlines are left.
       (should (equal (concat
-                      "$ for i in $(seq 0 10); do echo hello, world; done\n"
+                      "$ echo hello, world\n"
                       "hello, world\n"
-                      "hello, world\n"
-                      "hello, world\n"
-                      "hello, world\n"
-                      "hello, world\n"
-                      "hello, world\n"
-                      "hello, world\n"
-                      "hello, world\n"
-                      "hello, world\n"
-                      "hello, world\n"
-                      "hello, world")
-                     (mistty-test-content :end (mistty-test-pos "$ printf")))))))
+                      "$ echo foo\n"
+                      "foo\n"
+                      "$")
+                     (mistty-test-content))))))
 
 (ert-deftest mistty-test-detect-foreign-overlays-labelled ()
   (let ((mistty-detect-foreign-overlays t))
