@@ -426,17 +426,17 @@ WIDTH and HEIGHT are the initial dimension of the terminal
 reported to the remote process.
 
 This function returns the newly-created buffer."
-  (let ((term-buffer (generate-new-buffer name 'inhibit-buffer-hooks))
-        (process-environment (if mistty-set-EMACS
-                                 (cons (format "EMACS=%s" emacs-version)
-                                       process-environment)
-                               process-environment)))
+  (let ((term-buffer (generate-new-buffer name 'inhibit-buffer-hooks)))
     (with-current-buffer term-buffer
       (mistty-raw-mode)
       (setq-local mistty--prompt-cell (mistty--make-prompt-cell))
       (setq-local scroll-margin 0)
-
-      (mistty-raw-exec name program args width height)
+      (let ((process-environment
+             (if (with-connection-local-variables mistty-set-EMACS)
+                 (cons (format "EMACS=%s" emacs-version)
+                       process-environment)
+               process-environment)))
+        (mistty-raw-exec name program args width height))
       (let ((proc (get-buffer-process term-buffer)))
         (set-process-filter proc (mistty--make-accumulator
                                   #'mistty--emulate-terminal))))

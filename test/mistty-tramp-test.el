@@ -140,7 +140,6 @@
       (should (equal "*mistty-root*" (mistty-new-buffer-name))))))
 
 (ert-deftest mistty-tramp-test-set-EMACS ()
-  :expected-result :failed
   (setenv "EMACS" nil) ;; Sometimes set to run Eldev
 
   (let* ((tramp-methods (mistty-test-tramp-methods))
@@ -151,7 +150,7 @@
          (connection-local-criteria-alist nil)
          (mistty-set-EMACS nil))
 
-    (mistty-with-test-buffer ()
+    (mistty-with-test-buffer (:cd (concat tramp-prefix home))
       (mistty-send-text "if test -n \"$EMACS\"; then echo set; else echo unset; fi")
       (should (equal "unset" (mistty-send-and-capture-command-output))))
 
@@ -163,6 +162,6 @@
     ;; This makes sure the connection-local setup above works.
     (should (equal t (with-connection-local-variables mistty-set-EMACS)))
 
-    (mistty-with-test-buffer ()
+    (mistty-with-test-buffer (:cd (concat tramp-prefix home))
       (mistty-send-text "if test -n \"$EMACS\"; then echo set; else echo unset; fi")
       (should (equal "set" (mistty-send-and-capture-command-output))))))
