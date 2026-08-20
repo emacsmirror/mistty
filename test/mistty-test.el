@@ -6405,7 +6405,6 @@ precmd_functions+=(prompt_header)
               :show (mistty-test-all-inputs))))))
 
 (ert-deftest mistty-osc133-prompt-set-properties ()
-  :expected-result :failed
   (mistty-with-test-buffer (:init "PS1='$ \\033]133;B\\007'")
     (mistty-send-text "echo foobar")
     ;; With OSC133 B, MisTTY sets text properties on the prompt that
@@ -6416,7 +6415,7 @@ precmd_functions+=(prompt_header)
                    (mistty-test-content
                     :show (point)
                     :show-property '(field prompt))))
-    (should (equal "echo foobar "
+    (should (equal "echo foobar"
                    (buffer-substring-no-properties
                     (line-beginning-position)
                     (line-end-position))))))
