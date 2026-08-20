@@ -2481,7 +2481,6 @@
             (mistty-test-content)))))
 
 (ert-deftest mistty-reset-during-replay ()
-  :expected-result '(or :passed :failed)
   (mistty-with-test-buffer ()
     (mistty-send-text "echo -n 'read> '; read l; printf 'will reset\\ecreset done\\n'")
     (mistty-send-and-wait-for-prompt :prompt "read> ")
