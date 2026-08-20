@@ -111,7 +111,10 @@ function does that, for `self-inserted keys', `delete-char', and
                        (make-string n c))))
 
         ('delete-char
-         (setq entry (cons (mistty--safe-bufstring pos (+ pos n)) pos)))
+         (let ((start pos)
+               (end (mistty--cap-at-blank-end (+ pos n))))
+           (when (> end start)
+             (setq entry (cons (mistty--safe-bufstring start end) pos)))))
 
         ('backward-delete-char
          ;; Get the text to be deleted first from the inserted data,

@@ -172,6 +172,10 @@ Add an ellipsis if STR is truncated."
     (skip-chars-backward "[:blank:]\n\r")
     (point)))
 
+(defun mistty--cap-at-blank-end (pos)
+  "Make sure POS is before the last non-empty character in the buffer."
+  (min pos (mistty--blank-end-start)))
+
 (defun mistty--blank-end-start ()
   "Return the position of the last non-empty character in the buffer.
 

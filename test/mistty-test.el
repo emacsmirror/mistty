@@ -4210,7 +4210,6 @@
     (mistty-wait-for-output :str "hello world" :start (point-min))))
 
 (ert-deftest mistty-test-undo-delete-eof ()
-  :expected-result :failed
   (mistty-with-test-buffer ()
     (setq buffer-undo-list nil)
     (mistty-send-text "echo hello world")
