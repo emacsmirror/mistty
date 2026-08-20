@@ -6141,7 +6141,6 @@ function prompt {
                    (mistty-send-and-capture-command-output)))))
 
 (ert-deftest mistty-disable-jit-lock-mode-in-term-buf ()
-  :expected-result :failed
   (let ((was-enabled global-goto-address-mode))
     (unwind-protect
         (progn
@@ -6164,16 +6163,14 @@ function prompt {
               (with-current-buffer termbuf
                 (should-not jit-lock-mode))
               (mistty-send-and-wait-for-prompt
-               (lambda () (process-send-string proc "q"))
-               nil
-               proc)
+               :send (lambda () (process-send-string proc "q"))
+               :proc proc)
               (with-current-buffer termbuf
                 (should-not jit-lock-mode)))))
       (unless was-enabled
         (global-goto-address-mode -1)))))
 
 (turtles-ert-deftest mistty-scrolline-after-scrolling (:instance 'mistty)
-  :expected-result :failed
   (mistty-with-test-buffer (:term-size '(79 . 22))
     (save-restriction
       (let (one two)
@@ -6227,15 +6224,14 @@ function prompt {
           (should (equal "two" (mistty-test-line-at-scrolline two))))
 
         (mistty-send-and-wait-for-prompt
-         (lambda ()
-           (mistty--send-string mistty-proc "q\n")))
+         :send (lambda ()
+                 (mistty--send-string mistty-proc "q\n")))
 
         ;; Both are now invalid, as they're below the sync mark
         (should (null (mistty--scrolline-pos one)))
         (should (null (mistty--scrolline-pos two)))))))
 
 (turtles-ert-deftest mistty-scrolline-after-scrolling-long-lines (:instance 'mistty)
-  :expected-result :failed
   (mistty-with-test-buffer (:term-size '(79 . 23))
     (save-restriction
       (let (one two)
@@ -6277,7 +6273,7 @@ function prompt {
         (with-current-buffer mistty-term-buffer
           (should (equal "one" (mistty-test-line-at-scrolline one))))
         (mistty-send-and-wait-for-prompt
-         (lambda ()
+         :send (lambda ()
            (mistty--send-string mistty-proc "q\n")))))))
 
 (ert-deftest mistty-prompt-cell ()
