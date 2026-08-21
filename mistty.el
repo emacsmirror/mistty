@@ -2191,14 +2191,12 @@ SCROLLINE is the scrolline at BEG."
   (save-excursion
     (goto-char beg)
     (while (< (point) end)
-      (let ((bos (mistty--beginning-of-scrolline-pos))
-            (eos (mistty--end-of-scrolline-pos)))
-        (when (eq ?\n (char-after eos))
-          (cl-incf eos))
-        (when (> eos bos)
-          (put-text-property bos eos 'mistty-scrolline scrolline))
-        (cl-incf scrolline)
-        (mistty--go-down-scrollines 1)))))
+      (let ((bol (point)))
+        (while (and (search-forward "\n" end 'noerror)
+                    (get-text-property (match-beginning 0) 'term-line-wrap)))
+        (when (> (point) bol)
+          (put-text-property bol (point) 'mistty-scrolline scrolline))
+        (cl-incf scrolline)))))
 
 (defun mistty-send-string (str)
   "Send STR to the process."

@@ -5265,8 +5265,6 @@
                               (mistty-test-pos "$ echo one")))))))
 
 (ert-deftest mistty-test-recovery-despite-fakenl-cleanup ()
-  :expected-result :failed
-  (error "hangs")
   (let ((mistty--inhibit-scrollback-cleaup nil))
     (mistty-with-test-buffer (:term-size '(20 . 20))
       ;; Insert text that'll be too long for the window, so term
@@ -5274,16 +5272,17 @@
       ;; zone transitions to scrollback. These changes should not
       ;; throw off recovery.
       (dotimes (i 20)
-        (mistty-send-text (format "echo one two three four five six seven eight nine %d" i))
-        (mistty-send-and-wait-for-prompt))
+        ;; Using mistty-send-string directly as the lines will get fake
+        ;; newlines, which confuses mistty-send-text.
+        (mistty--send-string
+         mistty-proc (format "echo one two three four five six seven eight nine %02.2d\n" i)))
+      (mistty-wait-for-output :str "19\n$ ")
 
       (mistty-send-text "echo one")
       (mistty-send-and-wait-for-prompt)
       (mistty-send-text "echo two")
       (mistty-send-and-wait-for-prompt)
 
-      ;; Using mistty-send-string directly as the lines will get fake
-      ;; newlines, which confuses mistty-send-text.
       (mistty--send-string
        mistty-proc
        (concat "for i in {0..5}; do"
@@ -5318,6 +5317,57 @@
         (mistty-test-content
          :start (save-excursion (goto-char (point-min))
                                 (mistty-test-pos "$ ^A\nline 0\n"))))))))
+
+(ert-deftest mistty-mark-scrollines-for-recovery-gradual-scrollback ()
+  (mistty-with-test-buffer (:term-size '(80 . 20))
+    (let ((mistty--inhibit-scrollback-cleaup nil))
+      ;; a very long line that will have to be broken up, to be
+      ;; sure we count scrollines and not terminal lines
+      (mistty-send-text "for i in $(seq 0 60); do echo -n '= '; done; echo")
+      (mistty-send-and-wait-for-prompt)
+
+      ;; gradual scroll, handled by mistty--cleanup-scrollback
+      (dotimes (i 12)
+        (mistty-send-text (format "echo line %d" i))
+        (mistty-send-and-wait-for-prompt))
+
+      ;; make sure all lines in the scrollback have been marked with
+      ;; mistty-scrolline
+      (goto-char (point-min))
+      (let ((scrolline 0))
+        (while (< (point) mistty-sync-marker)
+          (should (equal scrolline (get-text-property (point) 'mistty-scrolline)))
+          (should-not (text-property-not-all (point) (pos-eol) 'mistty-scrolline scrolline))
+          (mistty-log
+           "scrolline %s ok: >>%s<<"
+           scrolline (buffer-substring-no-properties (point) (pos-eol)))
+          (cl-incf scrolline)
+          (forward-line 1))))))
+
+(ert-deftest mistty-mark-scrollines-for-recovery-quick-scrollback ()
+  (mistty-with-test-buffer (:term-size '(80 . 20))
+    (let ((mistty--inhibit-scrollback-cleaup nil))
+      ;; a very long line that will have to be broken up, to be
+      ;; sure we count scrollines and not terminal lines
+      (mistty-send-text "for i in $(seq 0 60); do echo -n '= '; done; echo")
+      (mistty-send-and-wait-for-prompt)
+
+      ;; quick scroll, handled by catchup
+      (mistty-send-text "for i in $(seq 0 25); do echo $i; done")
+      (mistty-send-and-wait-for-prompt)
+
+      ;; make sure all lines in the scrollback have been marked with
+      ;; mistty-scrolline
+      (goto-char (point-min))
+      (let ((scrolline 0))
+        (while (< (point) mistty-sync-marker)
+          (should (equal scrolline (get-text-property (point) 'mistty-scrolline)))
+          (should-not (text-property-not-all (point) (pos-eol) 'mistty-scrolline scrolline))
+          (mistty-log
+           "scrolline %s ok: >>%s<<"
+           scrolline (buffer-substring-no-properties (point) (pos-eol)))
+          (cl-incf scrolline)
+          (forward-line 1))))))
 
 (defconst mistty-test-clear-before-prompt "
 function prompt {
@@ -6909,3 +6959,75 @@ precmd_functions+=(prompt_header)
     (mistty-send-text "echo $bg | strings")
     (should (equal "]11;rgb:0000/0000/ffff"
                    (mistty-send-and-capture-command-output)))))
+
+(ert-deftest mistty-test-mark-scrollines ()
+  (ert-with-test-buffer ()
+    (let ((fakenl (propertize "\n" 'term-line-wrap t)))
+      (insert "line1" fakenl "still line 1" fakenl "line 1 end.\n")
+      (insert "line2" fakenl "line 2 end.\n")
+      (insert "line3" fakenl "still line 3"))
+
+    (mistty--mark-scrollines (point-min) 10 (point-max))
+
+    (should (equal
+             (concat "[line1\nstill line 1\nline 1 end.\n]"
+                     "line2\nline 2 end.\n"
+                     "line3\nstill line 3")
+             (mistty-test-content :show-property '(mistty-scrolline 10))))
+    (should (equal
+             (concat "line1\nstill line 1\nline 1 end.\n"
+                     "[line2\nline 2 end.\n]"
+                     "line3\nstill line 3")
+             (mistty-test-content :show-property '(mistty-scrolline 11))))
+    (should (equal
+             (concat "line1\nstill line 1\nline 1 end.\n"
+                     "line2\nline 2 end.\n"
+                     "[line3\nstill line 3]")
+             (mistty-test-content :show-property '(mistty-scrolline 12))))))
+
+(ert-deftest mistty-test-mark-scrollines-empty ()
+  (ert-with-test-buffer ()
+    (let ((fakenl (propertize "\n" 'term-line-wrap t)))
+      (insert "line1" fakenl "still line 1\n")
+      (insert "\n")
+      (insert fakenl fakenl "\n")
+      (insert "line3\n")
+      (insert "\n"))
+
+    (mistty--mark-scrollines (point-min) 10 (point-max))
+
+    (should (equal
+             (concat "[line1\nstill line 1\n]"
+                     "\n"
+                     "\n\n\n"
+                     "line3\n"
+                     "\n")
+             (mistty-test-content :trim nil :show-property '(mistty-scrolline 10))))
+    (should (equal
+             (concat "line1\nstill line 1\n"
+                     "[\n]"
+                     "\n\n\n"
+                     "line3\n"
+                     "\n")
+             (mistty-test-content :trim nil :show-property '(mistty-scrolline 11))))
+    (should (equal
+             (concat "line1\nstill line 1\n"
+                     "\n"
+                     "[\n\n\n]"
+                     "line3\n"
+                     "\n")
+             (mistty-test-content :trim nil :show-property '(mistty-scrolline 12))))
+    (should (equal
+             (concat "line1\nstill line 1\n"
+                     "\n"
+                     "\n\n\n"
+                     "[line3\n]"
+                     "\n")
+             (mistty-test-content :trim nil :show-property '(mistty-scrolline 13))))
+    (should (equal
+             (concat "line1\nstill line 1\n"
+                     "\n"
+                     "\n\n\n"
+                     "line3\n"
+                     "[\n]")
+             (mistty-test-content :trim nil :show-property '(mistty-scrolline 14))))))
