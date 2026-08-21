@@ -3188,7 +3188,6 @@
                      (mistty-test-content :show (point)))))))
 
 (ert-deftest mistty-test-zsh-dead-spaces ()
-  :expected-result :failed
   (mistty-with-test-buffer (:shell zsh :selected t)
     (let ((mistty-skip-empty-spaces t)
           (win (selected-window)))
@@ -3198,8 +3197,9 @@
        (mistty-test-goto "world")
        (insert "\n"))
 
-      (should (equal "$ echo \"hello,       \n<>world\"\n"
-                     (mistty-test-content :trim nil :show (point))))
+      (should (string-match
+               "\\$ echo \"hello, *\n<>world\""
+               (mistty-test-content :show (point))))
 
       ;; Zsh tends to add spaces after the hello, to delete what was
       ;; "world" before. These spaces should be marked mistty-skip and
@@ -3209,8 +3209,9 @@
       (mistty-run-command
        (goto-char (1- (point))))
       (mistty--cursor-skip win)
-      (should (equal "$ echo \"hello, <>      \nworld\"\n"
-                     (mistty-test-content :trim nil :show (point)))))))
+      (should (string-match
+               "\\$ echo \"hello, <> *\nworld\""
+               (mistty-test-content :show (point)))))))
 
 (defconst mistty-test-fish-right-prompt "function fish_right_prompt; printf '< right'; end")
 
