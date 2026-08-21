@@ -2105,8 +2105,16 @@ SCROLLINE is a scrolline that's currently visible on the terminal."
                 (marker-position mistty-sync-marker)
                 sync-pos
                 scrolline)
-    (setq mistty--active-prompt nil)
-    (setq mistty--end-prompt nil)
+    (when-let* ((p mistty--active-prompt))
+      (if (and (mistty--prompt-realized p)
+               (not (mistty--prompt-end p)))
+          (mistty-log "Keep prompt #%s"
+                      (mistty--prompt-input-id mistty--active-prompt))
+      (mistty-log "Deactivate prompt #%s"
+                  (mistty--prompt-input-id mistty--active-prompt))
+      (setq mistty--active-prompt nil)
+      (setq mistty--end-prompt nil)))
+
     (mistty--process-archived-prompts sync-pos)
     (let ((old-marker-position (marker-position mistty-sync-marker)))
       (move-marker mistty-sync-marker sync-pos)

@@ -2137,7 +2137,6 @@
                 (mistty-test-content :start ls-start :show (point))))))))
 
 (ert-deftest mistty-test-zsh-bash-style-completion-and-scroll ()
-  :expected-result :failed
   (ert-with-temp-directory tempdir
     (dotimes (i 10)
       (with-temp-file (format "%sfile%d" tempdir i)))
