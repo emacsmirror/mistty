@@ -3172,20 +3172,21 @@
             (mistty-test-content)))))
 
 (ert-deftest mistty-test-zsh-empty-line-at-eob ()
-  :expected-result :failed
   (mistty-with-test-buffer (:shell zsh :selected t)
     (let ((mistty-skip-empty-spaces t)
           (win (selected-window)))
       (mistty--cursor-skip win)
       (forward-line)
-      (should (equal "$\n<>"
-                     (mistty-test-content :show (point))))
+      (should (equal "$ <1>\n<>"
+                     (mistty-test-content
+                      :show (list (point) (mistty-cursor)))))
 
-      ;; zsh likes to add a newline after the last line. Go back from
-      ;; there.
+      ;; Don't let the cursor enter the empty lines at EOB and go back
+      ;; to the prompt.
       (mistty--cursor-skip win)
-      (should (equal "$ <>"
-                     (mistty-test-content :show (point)))))))
+      (should (equal "$ <><1>"
+                     (mistty-test-content
+                      :show (list (point) (mistty-cursor))))))))
 
 (ert-deftest mistty-test-zsh-dead-spaces ()
   (mistty-with-test-buffer (:shell zsh :selected t)

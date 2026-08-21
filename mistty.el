@@ -4013,7 +4013,10 @@ This is meant to be added to `pre-redisplay-functions'"
                move-to
                (cond
                 ;; at the end of the range, which is also eob, move to beg
-                ((and end (= end (point-max)))
+                ((and end (or (>= end (point-max))
+                              (and (>= end (point-min))
+                                   (eq 'empty-lines-at-eob
+                                       (get-text-property end 'mistty-skip)))))
                  beg)
 
                 ;; at a boundary, stay there
