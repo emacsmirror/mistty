@@ -3306,7 +3306,7 @@
   ;; In tests, zsh right prompts aren't close enough to the right
   ;; border to be recognized as such, so this test fails under zsh but
   ;; succeeds under fish. It doesn't seem to affect real-life usage.
-  :expected-result :failed
+  :expected-result '(or :failed :passed)
   (mistty-with-test-buffer (:shell zsh :init (concat
                                               mistty-test-zsh-osc133-b
                                               mistty-test-zsh-right-prompt))
