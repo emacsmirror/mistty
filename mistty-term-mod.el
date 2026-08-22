@@ -41,16 +41,47 @@
                        process-environment)
                process-environment)))
         (mistty-raw-exec name program args width height))
-      (let ((proc (get-buffer-process term-buffer)))
+      (let* ((proc (get-buffer-process term-buffer))
+             (term (mistty--make-term-mod :buf term-buffer :proc proc)))
         (set-process-filter proc (mistty--make-accumulator
                                   #'mistty--emulate-terminal))
-        (mistty--make-term-mod :buf term-buffer :proc proc)))))
+        (process-put proc 'mistty-term term)
+
+        term))))
 
 (cl-defmethod mistty--term-buf ((term mistty--term-mod))
   (mistty--term-mod-buf term))
 
 (cl-defmethod mistty--term-proc ((term mistty--term-mod))
   (mistty--term-mod-proc term))
+
+(cl-defmethod mistty--term-home-marker ((term mistty--term-mod))
+  (with-current-buffer (mistty--term-mod-buf term)
+    mistty-raw--home))
+
+(cl-defmethod mistty--term-home-scrolline ((term mistty--term-mod))
+  (with-current-buffer (mistty--term-mod-buf term)
+    (or mistty-raw--home-scrolline 0)))
+
+(cl-defmethod mistty--term-lines ((term mistty--term-mod))
+  (with-current-buffer (mistty--term-mod-buf term)
+    mistty-raw-lines))
+
+(cl-defmethod mistty--term-columns ((term mistty--term-mod))
+  (with-current-buffer (mistty--term-mod-buf term)
+    mistty-raw-columns))
+
+(cl-defmethod mistty--term-sentinel-func ((_term mistty--term-mod))
+  #'mistty-raw--sentinel)
+
+(cl-defmethod mistty--term-resize ((term mistty--term-mod) width height)
+  (with-current-buffer (mistty--term-mod-buf term)
+    (mistty-raw-resize width height))
+  (set-process-window-size (mistty--term-mod-proc term) height width))
+
+(cl-defmethod mistty--term-autoresize ((term mistty--term-mod) enable)
+  (with-current-buffer (mistty--term-mod-buf term)
+    (mistty-raw-auto-resize enable)))
 
 (provide 'mistty-term-mod)
 

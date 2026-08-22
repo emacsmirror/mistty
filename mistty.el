@@ -53,7 +53,6 @@
 (require 'mistty-log)
 (require 'mistty-queue)
 (require 'mistty-undo)
-(require 'mistty-raw)
 (require 'mistty-term-base)
 (require 'mistty-term-mod)
 
@@ -661,6 +660,12 @@ best.
 
 This variable is available in the work buffer.")
 
+(defvar-local mistty--term nil
+  "The current terminal instance.
+
+This variable is available in both the work buffer and the term
+buffer.")
+
 (defvar-local mistty--queue nil
   "A queue of data to send to the process; a mistty--queue struct.
 
@@ -964,26 +969,25 @@ window."
         (setq width (window-max-chars-per-line win))
         (setq height (floor (with-selected-window win
                                    (window-screen-lines))))))
-    (let ((term (mistty--create-term 'mod
-                                     (concat " mistty tty " (buffer-name)) command args
-                                     width height)))
-      (mistty--attach (mistty--term-buf term))))
+    (mistty--attach
+     (mistty--create-term 'mod
+                          (concat " mistty tty " (buffer-name)) command args
+                          width height)))
   (mistty--wrap-capf-functions)
   (mistty--update-mode-lines)
   (run-hooks 'mistty-after-process-start-hook))
 
-(defun mistty--attach (term-buffer)
-  "Attach the current `mistty-mode' buffer to TERM-BUFFER.
-
-This sets `mistty-term-buffer' to TERM-BUFFER in the current
-buffer and `mistty-proc' to that buffer's process."
+(defun mistty--attach (term)
+  "Attach the current `mistty-mode' buffer to TERM."
   (let ((work-buffer (current-buffer))
-        (proc (get-buffer-process term-buffer)))
+        (term-buffer (mistty--term-buf term))
+        (proc (mistty--term-proc term)))
 
     (when proc
       (process-put proc 'mistty-work-buffer work-buffer)
       (process-put proc 'mistty-term-buffer term-buffer))
 
+    (setq mistty--term term)
     (setq mistty-proc proc)
     (setq mistty-term-buffer term-buffer)
     (setq mistty--prompt-cell (buffer-local-value 'mistty--prompt-cell term-buffer))
@@ -991,11 +995,12 @@ buffer and `mistty-proc' to that buffer's process."
     (mistty--needs-refresh)
 
     (with-current-buffer term-buffer
+      (setq mistty--term term)
       (setq mistty-proc proc)
       (setq mistty-work-buffer work-buffer)
       (setq mistty-term-buffer term-buffer)
       (unless mistty-sync-marker
-        (setq mistty-sync-marker (copy-marker mistty-raw--home))))
+        (setq mistty-sync-marker (copy-marker (mistty--term-home-marker term)))))
 
     (when proc
       (let ((accum (process-filter proc)))
@@ -1072,7 +1077,7 @@ Returns M or a new marker."
   (when mistty-proc
     (let ((accum (process-filter mistty-proc)))
       (mistty--accum-reset accum))
-    (set-process-sentinel mistty-proc #'mistty-raw--sentinel)
+    (set-process-sentinel mistty-proc (mistty--term-sentinel-func mistty--term))
     (setq mistty-proc nil)))
 
 (defun mistty--kill-term-buffer ()
@@ -1095,12 +1100,10 @@ The buffer might be a `mistty-mode' buffer in non-fullscreen mode or a
 `term-mode' buffer in fullscreen mode."
   (and
    (buffer-live-p buffer)
-   (pcase (buffer-local-value 'major-mode buffer)
-     ('mistty-mode (not (buffer-local-value 'mistty-fullscreen buffer)))
-     ('mistty-raw-mode (buffer-local-value 'mistty-fullscreen buffer))
-     ('term-mode (buffer-local-value 'mistty-fullscreen buffer)))
+   (if (buffer-local-value 'mistty-fullscreen buffer)
+       (mistty--term-is-term-buffer buffer)
+     (eq (buffer-local-value 'major-mode buffer) 'mistty-mode))
 
-   ;; returns
    buffer))
 
 (defun mistty-live-buffer-p (buffer)
@@ -1382,7 +1385,7 @@ a special string describing the new process state."
     (cond
      ((and (buffer-live-p term-buffer)
            (buffer-live-p work-buffer))
-      (mistty-raw--sentinel proc msg)
+      (mistty--term-sentinel proc msg)
       (mistty--with-live-buffer work-buffer
         (mistty--needs-refresh) ;; term-buffer was modified by term-sentinel
         (save-restriction
@@ -1437,9 +1440,9 @@ special string describing the new process state."
      ((and process-dead (not (buffer-live-p term-buffer)) (buffer-live-p work-buffer))
       (let ((kill-buffer-query-functions nil))
         (kill-buffer (process-get proc 'mistty-work-buffer)))
-      (mistty-raw--sentinel proc msg)
+      (mistty--term-sentinel proc msg)
       (mistty--run-after-process-end-hooks work-buffer proc))
-     (t (mistty-raw--sentinel proc msg)))))
+     (t (mistty--term-sentinel proc msg)))))
 
 (defun mistty--add-sync-buffers (accum work-buffer term-buffer)
   "Sync the terminal region of WORK-BUFFER with TERM-BUFFER.
@@ -1585,23 +1588,24 @@ This function detects FUNC moving the sync mark in TERM-BUFFER and
 triggers realignment with the work buffer when that happens."
   (let ((old-sync-position (mistty--with-live-buffer term-buffer
                              (marker-position mistty-sync-marker)))
-        sync-scrolline)
+        sync-scrolline home-scrolline)
     ;; Reminder: call func with no buffer set, to avoid strange
     ;; breakages when the term buffer is killed.
     (funcall func)
     (mistty--with-live-buffer term-buffer
       (setq sync-scrolline (mistty--with-live-buffer mistty-work-buffer
                              mistty--sync-marker-scrolline))
+      (setq home-scrolline (mistty--term-home-scrolline mistty--term))
       (cond
-       ((< sync-scrolline mistty-raw--home-scrolline)
+       ((< sync-scrolline home-scrolline)
         (mistty-log "Detected rapid scroll (sync @%s, home now @%s). Catching up."
-                    sync-scrolline mistty-raw--home-scrolline)
-        (let* ((home-scrolline mistty-raw--home-scrolline)
-               (catchup-lines (- home-scrolline sync-scrolline))
+                    sync-scrolline home-scrolline)
+        (let* ((catchup-lines (- home-scrolline sync-scrolline))
+               (home (mistty--term-home-marker mistty--term))
                (catchup-start (save-excursion
-                                (goto-char mistty-raw--home)
+                                (goto-char home)
                                 (pos-bol (1+ (- catchup-lines)))))
-               (catchup-end (marker-position mistty-raw--home)))
+               (catchup-end (marker-position home)))
           (mistty-log "Catchup [%s-%s] %s lines" catchup-start catchup-end catchup-lines)
           (move-marker mistty-sync-marker catchup-end)
           (setq mistty--sync-marker-scrolline home-scrolline)
@@ -1620,8 +1624,8 @@ triggers realignment with the work buffer when that happens."
       ;; TODO: delete unnecessary scrollback data. Will it invalidate stored positions?
 
       ;; We don't need scrollback on term anymore
-      ;; (when (> mistty-raw--home (point))
-      ;;   (delete-region (point-min) mistty-raw--home))
+      ;; (when (> home-marker (point))
+      ;;   (delete-region (point-min) home-marker))
       )))
 
 (defun mistty-goto-cursor ()
@@ -1715,7 +1719,7 @@ Also updates prompt and point."
                                    (= (point) mistty--cursor-after-last-refresh)))
           on-prompt)
       (mistty--copy-buffer-local-variables
-       (cons 'mistty-bracketed-paste (cons 'mistty-raw-columns mistty-variables-to-copy))
+       (cons 'mistty-bracketed-paste mistty-variables-to-copy)
        mistty-term-buffer)
       (mistty--inhibit-undo
        (save-restriction
@@ -1740,7 +1744,7 @@ Also updates prompt and point."
                         (text-property-search-forward 'term-line-wrap t t)))
              (when (save-excursion
                      (goto-char (prop-match-beginning prop-match))
-                     (zerop (% (current-column) mistty-raw-columns)))
+                     (zerop (% (current-column) (mistty--term-columns mistty--term))))
                (add-text-properties
                 (prop-match-beginning prop-match)
                 (prop-match-end prop-match)
@@ -1820,7 +1824,7 @@ Also updates prompt and point."
          (unless mistty--active-prompt
            (mistty--with-live-buffer mistty-term-buffer
              ;; Next time, only sync the visible portion of the terminal.
-             (when (< mistty-sync-marker mistty-raw--home)
+             (when (< mistty-sync-marker (mistty--term-home-marker mistty--term))
                (let ((scrolline (mistty--term-scrolline-at-screen-start)))
                  (mistty--with-live-buffer mistty-work-buffer
                    (mistty--maybe-move-sync-mark scrolline))))))
@@ -3674,9 +3678,7 @@ Width and height are limited to `mistty-min-terminal-width' and
   (when (process-live-p mistty-proc)
     (let ((width (max width mistty-min-terminal-width))
           (height (max height mistty-min-terminal-height)))
-      (mistty--with-live-buffer mistty-term-buffer
-        (mistty-raw-resize width height)
-        (set-process-window-size mistty-proc height width)))))
+      (mistty--term-resize mistty--term width height))))
 
 (defun mistty--enter-fullscreen (proc)
   "Enter fullscreen mode for PROC."
@@ -3719,7 +3721,7 @@ Width and height are limited to `mistty-min-terminal-width' and
     (mistty--update-mode-lines proc)
     (setq mistty-fullscreen t)
     (mistty--with-live-buffer mistty-term-buffer
-      (mistty-raw-auto-resize t)
+      (mistty--term-autoresize mistty--term t)
       (mistty-fullscreen-mode 1)
       (setq mistty-fullscreen t))
     (run-hooks 'mistty-entered-fullscreen-hook)
@@ -3768,8 +3770,8 @@ This function looks into the maps to find the key bindings for
       (widen)
       (overlay-put mistty--sync-ov 'after-string nil)
 
-      (mistty-raw-auto-resize nil)
-      (mistty--attach (process-buffer proc))
+      (mistty--term-autoresize mistty--term nil)
+      (mistty--attach mistty--term)
       (mistty--refresh)
       (when (and proc (process-live-p proc))
         (mistty-goto-cursor))

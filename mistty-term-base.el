@@ -31,13 +31,45 @@ LOCAL-MAP specifies a local map to be used as the char-mode map.
 WIDTH and HEIGHT are the initial dimension of the terminal
 reported to the remote process.
 
-This function returns an instance of the generic terminal type.")
+This function returns an instance of the generic terminal type, which
+allows getting hold of the buffer and process.")
 
 (cl-defgeneric mistty--term-buf (term)
   "Return the terminal buffer.")
 
 (cl-defgeneric mistty--term-proc (term)
   "Return the terminal process.")
+
+(cl-defgeneric mistty--term-home-marker (term)
+  "Return the marker for the start of the terminal.
+
+The marker is only valid in the terminal buffer.")
+
+(cl-defgeneric mistty--term-lines (term)
+  "Return the height of the terminal, in lines.")
+
+(cl-defgeneric mistty--term-columns (term)
+  "Return the width of the terminal, in columns.")
+
+(cl-defgeneric mistty--term-sentinel-func (term)
+  "Return the hardcoded sentinel function or the terminal.")
+
+(defun mistty--term-sentinel (proc msg)
+  "Call the hardcoded sentinel function.
+
+This might be different from the sentinel set on PROC."
+  (funcall (mistty--term-sentinel-func (process-get proc 'mistty-term)) proc msg))
+
+(cl-defgeneric mistty--term-resize (term width height)
+  "Set the terminal size for TERM to WIDTH x HEIGHT.")
+
+(cl-defgeneric mistty--term-autoresize (term enable)
+  "Enable or disable auto-resizing based on the buffer windows.")
+
+(defun mistty--term-is-term-buffer (buffer)
+  "Return non-nil if BUFFER is a term buffer."
+  (when-let* ((proc (get-buffer-process buffer)))
+    (process-get proc 'mistty-term)))
 
 (provide 'mistty-term-base)
 

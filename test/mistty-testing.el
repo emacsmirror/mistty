@@ -161,7 +161,8 @@ default, the default directory is a temp directory created for the test."
      (unwind-protect
          (progn
            ,@body)
-       (mistty--attach term-buffer))))
+       (mistty--attach (with-current-buffer term-buffer
+                         mistty--term)))))
 
 (defmacro mistty-run-command (&rest body)
   `(progn
