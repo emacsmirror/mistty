@@ -19,17 +19,38 @@
 ;; This file implements generic methods defined in mistty-term-base.el
 ;; on top of mistty-raw.el
 
-(require 'mistty-term-base)
-(require 'term)
 (require 'cl-lib)
+(require 'mistty-term-base)
+(require 'mistty-raw)
+(require 'mistty-term)
 
 (cl-defstruct (mistty--term-mod
                (:constructor mistty--make-term-mod)
                (:copier nil))
   proc buf)
 
-(cl-defmethod mistty--create-term ((_type (eql 'mod)) _name _program _args _width _height)
-  (mistty--make-term-mod))
+(cl-defmethod mistty--create-term ((_type (eql 'mod)) name program args width height)
+  (let ((term-buffer (generate-new-buffer name 'inhibit-buffer-hooks)))
+    (with-current-buffer term-buffer
+      (mistty-raw-mode)
+      (setq-local mistty--prompt-cell (mistty--make-prompt-cell))
+      (setq-local scroll-margin 0)
+      (let ((process-environment
+             (if (with-connection-local-variables mistty-set-EMACS)
+                 (cons (format "EMACS=%s" emacs-version)
+                       process-environment)
+               process-environment)))
+        (mistty-raw-exec name program args width height))
+      (let ((proc (get-buffer-process term-buffer)))
+        (set-process-filter proc (mistty--make-accumulator
+                                  #'mistty--emulate-terminal))
+        (mistty--make-term-mod :buf term-buffer :proc proc)))))
+
+(cl-defmethod mistty--term-buf ((term mistty--term-mod))
+  (mistty--term-mod-buf term))
+
+(cl-defmethod mistty--term-proc ((term mistty--term-mod))
+  (mistty--term-mod-proc term))
 
 (provide 'mistty-term-mod)
 

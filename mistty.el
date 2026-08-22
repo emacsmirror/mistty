@@ -54,6 +54,8 @@
 (require 'mistty-queue)
 (require 'mistty-undo)
 (require 'mistty-raw)
+(require 'mistty-term-base)
+(require 'mistty-term-mod)
 
 ;;; Code:
 
@@ -962,10 +964,10 @@ window."
         (setq width (window-max-chars-per-line win))
         (setq height (floor (with-selected-window win
                                    (window-screen-lines))))))
-    (mistty--attach
-     (mistty--create-term
-      (concat " mistty tty " (buffer-name)) command args
-      width height)))
+    (let ((term (mistty--create-term 'mod
+                                     (concat " mistty tty " (buffer-name)) command args
+                                     width height)))
+      (mistty--attach (mistty--term-buf term))))
   (mistty--wrap-capf-functions)
   (mistty--update-mode-lines)
   (run-hooks 'mistty-after-process-start-hook))

@@ -405,34 +405,6 @@ the last set of properties to be registered is applied."
           (delq cell
                 mistty--term-properties-to-add-alist))))
 
-(defun mistty--create-term (name program args width height)
-  "Create a new term buffer with name NAME.
-
-The buffer runs PROGRAM with the given ARGS.
-
-LOCAL-MAP specifies a local map to be used as the char-mode map.
-
-WIDTH and HEIGHT are the initial dimension of the terminal
-reported to the remote process.
-
-This function returns the newly-created buffer."
-  (let ((term-buffer (generate-new-buffer name 'inhibit-buffer-hooks)))
-    (with-current-buffer term-buffer
-      (mistty-raw-mode)
-      (setq-local mistty--prompt-cell (mistty--make-prompt-cell))
-      (setq-local scroll-margin 0)
-      (let ((process-environment
-             (if (with-connection-local-variables mistty-set-EMACS)
-                 (cons (format "EMACS=%s" emacs-version)
-                       process-environment)
-               process-environment)))
-        (mistty-raw-exec name program args width height))
-      (let ((proc (get-buffer-process term-buffer)))
-        (set-process-filter proc (mistty--make-accumulator
-                                  #'mistty--emulate-terminal))))
-
-    term-buffer))
-
 (defun mistty--term-postprocess-changed ()
   "Process mistty-clear text properties.
 

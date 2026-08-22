@@ -21,8 +21,23 @@
 
 (require 'cl-lib)
 
-(cl-defgeneric mistty--create-term (type name program args width height))
+(cl-defgeneric mistty--create-term (type name program args width height)
+  "Create a new term buffer of the given TYPE with name NAME.
 
+The buffer runs PROGRAM with the given ARGS.
+
+LOCAL-MAP specifies a local map to be used as the char-mode map.
+
+WIDTH and HEIGHT are the initial dimension of the terminal
+reported to the remote process.
+
+This function returns an instance of the generic terminal type.")
+
+(cl-defgeneric mistty--term-buf (term)
+  "Return the terminal buffer.")
+
+(cl-defgeneric mistty--term-proc (term)
+  "Return the terminal process.")
 
 (provide 'mistty-term-base)
 
