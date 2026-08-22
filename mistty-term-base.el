@@ -54,6 +54,9 @@ The marker is only valid in the terminal buffer.")
 (cl-defgeneric mistty--term-sentinel-func (term)
   "Return the hardcoded sentinel function or the terminal.")
 
+(cl-defgeneric mistty--term-filter-func (term)
+  "Return the hardcoded filter function or the terminal.")
+
 (defun mistty--term-sentinel (proc msg)
   "Call the hardcoded sentinel function.
 

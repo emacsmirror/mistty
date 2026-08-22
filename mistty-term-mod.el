@@ -44,7 +44,7 @@
       (let* ((proc (get-buffer-process term-buffer))
              (term (mistty--make-term-mod :buf term-buffer :proc proc)))
         (set-process-filter proc (mistty--make-accumulator
-                                  #'mistty--emulate-terminal))
+                                  (mistty--term-filter-func term)))
         (process-put proc 'mistty-term term)
 
         term))))
@@ -73,6 +73,9 @@
 
 (cl-defmethod mistty--term-sentinel-func ((_term mistty--term-mod))
   #'mistty-raw--sentinel)
+
+(cl-defmethod mistty--term-filter-func ((_term mistty--term-mod))
+  #'mistty-raw--process-filter)
 
 (cl-defmethod mistty--term-resize ((term mistty--term-mod) width height)
   (with-current-buffer (mistty--term-mod-buf term)

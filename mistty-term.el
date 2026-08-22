@@ -219,13 +219,6 @@ The old value, if any, is pushed into `mistty--prompt-archive'."
        (or (null (mistty--prompt-end prompt))
            (< scrolline (mistty--prompt-end prompt)))))
 
-(defun mistty--emulate-terminal (proc str)
-  "Handle process output as a terminal would.
-
-This function accepts output from PROC included into STR and forwards
-them to the virtual terminal."
-  (mistty-raw--process-filter proc str))
-
 (defun mistty--add-osc-detection (accum)
   "Handle OSC code in ACCUM.
 
