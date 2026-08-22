@@ -2615,33 +2615,25 @@ returns nil."
                  (let ((end (max beg (mistty--blank-end-start))))
                    (setq old-length (- end beg))
                    (move-marker old-end end))
+               (move-marker old-end (+ beg old-length)))
 
-               (move-marker old-end (+ beg old-length))
+             ;; don't try to delete blank lines at EOB
+             (let ((blank-end (mistty--blank-end-start)))
+               (let ((end (max beg blank-end)))
+                 (when (> old-end end)
+                   (move-marker old-end end)))
 
-               ;; Detect when the end is inside the blank space at the
-               ;; end of the buffer; this is normally neither
-               ;; accessible nor deletable.
-               (when (and (> old-end beg)
-                          (or (get-text-property old-end 'mistty-skip)
-                              (get-text-property (min beg (1- old-end)) 'mistty-skip)))
-                 (let ((end (max beg (mistty--blank-end-start))))
-                   (when (> old-end end)
-                     (move-marker old-end end)
-                     (setq old-length (- end beg))))))
+               ;; don't even try to move through trailing ws at the
+               ;; end of the prompt, as they may not exist (Issue #34)
+               ;; even though they're not reported as blank.
+               (setq trailing-ws-to-delete 0)
+               (when (= old-end blank-end)
+                 (while (and (eq ?\  (char-before old-end)) (> old-end beg))
+                   (cl-incf trailing-ws-to-delete)
+                   (move-marker old-end (1- old-end)))))
+             (setq old-length (- old-end beg))
 
-             ;; don't even try to move through trailing ws, as they may
-             ;; not exist (Issue #34)
-             (setq trailing-ws-to-delete 0)
-             (when (memq (char-after old-end) '(nil ?\n))
-               (let ((at-end (<= (mistty--last-non-ws) old-end )))
-                 (while (and (> old-length 0)
-                             (eq ?\  (char-before old-end)))
-                   (move-marker old-end (1- old-end))
-                   (when at-end
-                     (cl-incf trailing-ws-to-delete))
-                   (cl-decf old-length))))
-
-             (mistty-log "replay: %s %s %s old-content: '%s' (limit: [%s-%s])"
+             (mistty-log "replay: %s '%s' %s old-content: '%s' (limit: [%s-%s])"
                          (marker-position orig-beg)
                          content
                          old-length
