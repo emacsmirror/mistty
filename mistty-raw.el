@@ -300,6 +300,33 @@ This is controlled by the custom variable `mistty-term-name'"
                                (mistty--count-lines mistty-raw--home pos)
                                (- pos (mistty--bol pos))))))
 
+(defun mistty-raw--cleanup-prompt-sp (pos)
+  "
+
+This command cleans up the terminal after a trick used to detect output
+that doesn't end in a newline is called prompt sp. That trick consists
+of outputing an optional end-of-line marker, then columns-1 spaces and a
+CR. If we end up still on the same line, the output ended with a NL and
+the whole line, and the marker, is then overwritten. If we end up on
+another line due to line wrap, the previous line and the marker stay in
+the previous line.
+
+This results in a continuation line that shouldn't be continued and a
+large number of newlines, both of which will look bad when they enter
+scrollback.
+
+To work around it, this call transform the fake newline into a real one
+and marks the spaces at the end of the previous line as blank.
+
+POS should be the position where the CR is called in the prompt-sp
+sequence."
+  (when-let* ((vterm mistty-raw--vterm))
+    (when (> pos mistty-raw--home)
+      (mistty-mod-cleanup-prompt-sp
+       vterm
+       (mistty--count-lines mistty-raw--home pos)))))
+
+
 (provide 'mistty-raw)
 
 ;;; mistty-raw.el ends here

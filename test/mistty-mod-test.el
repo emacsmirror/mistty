@@ -1142,3 +1142,62 @@
                   "\n"
                   "\n")
                  (mistty-test-content :trim nil)))))))
+
+(ert-deftest mistty-mod-cleanup-sp-continued ()
+  (let ((term (mistty-mod-make-vterm 20 5))
+        (cursor (make-marker)))
+    (ert-with-test-buffer ()
+      (mistty-mod-process-bytes term (vconcat "output 1\r\n"))
+      (mistty-mod-process-bytes term (vconcat "end"))
+      (mistty-mod-process-bytes term (vconcat "%" (make-string 19 ?\ ) "\r")) ;; prompt-sp
+      (mistty-mod-render term (point-min) (point-max) cursor)
+
+      (should (equal
+               (concat "output 1\n"
+                       "end%                [\n]"
+                       "   \n"
+                       "\n"
+                       "\n")
+               (mistty-test-content
+                :trim nil :show-property '(term-line-wrap t))))
+
+      (mistty-mod-cleanup-prompt-sp term 2)
+      (mistty-mod-render term (point-min) (point-max) cursor)
+
+      (should (equal
+               (concat "output 1\n"
+                       "end%\n"
+                       "\n"
+                       "\n"
+                       "\n")
+               (mistty-test-content
+                :trim nil :show-property '(term-line-wrap t)))))))
+
+(ert-deftest mistty-mod-cleanup-sp-not-continued ()
+  (let ((term (mistty-mod-make-vterm 20 5))
+        (cursor (make-marker)))
+    (ert-with-test-buffer ()
+      (mistty-mod-process-bytes term (vconcat "output 1\r\n"))
+      (mistty-mod-process-bytes term (vconcat "%" (make-string 19 ?\ ) "\r")) ;; prompt-sp
+      (mistty-mod-render term (point-min) (point-max) cursor)
+
+      (should (equal
+               (concat "output 1\n"
+                       "%                   \n"
+                       "\n"
+                       "\n"
+                       "\n")
+               (mistty-test-content
+                :trim nil :show-property '(term-line-wrap t))))
+
+      (mistty-mod-cleanup-prompt-sp term 1)
+      (mistty-mod-render term (point-min) (point-max) cursor)
+
+      (should (equal
+               (concat "output 1\n"
+                       "%\n"
+                       "\n"
+                       "\n"
+                       "\n")
+               (mistty-test-content
+                :trim nil :show-property '(term-line-wrap t)))))))

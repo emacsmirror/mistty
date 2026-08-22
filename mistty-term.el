@@ -262,33 +262,19 @@ Detected prompts can be found in `mistty-prompt'."
               (inhibit-modification-hooks t)
               (scrolline (mistty--term-scrolline)))
          (when (or (null prompt)
+                   (memq (mistty--prompt-source prompt) '(regexp prompt_sp))
                    (not (mistty--prompt-contains prompt scrolline)))
-           ;; zsh enables bracketed paste only after having printed
-           ;; the prompt. Try to find the beginning of the prompt
-           ;; from prompt_sp or assume a single-line prompt.
-           (when-let* ((real-start
-                       (catch 'mistty-prompt-start
-                         (dolist (i '(0 -1 -2 -3))
-                           (let ((pos (pos-eol i)))
-                             (when (and (zerop (mistty--prompt-counter))
-                                        (= pos 1) (> (point) (pos-bol)))
-                               (mistty-log "extend first prompt [1-%s]" (point))
-                               (throw 'mistty-prompt-start (point-min)))
-                             (when (get-text-property pos 'mistty-prompt-sp)
-                               (mistty-log "prompt_sp %s [%s-%s]" i (1+ pos) (point))
-                               (remove-text-properties
-                                pos (1+ pos) '(term-line-wrap t 'mistty-prompt-sp nil))
-                               (throw 'mistty-prompt-start (1+ pos)))))))
-                      (eol (pos-eol)))
-             (when (> eol real-start)
-               ;; mistty--changed is only called when bracketed
-               ;; paste is on; mark past sections of the prompt
-               ;; as changed, including to the eol to cover
-               ;; right prompts, also written before.
-               (add-text-properties real-start eol '(mistty-updated t)))
-             (setq scrolline (mistty--term-scrolline-at real-start)))
+           (cond
+            ;; Zsh enables bracketed past after opening the prompt. Rely on prompt_sp
+            ;; to find the beginning of possible multiline prompts.
+            ((and prompt
+                  (eq 'prompt_sp (mistty--prompt-source prompt))
+                  (mistty--prompt-contains prompt scrolline)
+                  (< (mistty--prompt-start prompt) scrolline))
+             (mistty-log "Reusing prompt_sp start %s" (mistty--prompt-start prompt))
+             (setq scrolline (mistty--prompt-start prompt))
+             (add-text-properties (mistty--term-scrolline-pos scrolline) (pos-eol) '(mistty-updated t))))
            (setq prompt (mistty--make-prompt 'bracketed-paste scrolline))
-           (mistty--term-remove-prompt_sp prompt)
            (mistty-log "Detected %s prompt #%s [%s-]"
                        (mistty--prompt-source prompt)
                        (mistty--prompt-input-id prompt)
@@ -335,24 +321,28 @@ Detected prompts can be found in `mistty-prompt'."
                       (eq ?\  (char-before (point))))
                  (and (get-text-property (pos-eol 0) 'term-line-wrap)
                       (string-match "^ *$" (buffer-substring (pos-bol) (pos-eol)))))
-         (let ((inhibit-modification-hooks t)
-               (inhibit-read-only t)
-               (pos (pos-eol 0)))
-           (put-text-property pos (1+ pos) 'mistty-prompt-sp t))))
+         (let* ((prompt (mistty--prompt))
+                (pos (pos-bol))
+                (scrolline (mistty--term-scrolline-at pos)))
 
+           (when (get-text-property (pos-eol 0) 'term-line-wrap)
+             (mistty-raw--cleanup-prompt-sp (point))
+             (let* ((eol (pos-eol 0)) (pos eol))
+               (remove-text-properties eol (1+ eol) '(term-line-wrap nil))
+               (while (eq ?\  (char-before pos))
+                 (cl-decf pos))
+               (when (> eol pos)
+                 (add-text-properties pos eol '(mistty-blank t))))
+             (cl-incf scrolline))
+           (when (or (null prompt)
+                     (not (mistty--prompt-contains prompt scrolline)))
+             (setq prompt (mistty--make-prompt 'prompt_sp scrolline))
+             (setf (mistty--prompt) prompt)
+             (mistty-log "Suspected %s prompt #%s: [%s,)"
+                            (mistty--prompt-source prompt)
+                            (mistty--prompt-input-id prompt)
+                            (mistty--prompt-start prompt))))))
      (mistty--accum-ctx-push-down ctx "\r"))))
-
-(defun mistty--term-remove-prompt_sp (prompt)
-  "Clear the mistty-prompt-sp property in PROMPT.
-
-This should be called for all newly-detected prompt to avoid confusing
-future prompts."
-  (when-let* ((start (mistty--term-scrolline-pos
-                     (mistty--prompt-start prompt))))
-    (when (< start (point-max))
-      (remove-text-properties (max (point-min) (1- start))
-                              (point-max) '
-                              (mistty-prompt-sp nil)))))
 
 (defun mistty--regexp-prompt-detector ()
   "Build a post-processor that look for a new prompt at cursor.
@@ -730,7 +720,6 @@ Everything else is ignored."
          ;; Overwrite any other prompt source.
          (let ((prompt (mistty--make-prompt 'osc133 (mistty--term-scrolline))))
            (setf (mistty--prompt) prompt)
-           (mistty--term-remove-prompt_sp prompt)
            (mistty-log "Detected %s prompt #%s [%s-]"
                        (mistty--prompt-source prompt)
                        (mistty--prompt-input-id prompt)

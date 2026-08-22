@@ -5857,7 +5857,6 @@ function prompt {
           " }\n"))
 
 (ert-deftest mistty-test-detect-zsh-multiline-prompt-start ()
-  :expected-result :failed ;; TODO: support with module
   (mistty-with-test-buffer (:shell zsh :init mistty-test-zsh-fancy-prompt)
     (mistty-send-text "echo hello")
     (mistty-send-and-wait-for-prompt)
@@ -5880,7 +5879,6 @@ function prompt {
     ))
 
 (ert-deftest mistty-test-zsh-multiline-prompt-sp ()
-  :expected-result :failed
   (mistty-with-test-buffer (:shell zsh :init mistty-test-zsh-fancy-prompt)
     (mistty-send-text "echo -n hello")
     (mistty-send-and-wait-for-prompt)
@@ -5895,7 +5893,6 @@ function prompt {
       (mistty-test-content :show mistty-sync-marker)))))
 
 (ert-deftest mistty-test-zsh-multiline-prompt-empty ()
-  :expected-result :failed
   (mistty-with-test-buffer (:shell zsh :init mistty-test-zsh-fancy-prompt)
     (mistty-send-and-wait-for-prompt)
 
@@ -5908,23 +5905,22 @@ function prompt {
       (mistty-test-content :show mistty-sync-marker)))))
 
 (ert-deftest mistty-test-zsh-multiline-prompt-sp-no-eol-mark ()
-  :expected-result :failed
   (mistty-with-test-buffer (:shell zsh :init mistty-test-zsh-fancy-prompt)
     (mistty-send-text "PROMPT_EOL_MARK=''")
     (mistty-send-and-wait-for-prompt)
-    (mistty-test-narrow (pos-bol 0))
 
-    (mistty-send-text "echo -n hello")
-    (mistty-send-and-wait-for-prompt)
+    (let ((start (copy-marker (pos-bol 0))))
+      (mistty-send-text "echo -n hello")
+      (mistty-send-and-wait-for-prompt)
 
-    (should
-     (equal
-      (concat "left...............................right\n"
-              "$ echo -n hello\n"
-              "hello\n"
-              "<>left...............................right\n"
-              "$")
-      (mistty-test-content :show mistty-sync-marker)))))
+      (should
+       (equal
+        (concat "left...............................right\n"
+                "$ echo -n hello\n"
+                "hello\n"
+                "<>left...............................right\n"
+                "$")
+        (mistty-test-content :start start :show mistty-sync-marker))))))
 
 (ert-deftest mistty-test-zsh-multiline-prompt-next-previous ()
   (mistty-with-test-buffer (:shell zsh :init mistty-test-zsh-fancy-prompt)
@@ -6061,7 +6057,6 @@ function prompt {
       (mistty-test-content :show (point))))))
 
 (ert-deftest mistty-test-zsh-multiline-prompt-extract-output ()
-  :expected-result :failed
   (mistty-with-test-buffer (:shell zsh :init mistty-test-zsh-fancy-prompt)
     (dolist (text '("one" "two" "three" "four"))
       (mistty-send-text (concat "echo " text))

@@ -4,9 +4,12 @@ mod vterm;
 
 use crate::{render::cell_char_count, vterm::VTerm};
 use alacritty_terminal::{
-    grid::Dimensions,
+    grid::{Dimensions, Row},
     index::{Column, Line, Point},
-    term::{TermMode, cell::Flags},
+    term::{
+        TermMode,
+        cell::{Cell, Flags},
+    },
 };
 use emacs::{Env, IntoLisp, Result, Value, Vector, defun};
 use std::{fmt::Debug, ops::RangeBounds};
@@ -261,6 +264,38 @@ fn clear_to_eol(env: &Env, term: &mut VTerm, line: i32, beg_chars: usize) -> Res
     }
 
     Ok(())
+}
+
+/// Cleanup the effects of the hack that ZSH calls prompt sp.
+#[defun]
+fn cleanup_prompt_sp(env: &Env, term: &mut VTerm, line: i32) -> Result<()> {
+    let line = line_range_check(env, line, term)?;
+    if line == Line(0) {
+        return Ok(());
+    }
+
+    let grid = term.inner_mut().grid_mut();
+    let last_column = grid.last_column();
+    let prev_line: Line = line - 1;
+    let prev_row = &mut grid[prev_line];
+    if prev_row[last_column].flags.contains(Flags::WRAPLINE) {
+        prev_row[last_column].flags.remove(Flags::WRAPLINE);
+        blank_trailing(prev_row);
+    }
+    blank_trailing(&mut grid[line]);
+
+    Ok(())
+}
+
+fn blank_trailing(row: &mut Row<Cell>) {
+    for col in (0..row.len()).rev() {
+        let col = Column(col);
+        let cell = &mut row[col];
+        if cell.c != ' ' {
+            break;
+        }
+        cell.flags.set(Flags::DIM, false);
+    }
 }
 
 /// Create a `Column` that's guaranteed to be a valid column for the
