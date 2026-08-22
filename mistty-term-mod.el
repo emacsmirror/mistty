@@ -23,6 +23,9 @@
 (require 'mistty-term-base)
 (require 'mistty-raw)
 (require 'mistty-term)
+(require 'mistty-accum)
+(eval-when-compile
+  (require 'mistty-accum-macros))
 
 (cl-defstruct (mistty--term-mod
                (:constructor mistty--make-term-mod)
@@ -85,6 +88,29 @@
 (cl-defmethod mistty--term-autoresize ((term mistty--term-mod) enable)
   (with-current-buffer (mistty--term-mod-buf term)
     (mistty-raw-auto-resize enable)))
+
+(cl-defmethod mistty--term-setup-buffer ((_term mistty--term-mod) &optional _fullscreen))
+
+(cl-defmethod mistty--term-setup-accum ((_term mistty--term-mod) accum enter-fullscreen-func)
+  (mistty--add-prompt-detection accum)
+  (mistty--add-osc-detection accum)
+  (mistty--accum-add-processor
+   accum
+   '(seq CSI (or "47" "?47" "?1047" "?1049") ?h)
+   (lambda (ctx str)
+     (mistty--accum-ctx-flush ctx)
+     (funcall enter-fullscreen-func)
+     (mistty--accum-ctx-push-down ctx str))))
+
+(cl-defmethod mistty--term-setup-accum-for-fullscreen ((_term mistty--term-mod) accum leave-fullscreen-func)
+  (mistty--add-osc-detection accum)
+  (mistty--accum-add-processor
+   accum
+   '(seq CSI (or "47" "?47" "?1047" "?1049") ?l)
+   (lambda (ctx str)
+     (mistty--accum-ctx-push-down ctx str)
+     (mistty--accum-ctx-flush ctx)
+     (funcall leave-fullscreen-func))))
 
 (provide 'mistty-term-mod)
 

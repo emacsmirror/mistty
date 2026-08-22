@@ -1000,24 +1000,19 @@ window."
       (setq mistty-work-buffer work-buffer)
       (setq mistty-term-buffer term-buffer)
       (unless mistty-sync-marker
-        (setq mistty-sync-marker (copy-marker (mistty--term-home-marker term)))))
+        (setq mistty-sync-marker (copy-marker (mistty--term-home-marker term))))
+      (mistty--term-autoresize mistty--term nil)
+      (mistty--term-setup-buffer term nil))
 
     (when proc
       (let ((accum (process-filter proc)))
         (mistty--accum-reset accum)
-        (mistty--add-prompt-detection accum)
-        (mistty--add-osc-detection accum)
+        (mistty--term-setup-accum
+         term accum
+         (lambda ()
+           (mistty--enter-fullscreen work-buffer proc)))
         (mistty--add-toggle-cursor accum work-buffer)
-        (mistty--add-sync-buffers accum work-buffer term-buffer)
-
-        ;; Switch to fullscreen mode
-        (mistty--accum-add-processor
-         accum
-         '(seq CSI (or "47" "?47" "?1047" "?1049") ?h)
-         (lambda (ctx str)
-           (mistty--accum-ctx-flush ctx)
-           (mistty--enter-fullscreen proc)
-           (mistty--accum-ctx-push-down ctx str))))
+        (mistty--add-sync-buffers accum work-buffer term-buffer))
       (set-process-sentinel proc #'mistty--process-sentinel))
 
     (add-hook 'kill-buffer-hook #'mistty--kill-term-buffer nil t)
@@ -1435,7 +1430,7 @@ special string describing the new process state."
         (work-buffer (process-get proc 'mistty-work-buffer)))
     (cond
      ((and process-dead (buffer-live-p term-buffer) (buffer-live-p work-buffer))
-      (mistty--leave-fullscreen proc)
+      (mistty--leave-fullscreen work-buffer proc)
       (mistty--process-sentinel proc msg))
      ((and process-dead (not (buffer-live-p term-buffer)) (buffer-live-p work-buffer))
       (let ((kill-buffer-query-functions nil))
@@ -3680,9 +3675,9 @@ Width and height are limited to `mistty-min-terminal-width' and
           (height (max height mistty-min-terminal-height)))
       (mistty--term-resize mistty--term width height))))
 
-(defun mistty--enter-fullscreen (proc)
+(defun mistty--enter-fullscreen (work-buffer proc)
   "Enter fullscreen mode for PROC."
-  (mistty--with-live-buffer (process-get proc 'mistty-work-buffer)
+  (mistty--with-live-buffer work-buffer
     (mistty--detach)
     (let ((bufname (buffer-name)))
       (rename-buffer (generate-new-buffer-name (concat bufname " scrollback")))
@@ -3694,33 +3689,18 @@ Width and height are limited to `mistty-min-terminal-width' and
       (overlay-put mistty--sync-ov 'after-string (concat "\n" msg "\n"))
       (run-with-idle-timer 0.1 nil #'mistty--report-fullscreen (current-buffer) msg))
 
-    (let ((accum (process-filter proc))
-          (end (copy-marker (point-max))))
+    (let ((accum (process-filter proc)))
       (mistty--accum-reset accum)
-      (mistty--add-osc-detection accum)
-      (mistty--add-toggle-cursor accum mistty-term-buffer)
-      (mistty--accum-add-processor
-       accum
-       '(seq CSI (or "47" "?47" "?1047" "?1049") ?l)
-       (lambda (ctx str)
-         (mistty--accum-ctx-push-down ctx str)
-         (mistty--accum-ctx-flush ctx)
-         ;; When handling CSI 47 h, term.el sometimes add a newline
-         ;; that is not removed after handling CSI 47 l. This
-         ;; manifests as extra newlines, especially visible when
-         ;; launching recent versions of fish. This code works around
-         ;; the problem by deleting anything after the position that
-         ;; was end-of-buffer just before CSI 47 h was handled.
-         (when (and end (< end (point-max))
-                    (eq ?\n (char-after end)))
-           (let ((inhibit-read-only t))
-             (delete-region end (point-max))))
-         (move-marker end nil)
-         (mistty--leave-fullscreen proc))))
+      (mistty--term-setup-accum-for-fullscreen
+       mistty--term accum
+       (lambda ()
+         (mistty--leave-fullscreen work-buffer proc)))
+      (mistty--add-toggle-cursor accum mistty-term-buffer))
     (set-process-sentinel proc #'mistty--fs-process-sentinel)
     (mistty--update-mode-lines proc)
     (setq mistty-fullscreen t)
     (mistty--with-live-buffer mistty-term-buffer
+      (mistty--term-setup-buffer mistty--term t)
       (mistty--term-autoresize mistty--term t)
       (mistty-fullscreen-mode 1)
       (setq mistty-fullscreen t))
@@ -3763,14 +3743,13 @@ This function looks into the maps to find the key bindings for
             (when keybinding-descr ". ")
             keybinding-descr)))
 
-(defun mistty--leave-fullscreen (proc)
-  "Leave fullscreen mode for PROC."
-  (mistty--with-live-buffer (process-get proc 'mistty-work-buffer)
+(defun mistty--leave-fullscreen (work-buffer proc)
+  "Leave fullscreen mode for WORK-BUFFER and PROC."
+  (mistty--with-live-buffer work-buffer
     (save-restriction
       (widen)
       (overlay-put mistty--sync-ov 'after-string nil)
 
-      (mistty--term-autoresize mistty--term nil)
       (mistty--attach mistty--term)
       (mistty--refresh)
       (when (and proc (process-live-p proc))

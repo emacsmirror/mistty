@@ -74,6 +74,25 @@ This might be different from the sentinel set on PROC."
   (when-let* ((proc (get-buffer-process buffer)))
     (process-get proc 'mistty-term)))
 
+(cl-defgeneric mistty--term-setup-buffer (term fullscreen)
+  "Prepare the buffer for use.
+
+If FULLSCREEN is non-nil, prepare the buffer for fullscreen mode")
+
+(cl-defgeneric mistty--term-setup-accum-for-fullscreen
+    (term accum leave-fullscreen-func)
+  "Register processors for TERM on ACCUM in fullscreen mode.
+
+LEAVE-FULLSCREEN-FUNC is a function that takes the TERM instance and
+leaves fullscreen mode.")
+
+(cl-defgeneric mistty--term-setup-accum
+    (term accum enter-fullscreen-func)
+  "Register processors for TERM on ACCUM in normal mode.
+
+ENTER-FULLSCREEN-FUNC is a function that takes he TERM instance and
+enters fullscreen mode.")
+
 (provide 'mistty-term-base)
 
 ;;; mistty-term-base.el ends here
