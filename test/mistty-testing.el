@@ -287,6 +287,7 @@ default, the default directory is a temp directory created for the test."
             "bind \\ca beginning-of-line; "
             "bind \\ce end-of-line; "
             "bind \\cg cancel; "
+            "bind \\cl clear-screen; "
             "bind \\b delete-char; " ;; simulate fish 4.0.0
             "bind \\ch backward-delete-char; "
             init))

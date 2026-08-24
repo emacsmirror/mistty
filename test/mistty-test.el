@@ -1854,6 +1854,17 @@
     (should (equal "$ echo two\ntwo\n$"
                    (mistty-test-content))))))
 
+(ert-deftest mistty-test-clear-current-prompt ()
+  (mistty-with-test-buffer (:shell fish)
+    (mistty--send-string mistty-proc "echo")
+    (mistty-wait-for-output :start (point-min) :str "echo" :cursor-at-end t)
+    (mistty--send-string mistty-proc "\C-l")
+    (mistty--send-string mistty-proc " two")
+    (mistty-wait-for-output :start (point-min) :str "two" :cursor-at-end t)
+    (mistty-send-and-wait-for-prompt)
+    (should (equal "$ echo two\ntwo\n$"
+                   (mistty-test-content)))))
+
 (turtles-ert-deftest mistty-test-scrolls-window-after-clear ( :instance 'mistty)
   (mistty-with-test-buffer (:shell zsh :selected t)
     (mistty-send-text "echo one")

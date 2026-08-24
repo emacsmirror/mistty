@@ -1488,9 +1488,26 @@ terminal region of WORK-BUFFER in sync with TERM-BUFFER."
   (mistty--accum-add-processor
    accum '(seq CSI ?2 ?J) ;; Clear screen
    (lambda (ctx str)
-     (mistty--accum-ctx-push-down ctx str)
      (mistty--accum-ctx-flush ctx)
+     (mistty--accum-ctx-push-down
+      ctx
+      ;; If there's a current prompt, clear it in a way that avoids
+      ;; adding it to scrollback. This allows the shell to send CSI 2J
+      ;; to clear a prompt at the top of the screen , as recent
+      ;; versions of fish do.
+      (or
+       (when-let* ((prompt (mistty--with-live-buffer work-buffer mistty--active-prompt)))
+         (mistty--with-live-buffer term-buffer
+           (when (equal (mistty--prompt-start prompt)
+                        (mistty--term-scrolline-at-screen-start))
+             (mistty-log "CLEAR PROMPT")
+             ;; This is equivalent to CSI 2J, but doesn't trigger
+             ;; alacritty's storing the current screen content into
+             ;; scrollback.
+             "\e[1J\e[0J")))
+       str))
      (mistty-log "CLEAR SCREEN")
+     (mistty--accum-ctx-flush ctx)
      (mistty--scroll-after-reset)))
 
   (mistty--accum-add-processor
