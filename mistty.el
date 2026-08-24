@@ -1481,6 +1481,16 @@ terminal region of WORK-BUFFER in sync with TERM-BUFFER."
      (mistty--accum-ctx-push-down ctx str)
      (mistty--accum-ctx-flush ctx)
      (mistty-log "RESET")
+
+     (mistty--with-live-buffer work-buffer
+       (mistty--cancel-queue mistty--queue)
+       (while-let ((cs (car mistty--changesets)))
+         (mistty--release-changeset cs))
+       (setq mistty--inhibit-refresh nil)
+       (setq mistty-bracketed-paste nil))
+     (mistty--with-live-buffer term-buffer
+       (setq mistty-bracketed-paste nil))
+
      (if mistty-allow-clearing-scrollback
          (mistty--clear-scrollback)
        (mistty--scroll-after-reset))))

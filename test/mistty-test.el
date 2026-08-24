@@ -1811,6 +1811,28 @@
     (should (equal "$ echo one\none\n$ printf '\\ec'\n$ echo two\ntwo\n$"
                    (mistty-test-content)))))
 
+(ert-deftest mistty-test-reset-bracketed-paste-state ()
+  (mistty-with-test-buffer ()
+    (mistty--send-string
+     mistty-proc
+     "p=':'; printf '\\e[?2004hbefore'$p; read; reset; printf 'after'$p; read")
+    (mistty--send-string mistty-proc "\n")
+    (mistty-wait-for-output :start (point-min) :str "before:")
+    (should mistty-bracketed-paste)
+    (should (with-current-buffer mistty-term-buffer
+              mistty-bracketed-paste))
+    (mistty--send-string mistty-proc "\n")
+    (mistty-wait-for-output :start (point-min) :str "after:")
+    (should-not mistty-bracketed-paste)
+    (should-not (with-current-buffer mistty-term-buffer
+                  mistty-bracketed-paste))
+    (mistty--send-string mistty-proc "\n")
+
+    ;; make sure that the next prompt is recognized properly
+    ;; despite bracketed paste having been reset
+    (mistty--send-string mistty-proc "echo hello$p\n")
+    (mistty-wait-for-output :start (point-min) :str "hello:")))
+
 (ert-deftest mistty-test-clear ()
   (mistty-with-test-buffer ()
     (mistty-send-text "echo one")
