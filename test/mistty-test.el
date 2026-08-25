@@ -6255,7 +6255,7 @@ function prompt {
       (unless was-enabled
         (global-goto-address-mode -1)))))
 
-(turtles-ert-deftest mistty-scrolline-after-scrolling (:instance 'mistty)
+(turtles-ert-deftest mistty-test-scrolline-after-scrolling (:instance 'mistty)
   (mistty-with-test-buffer (:term-size '(79 . 22))
     (save-restriction
       (let (one two)
@@ -6316,7 +6316,7 @@ function prompt {
         (should (null (mistty--scrolline-pos one)))
         (should (null (mistty--scrolline-pos two)))))))
 
-(turtles-ert-deftest mistty-scrolline-after-scrolling-long-lines (:instance 'mistty)
+(turtles-ert-deftest mistty-test-scrolline-after-scrolling-long-lines (:instance 'mistty)
   (mistty-with-test-buffer (:term-size '(79 . 23))
     (save-restriction
       (let (one two)
