@@ -178,6 +178,31 @@ If END < BEG, return a negative number."
 
       (* sign count))))
 
+(defun mistty--for-each-scrolline (func &optional beg end)
+  "Call FUNC for each scroll for each scrolline from BEG to END.
+
+FUNC is called for each scrolline with two arguments, the beginning and
+the end position of the scrolline.
+
+Empty lines are reported. If the buffer ends with a newline, no final
+empty line is reported.
+
+If BEG and END are in the middle of a line, the first line starts at BEG
+and the last one ends at END; check with `mistty--scrolline-start-pos'
+or `mistty--scrolline-end-pos' to get the real start and end in such
+case."
+  (let ((beg (or beg (point-min)))
+        (end (or end (point-max))))
+      (save-excursion
+        (goto-char beg)
+        (while (> end (point))
+          (let ((pos (point)))
+            (mistty--goto-scrolline-end)
+            (save-excursion
+              (funcall func pos (min end (point)))))
+          ;; skip the newline at the end
+          (forward-char)))))
+
 (defun mistty--unwrap-lines (beg end)
   "Remove fake newlines from the region BEG to END.
 

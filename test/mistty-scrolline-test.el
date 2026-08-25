@@ -688,4 +688,44 @@
     (should (equal (point-min) (mistty--find-scrolline 12)))
     (should (equal (point-min) (mistty--find-scrolline 100)))))
 
+(ert-deftest mistty-scrolline-for-each ()
+  (ert-with-test-buffer ()
+    (insert "abc" fakenl "def" fakenl "ghi\n")
+    (insert "\n")
+    (insert "jkl" fakenl "mno" fakenl "pqr\n")
+    (insert "stu" fakenl "vwx" fakenl "yz\n")
+    (goto-char (point-min))
+
+    (let ((capture (list)))
+      (mistty--for-each-scrolline
+       (lambda (beg end)
+         (push (buffer-substring-no-properties beg end) capture)))
+      (should (equal (list "abc\ndef\nghi"
+                           ""
+                           "jkl\nmno\npqr"
+                           "stu\nvwx\nyz")
+                     (nreverse capture))))))
+
+(ert-deftest mistty-scrolline-for-each-partial ()
+  (ert-with-test-buffer ()
+    (insert "abc" fakenl "def" fakenl "ghi\n")
+    (insert "jkl" fakenl "mno" fakenl "pqr\n")
+    (insert "stu" fakenl "vwx" fakenl "yz\n")
+    (goto-char (point-min))
+
+    (let ((capture (list)))
+      (mistty--for-each-scrolline
+       (lambda (beg end)
+         (push (buffer-substring-no-properties beg end) capture))
+       (save-excursion
+         (search-forward "e")
+         (match-beginning 0))
+       (save-excursion
+         (search-forward "w")
+         (match-beginning 0)))
+      (should (equal (list "ef\nghi"
+                           "jkl\nmno\npqr"
+                           "stu\nv")
+                     (nreverse capture))))))
+
 ;;; mistty-scrolline-test.el ends here
