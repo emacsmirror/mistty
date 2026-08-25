@@ -565,14 +565,14 @@
                            "jklmno\npqr\n")
                    (buffer-string)))))
 
-(ert-deftest mistty--scrolline-at ()
+(ert-deftest mistty-scrolline-at ()
   (ert-with-test-buffer ()
     (insert "abc" fakenl "def" fakenl "ghi\n")
     (insert "jkl" fakenl "mno" fakenl "pqr\n")
     (insert "stu" fakenl "vwx" fakenl "yz\n")
     (goto-char (point-min))
 
-    (equal 0 (mistty--scrolline-at))
+    (equal 0 (mistty--scrolline-at-point))
     (equal 0 (mistty--scrolline-at (save-excursion
                                     (search-forward "def")
                                     (match-beginning 0))))
@@ -589,19 +589,19 @@
                                     (search-forward "vwx")
                                     (match-beginning 0))))))
 
-(ert-deftest mistty--scrolline-at-with-home ()
+(ert-deftest mistty-scrolline-at-with-home ()
   (ert-with-test-buffer ()
     (insert "abc" fakenl "def" fakenl "ghi\n")
     (insert "jkl" fakenl "mno" fakenl "pqr\n")
     (insert "stu" fakenl "vwx" fakenl "yz\n")
     (goto-char (point-min))
 
-    (mistty--scrolline-update (save-excursion
+    (mistty--update-scrolline (save-excursion
                                 (search-forward "mno")
                                 (match-beginning 0))
                               10)
 
-    (equal 9 (mistty--scrolline-at))
+    (equal 9 (mistty--scrolline-at-point))
     (equal 9 (mistty--scrolline-at (save-excursion
                                     (search-forward "def")
                                     (match-beginning 0))))
@@ -615,7 +615,7 @@
                                      (search-forward "vwx")
                                      (match-beginning 0))))
 
-    (mistty--scrolline-update (save-excursion
+    (mistty--update-scrolline (save-excursion
                                 (search-forward "yz")
                                 (match-end 0))
                               100)
@@ -629,7 +629,7 @@
                                       (search-forward "vwx")
                                       (match-beginning 0))))
 
-    (mistty--scrolline-update (point-max) 200)
+    (mistty--update-scrolline (point-max) 200)
     (equal 197 (mistty--scrolline-at (save-excursion
                                      (search-forward "def")
                                      (match-beginning 0))))

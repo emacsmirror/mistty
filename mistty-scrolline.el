@@ -50,7 +50,7 @@ Note that it's not necessarily at the start of a scrolline.
 Normally initialized with `scrolline-init'and later on modified by
 `scrolline-update` or by changing the marker or number separately.")
 
-(defvar mistty--scrolline-home-num 0
+(defvar-local mistty--scrolline-home-num 0
   "Scrolline number of `mistty-scrolline-home-mark'.
 
 Normally initialized with `scrolline-init'.")
@@ -93,8 +93,10 @@ Return nil if the scrolline isn't available, otherwise return the
 position of the start of the scrolline."
   (save-excursion
     (goto-char (or mistty--scrolline-home-mark (point-min)))
-    (when (zerop (mistty--move-scrollines (- num mistty--scrolline-home-num)))
-        (point))))
+    (if (= num mistty--scrolline-home-num)
+        (mistty--scrolline-start-pos)
+      (when (zerop (mistty--move-scrollines (- num mistty--scrolline-home-num)))
+        (point)))))
 
 (defun mistty--scrolline-start-pos ()
   "Return the position of the start of the current scrolline."
