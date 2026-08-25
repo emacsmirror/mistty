@@ -82,7 +82,7 @@ NUMBER. If no marker was set for scrolline, a new one is created."
      (mistty--count-scrollines
       (or mistty--scrolline-home-mark (point-min)) pos)))
 
-(defsubst mistty--current-scrolline ()
+(defsubst mistty--scrolline-at-point ()
   "Return the scrolline number at point."
   (mistty--scrolline-at (point)))
 
