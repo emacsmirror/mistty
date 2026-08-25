@@ -640,7 +640,7 @@
                                       (search-forward "vwx")
                                       (match-beginning 0))))))
 
-(ert-deftest mistty--find-scrolline ()
+(ert-deftest mistty-scrolline-find ()
   (ert-with-test-buffer ()
     (insert "abc" fakenl "def" fakenl "ghi\n")
     (insert "jkl" fakenl "mno" fakenl "pqr\n")
@@ -657,19 +657,19 @@
                      (match-beginning 0))
                    (mistty--find-scrolline 2)))
 
-    (should (equal nil (mistt--find-scrolline 3)))
-    (should (equal nil (mistt--find-scrolline 10)))
-    (should (equal nil (mistt--find-scrolline -1)))
-    (should (equal nil (mistt--find-scrolline -10)))))
+    (should (equal (point-max) (mistty--find-scrolline 3)))
+    (should (equal nil (mistty--find-scrolline 10)))
+    (should (equal nil (mistty--find-scrolline -1)))
+    (should (equal nil (mistty--find-scrolline -10)))))
 
-(ert-deftest mistty--find-scrolline-with-home ()
+(ert-deftest mistty-scrolline-find-with-home ()
   (ert-with-test-buffer ()
     (insert "abc" fakenl "def" fakenl "ghi\n")
     (insert "jkl" fakenl "mno" fakenl "pqr\n")
     (insert "stu" fakenl "vwx" fakenl "yz\n")
     (goto-char (point-min))
 
-    (mistty--scrolline-update (save-excursion
+    (mistty--update-scrolline (save-excursion
                                 (search-forward "mno")
                                 (match-beginning 0))
                               10)
@@ -685,8 +685,9 @@
                      (search-forward "stu")
                      (match-beginning 0))
                    (mistty--find-scrolline 11)))
-    (should (equal (point-min) (mistty--find-scrolline 12)))
-    (should (equal (point-min) (mistty--find-scrolline 100)))))
+    (should (equal (point-max) (mistty--find-scrolline 12)))
+    (should (equal nil (mistty--find-scrolline 13)))
+    (should (equal nil (mistty--find-scrolline 100)))))
 
 (ert-deftest mistty-scrolline-for-each ()
   (ert-with-test-buffer ()
