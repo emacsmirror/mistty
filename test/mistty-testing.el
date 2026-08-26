@@ -129,7 +129,7 @@ default, the default directory is a temp directory created for the test."
                (mistty-backlog-size 500)
                (mistty-test-ok nil)
                (mistty-test-had-issues nil)
-               (mistty--inhibit-scrollback-cleaup t)
+               (mistty--inhibit-fake-nl-cleanup t)
                (mistty-test-prompt-re nil)
                (mistty-after-process-start-hook nil)
                (mistty-after-process-end-hook nil)

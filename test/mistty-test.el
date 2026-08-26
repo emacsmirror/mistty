@@ -1490,7 +1490,7 @@
 
 (ert-deftest mistty-test-delete-fake-nl-after-long-prompts ()
   (mistty-with-test-buffer (:term-size '(20 . 20))
-    (let ((mistty--inhibit-scrollback-cleaup nil))
+    (let ((mistty--inhibit-fake-nl-cleanup nil))
       (mistty-run-command
        (insert "echo one two three four five six seven eight nine"))
       (mistty-wait-for-output :str "nine" :cursor-at-end t)
@@ -4789,7 +4789,7 @@
 
 (turtles-ert-deftest mistty-test-terminal-accepts-min-terminal-size (:instance 'mistty)
   (mistty-with-test-buffer (:selected t :term-size 'window)
-    (let ((mistty--inhibit-scrollback-cleaup nil))
+    (let ((mistty--inhibit-fake-nl-cleanup nil))
       (should (equal 8 mistty-min-terminal-width))
       (should (equal 4 mistty-min-terminal-height))
 
@@ -4799,7 +4799,7 @@
 
 (turtles-ert-deftest mistty-test-min-terminal-size (:instance 'mistty)
   (mistty-with-test-buffer (:selected t :term-size '(8 . 4))
-    (let ((mistty--inhibit-scrollback-cleaup nil))
+    (let ((mistty--inhibit-fake-nl-cleanup nil))
       (mistty-set-terminal-size 8 4)
 
       (mistty--send-string mistty-proc "echo hello, world")
@@ -5303,7 +5303,7 @@
                               (mistty-test-pos "$ echo one")))))))
 
 (ert-deftest mistty-test-recovery-despite-fakenl-cleanup ()
-  (let ((mistty--inhibit-scrollback-cleaup nil))
+  (let ((mistty--inhibit-fake-nl-cleanup nil))
     (mistty-with-test-buffer (:term-size '(20 . 20))
       ;; Insert text that'll be too long for the window, so term
       ;; inserts fake newlines, which later get cleaned up when the
@@ -5358,7 +5358,7 @@
 
 (ert-deftest mistty-mark-scrollines-for-recovery-gradual-scrollback ()
   (mistty-with-test-buffer (:term-size '(80 . 20))
-    (let ((mistty--inhibit-scrollback-cleaup nil))
+    (let ((mistty--inhibit-fake-nl-cleanup nil))
       ;; a very long line that will have to be broken up, to be
       ;; sure we count scrollines and not terminal lines
       (mistty-send-text "for i in $(seq 0 60); do echo -n '= '; done; echo")
@@ -5384,7 +5384,7 @@
 
 (ert-deftest mistty-mark-scrollines-for-recovery-quick-scrollback ()
   (mistty-with-test-buffer (:term-size '(80 . 20))
-    (let ((mistty--inhibit-scrollback-cleaup nil))
+    (let ((mistty--inhibit-fake-nl-cleanup nil))
       ;; a very long line that will have to be broken up, to be
       ;; sure we count scrollines and not terminal lines
       (mistty-send-text "for i in $(seq 0 60); do echo -n '= '; done; echo")
