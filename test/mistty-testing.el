@@ -756,7 +756,7 @@ This simulates what happens in the command loop."
 
 (defun mistty-test-line-at-scrolline (scrolline)
   (save-excursion
-    (let ((pos (mistty--scrolline-pos scrolline)))
+    (let ((pos (mistty--find-scrolline scrolline)))
       (unless pos
         (error "Scrolline at %s outside of range [%s, %s].<<EOF%sEOF"
                scrolline mistty--sync-marker-scrolline

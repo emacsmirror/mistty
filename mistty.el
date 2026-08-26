@@ -52,6 +52,7 @@
 (require 'mistty-util)
 (require 'mistty-log)
 (require 'mistty-queue)
+(require 'mistty-scrolline)
 (require 'mistty-undo)
 (require 'mistty-term-base)
 (require 'mistty-term-mod)
@@ -682,11 +683,6 @@ kept in sync.
 This variable is available in both the work buffer and the term
 buffer.")
 
-(defvar-local mistty--sync-marker-scrolline 0
-  "Define the scrolline assigned to `mistty-sync-marker'.
-
-This is updated at the same time as the marker, on both buffers.")
-
 (defvar-local mistty--active-prompt nil
   "A `mistty--prompt' struct of the active prompt.")
 
@@ -866,6 +862,7 @@ be ignored if coming from window size.")
   (add-hook 'completion-in-region-mode-hook #'mistty--detect-completion-in-region nil t)
 
   (setq mistty-sync-marker (point-max-marker))
+  (mistty--init-scrolline mistty-sync-marker 0)
   (setq mistty--sync-ov (make-overlay mistty-sync-marker (point-max) nil nil 'rear-advance))
   (setq mistty--ignored-overlays (list mistty--sync-ov))
   (setq-local beginning-of-defun-function #'mistty-beginning-of-defun)
@@ -1541,7 +1538,8 @@ kept."
           (mistty--term-scrolline-at-screen-start)))
        (screen-start-pos
         (mistty--with-live-buffer mistty-work-buffer
-          (mistty--scrolline-pos screen-start-scrolline))))
+          (mistty--find-scrolline screen-start-scrolline))))
+    (mistty-log "SCROLL to %s@%s" screen-start-scrolline screen-start-pos)
     (set-window-start win screen-start-pos 'noforce)))
 
 (defun mistty--clear-scrollback ()
@@ -1589,7 +1587,7 @@ triggers realignment with the work buffer when that happens."
     (funcall func)
     (mistty--with-live-buffer term-buffer
       (setq sync-scrolline (mistty--with-live-buffer mistty-work-buffer
-                             mistty--sync-marker-scrolline))
+                             mistty--scrolline-home-num))
       (setq home-scrolline (mistty--term-home-scrolline mistty--term))
       (cond
        ((< sync-scrolline home-scrolline)
@@ -1603,7 +1601,7 @@ triggers realignment with the work buffer when that happens."
                (catchup-end (marker-position home)))
           (mistty-log "Catchup [%s-%s] %s lines" catchup-start catchup-end catchup-lines)
           (move-marker mistty-sync-marker catchup-end)
-          (setq mistty--sync-marker-scrolline home-scrolline)
+          (setq mistty--scrolline-home-num home-scrolline)
           (mistty--with-live-buffer mistty-work-buffer
             (goto-char mistty-sync-marker)
             (let ((inhibit-modification-hooks t))
@@ -1613,7 +1611,7 @@ triggers realignment with the work buffer when that happens."
             (setq mistty--need-refresh t))))
        ((/= mistty-sync-marker old-sync-position)
         (mistty-log "Detected terminal change above sync mark, at scrolline %s"
-                    mistty--sync-marker-scrolline)
+                    mistty--scrolline-home-num)
         (mistty--realign-buffers)))
 
       ;; TODO: delete unnecessary scrollback data. Will it invalidate stored positions?
@@ -1646,11 +1644,6 @@ not yet, if it the work buffer is out of sync with
     (error "No process"))
   (mistty--from-pos-of (process-mark mistty-proc) mistty-term-buffer))
 
-(defun mistty--cursor-scrolline ()
-  "Return the scrolline position of the cursor."
-  (with-current-buffer mistty-term-buffer
-    (mistty--term-scrolline)))
-
 (defun mistty--from-pos-of (pos buffer-of-pos)
   "Return the local equivalent to POS defined in BUFFER-OF-POS."
   (+ mistty-sync-marker (with-current-buffer buffer-of-pos
@@ -1663,30 +1656,6 @@ Note that the position might not exist in `mistty-work-buffer',
 not yet, if it the work buffer is out of sync with
 `mistty-term-buffer'."
   (mistty--from-pos-of pos mistty-term-buffer))
-
-(defun mistty--scrolline (pos)
-  "Return the scrolline that correspond to POS.
-
-This works in both the sync and term buffers.
-
-To get the position of the cursor `mistty--cursor-scrolline' is more
-efficient that passing the result of `mistty-cursor' to this function."
-  (save-restriction
-    (+ mistty--sync-marker-scrolline (mistty--count-scrollines mistty-sync-marker pos))))
-
-(defun mistty--scrolline-pos (scrolline)
-  "Return the position of the beginning of SCROLLINE.
-
-Return nil if SCROLLINE is not below the sync marker or outside the
-region accessible from the current buffer.
-
-Work in the work or term buffer."
-  (save-restriction
-    (save-excursion
-      (when (>= scrolline mistty--sync-marker-scrolline)
-        (goto-char mistty-sync-marker)
-        (when (zerop (mistty--go-down-scrollines (- scrolline mistty--sync-marker-scrolline)))
-          (point))))))
 
 (defun mistty--needs-refresh ()
   "Let next call to `mistty--refresh' know there's something to refresh."
@@ -1759,7 +1728,7 @@ Also updates prompt and point."
          (when mistty--end-prompt
            (when-let* ((prompt mistty--active-prompt)
                        (scrolline (mistty--with-live-buffer mistty-term-buffer
-                                    (mistty--term-scrolline)))
+                                    (mistty--scrolline-at-point)))
                        (end-scrolline (mistty--prompt-end prompt)))
              (when (>= scrolline end-scrolline)
                (when (mistty--maybe-move-sync-mark end-scrolline)
@@ -1776,7 +1745,8 @@ Also updates prompt and point."
            (when (and (not (mistty--prompt-realized prompt))
                       (memq (mistty--prompt-source prompt) '(bracketed-paste osc133))
                       (null (mistty--prompt-end prompt)))
-             (when-let* ((prompt-beg (mistty--scrolline-pos (mistty--prompt-start prompt)))
+             (when-let* ((prompt-beg (mistty--find-scrolline
+                                      (mistty--prompt-start prompt)))
                         (cursor (when (process-live-p mistty-proc)
                                   (mistty-cursor))))
                (when (and (> cursor prompt-beg)
@@ -1784,8 +1754,7 @@ Also updates prompt and point."
                               (string-match mistty--prompt-regexp
                                             (save-excursion
                                               (goto-char cursor)
-                                              (mistty--scrolline-text-before-point
-                                               'no-properties)))))
+                                              (mistty--unwrapped-scrolline-text-to-point)))))
                  (mistty-log "Realized %s prompt #%s [%s-] @%s"
                              (mistty--prompt-source prompt)
                              (mistty--prompt-input-id prompt)
@@ -1846,7 +1815,7 @@ prompt and right prompts."
   (when-let* ((user-input-start (mistty--prompt-user-input-start prompt))
               (start-scrolline (car user-input-start))
               (start-chars (cdr user-input-start))
-              (bol (mistty--scrolline-pos start-scrolline))
+              (bol (mistty--find-scrolline start-scrolline))
               (end (mistty--eol bol))
               (start-pos (min end (+ bol start-chars))))
     (when (> start-pos bol)
@@ -2108,7 +2077,7 @@ If it is, it sets the sync marker at that position and call
 `mistty--set-sync-mark'.
 
 Return nil if SCROLLINE is not accessible on the work buffer."
-  (when-let* ((pos (mistty--scrolline-pos scrolline)))
+  (when-let* ((pos (mistty--find-scrolline scrolline)))
     (mistty--set-sync-mark pos scrolline)
 
     t))
@@ -2122,13 +2091,13 @@ terminal region.
 SCROLLINE is a scrolline that's currently visible on the terminal."
   (mistty--require-work-buffer)
   (mistty--with-live-buffer mistty-term-buffer
-    (let ((pos (mistty--term-scrolline-pos scrolline)))
+    (let ((pos (mistty--find-scrolline scrolline)))
       (unless pos
         (error "Scrolline %s not accessible in terminal buffer" scrolline))
       (set-marker mistty-sync-marker pos)))
 
   (unless (and (= sync-pos mistty-sync-marker)
-               (= scrolline mistty--sync-marker-scrolline))
+               (= scrolline mistty--scrolline-home-num))
     (mistty-log "MOVE SYNC MARKER %s to %s at scrolline %s"
                 (marker-position mistty-sync-marker)
                 sync-pos
@@ -2148,8 +2117,8 @@ SCROLLINE is a scrolline that's currently visible on the terminal."
       (move-marker mistty-sync-marker sync-pos)
       (when (< old-marker-position sync-pos)
         (mistty--prepare-for-scrollback
-         old-marker-position mistty--sync-marker-scrolline mistty-sync-marker)))
-    (setq mistty--sync-marker-scrolline scrolline)
+         old-marker-position mistty--scrolline-home-num mistty-sync-marker)))
+    (setq mistty--scrolline-home-num scrolline)
     (move-overlay mistty--sync-ov mistty-sync-marker (point-max))))
 
 (defun mistty--update-sync-marker-scrolline ()
@@ -2157,13 +2126,13 @@ SCROLLINE is a scrolline that's currently visible on the terminal."
   (mistty--require-work-buffer)
   (let (scrolline)
     (mistty--with-live-buffer mistty-term-buffer
-      (setq scrolline (mistty--term-scrolline-at mistty-sync-marker))
-      (setq mistty--sync-marker-scrolline scrolline)
+      (setq scrolline (mistty--scrolline-at mistty-sync-marker))
+      (setq mistty--scrolline-home-num scrolline)
       (mistty-log "SYNC MARKER AT SCROLLINE %s ON SCREEN %s-"
                   scrolline
                   (mistty--term-scrolline-at-screen-start)))
     (when scrolline
-      (setq mistty--sync-marker-scrolline scrolline))))
+      (setq mistty--scrolline-home-num scrolline))))
 
 (defun mistty--process-archived-prompts (limit-pos)
   "Remove any archived prompt above END and mark their regions.
@@ -2175,7 +2144,7 @@ This function cleans up `mistty--prompt-archive', removing prompts above END.
 It also marks the prompt region with the text property
 \\=`mistty-input-id so they can be detected by functions like
 `mistty-next-output'."
-  (let ((limit (mistty--scrolline limit-pos))
+  (let ((limit (mistty--scrolline-at limit-pos))
         (inhibit-modification-hooks t)
         (inhibit-read-only t))
     (when-let* ((prompt (mistty--prompt)))
@@ -2184,10 +2153,10 @@ It also marks the prompt region with the text property
         (setf (mistty--prompt) nil)))
     (dolist (prompt (mistty--prompt-archive))
       (when (mistty--prompt-realized prompt)
-        (when-let* ((prompt-beg (mistty--scrolline-pos
-                                (mistty--prompt-start prompt)))
+        (when-let* ((prompt-beg (mistty--find-scrolline
+                                 (mistty--prompt-start prompt)))
                    (prompt-end (when (mistty--prompt-end prompt)
-                                 (mistty--scrolline-pos
+                                 (mistty--find-scrolline
                                   (mistty--prompt-end prompt)))))
           (when (> prompt-end prompt-beg)
             (mistty-log "End %s prompt #%s. Mark input range: [%s-%s]/[%s-%s]"
@@ -2224,15 +2193,11 @@ just tend to cause issues."
   "Add text property \\='mistty-scrolline to scrollines from BEG to END.
 
 SCROLLINE is the scrolline at BEG."
-  (save-excursion
-    (goto-char beg)
-    (while (< (point) end)
-      (let ((bol (point)))
-        (while (and (search-forward "\n" end 'noerror)
-                    (get-text-property (match-beginning 0) 'term-line-wrap)))
-        (when (> (point) bol)
-          (put-text-property bol (point) 'mistty-scrolline scrolline))
-        (cl-incf scrolline)))))
+  (mistty--for-each-scrolline
+   (lambda (bol eol)
+     (put-text-property bol eol 'mistty-scrolline scrolline)
+     (cl-incf scrolline))
+   beg end))
 
 (defun mistty-send-string (str)
   "Send STR to the process."
@@ -3270,9 +3235,9 @@ ACTIVE-PROMPT-RANGES must be the output of
 
 Also accepts inactive (potential) prompts."
   (when-let* ((prompt (or mistty--active-prompt (mistty--prompt)))
-              (start-pos (mistty--scrolline-pos (mistty--prompt-start prompt)))
+              (start-pos (mistty--find-scrolline (mistty--prompt-start prompt)))
               (end-pos (or (when-let* ((end (mistty--prompt-end prompt)))
-                             (mistty--scrolline-pos end))
+                             (mistty--find-scrolline end))
                            (point-max))))
     (list start-pos end-pos end-pos)))
 
@@ -3501,7 +3466,7 @@ Might modify CS before allowing replay."
      ;; modifications after the new prompt.
      ((and (mistty--possible-prompt-p)
            (mistty--changeset-restrict
-            cs (mistty--scrolline-pos (mistty--prompt-start (mistty--prompt)))))
+            cs (mistty--find-scrolline (mistty--prompt-start (mistty--prompt)))))
       (mistty--realize-possible-prompt)
       (setq replay t))
 
@@ -3513,7 +3478,7 @@ Might modify CS before allowing replay."
               (mistty--bol (point-max) -5))
            (not mistty--need-refresh))
       (let* ((pos (mistty--bol (mistty--changeset-end cs) 3))
-             (scrolline (mistty--scrolline pos)))
+             (scrolline (mistty--scrolline-at pos)))
         (mistty--set-sync-mark pos scrolline)))
 
      (t ;; revert everything
@@ -3929,7 +3894,7 @@ prompts."
   "Return non-nil if `mistty--possible-prompt' is usable."
   (when-let* ((prompt (mistty--prompt))
               (scrolline (mistty--prompt-start prompt))
-              (start (mistty--scrolline-pos scrolline)))
+              (start (mistty--find-scrolline scrolline)))
     (when (and (eq 'regexp (mistty--prompt-source prompt))
                (not (mistty--prompt-realized prompt)))
       (let* ((content (mistty--prompt-text prompt))
@@ -3947,7 +3912,7 @@ prompts."
 (defun mistty--prompt-contains-pos (prompt pos)
   "Return non-nil if POS is inside PROMPT."
   (when-let* ((scrolline (mistty--prompt-start prompt))
-              (start (mistty--scrolline-pos scrolline))
+              (start (mistty--find-scrolline scrolline))
               (length (if-let* ((text (mistty--prompt-text prompt)))
                           (length text)
                         0))
@@ -4463,8 +4428,8 @@ and SCROLLINE."
                                           "" "\n")
                              (mistty--with-live-buffer mistty-term-buffer
                                (save-excursion
-                                 (goto-char (mistty--term-scrolline-pos scrolline))
-                                 (mistty--current-scrolline-text 'no-properties))))
+                                 (goto-char (mistty--find-scrolline scrolline))
+                                 (mistty--unwrapped-scrolline-text))))
                 (setq pos end-row))))
         (goto-char pos)
         (cl-incf scrolline))))

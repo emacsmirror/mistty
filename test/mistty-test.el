@@ -1995,7 +1995,7 @@
     (let ((prompt (mistty--prompt)))
       (should-not (null prompt))
       (should (equal 'regexp (mistty--prompt-source prompt)))
-      (should (equal (mistty--scrolline (mistty-test-goto "say something>> "))
+      (should (equal (mistty--scrolline-at (mistty-test-goto "say something>> "))
                      (mistty--prompt-start prompt)))
       (should (equal (1+ (mistty--prompt-start prompt))
                      (mistty--prompt-end prompt)))
@@ -6257,6 +6257,11 @@ function prompt {
 
 (turtles-ert-deftest mistty-test-scrolline-after-scrolling (:instance 'mistty)
   (mistty-with-test-buffer (:term-size '(79 . 22))
+    (defun mistty--cursor-scrolline ()
+      "Return the scrolline position of the cursor."
+      (with-current-buffer mistty-term-buffer
+        (mistty--scrolline-at (point))))
+
     (save-restriction
       (let (one two)
         (mistty--send-string
@@ -6313,11 +6318,16 @@ function prompt {
                  (mistty--send-string mistty-proc "q\n")))
 
         ;; Both are now invalid, as they're below the sync mark
-        (should (null (mistty--scrolline-pos one)))
-        (should (null (mistty--scrolline-pos two)))))))
+        (should (> mistty-sync-marker (mistty--find-scrolline one)))
+        (should (> mistty-sync-marker (mistty--find-scrolline two)))))))
 
 (turtles-ert-deftest mistty-test-scrolline-after-scrolling-long-lines (:instance 'mistty)
   (mistty-with-test-buffer (:term-size '(79 . 23))
+    (defun mistty--cursor-scrolline ()
+      "Return the scrolline position of the cursor."
+      (with-current-buffer mistty-term-buffer
+        (mistty--scrolline-at (point))))
+                           
     (save-restriction
       (let (one two)
         ;; Each line counts double, as it is split by term.

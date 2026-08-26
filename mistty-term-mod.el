@@ -24,6 +24,7 @@
 (require 'mistty-raw)
 (require 'mistty-term)
 (require 'mistty-accum)
+(require 'mistty-scrolline)
 (eval-when-compile
   (require 'mistty-accum-macros))
 
@@ -64,7 +65,7 @@
 
 (cl-defmethod mistty--term-home-scrolline ((term mistty--term-mod))
   (with-current-buffer (mistty--term-mod-buf term)
-    (or mistty-raw--home-scrolline 0)))
+    mistty--scrolline-home-num))
 
 (cl-defmethod mistty--term-lines ((term mistty--term-mod))
   (with-current-buffer (mistty--term-mod-buf term)

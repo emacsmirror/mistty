@@ -224,12 +224,6 @@ newline and return non-nil if that newline should be counted."
 
       (* sign count))))
 
-(defun mistty--count-scrollines (beg end)
-  "Count the number of scrollines between BEG and END."
-  (mistty--count-lines
-   beg end
-   #'mistty--real-nl-p))
-
 (defun mistty--fake-nl-p (&optional pos)
   "Check whether newline at POS is a fake newline.
 
@@ -241,103 +235,6 @@ POS defaults to the current point."
   (let ((pos (or pos (point))))
     (and (eq ?\n (char-after pos))
          (not (mistty--fake-nl-p pos)))))
-
-(defun mistty--go-down-scrollines (count)
-  "Go down COUNT scrollines from the current position.
-
-If COUNT is < 0, go up that many scrollines instead.
-
-Put point at the beginning of a scrolline.
-
-Go as far up as possible and return the remaining number of scrollines
-to go down to, normally 0."
-
-  ;; Go down, skipping fake newlines
-  (while (and (> count 0) (search-forward "\n" nil 'noerror))
-    (unless (mistty--fake-nl-p (match-beginning 0))
-      (cl-decf count)))
-
-  ;; Go up, skipping fake newlines
-  (while (and (< count 0) (search-backward "\n" nil 'noerror))
-    (unless (mistty--fake-nl-p (match-beginning 0))
-      (cl-incf count)))
-
-  (mistty--go-beginning-of-scrolline)
-
-  count)
-
-(defsubst mistty--go-up-scrollines (count)
-  "Go up COUNT scrollines, skipping fake newlines.
-
-Go down that many scrollines if COUNT is negative.
-
-Put point at the beginning of a scrolline.
-
-Go as far down as possible and return the number of scrollines to go up
-to, normally 0."
-  (- (mistty--go-down-scrollines (- count))))
-
-(defun mistty--go-beginning-of-scrolline ()
-  "Go to the beginning of the scrolline, skipping fake newlines."
-  (while (progn
-           (goto-char (pos-bol))
-           (and (> (point) (point-min))
-                (mistty--fake-nl-p (1- (point)))))
-    (goto-char (1- (point)))))
-
-(defsubst mistty--beginning-of-scrolline-pos ()
-  "Position of the beginning of the current scrolline."
-  (save-excursion
-    (mistty--go-beginning-of-scrolline)
-    (point)))
-
-(defun mistty--go-end-of-scrolline ()
-  "Go to the end of the scrolline, skipping fake newlines."
-  (while (progn
-           (goto-char (pos-eol))
-           (and (< (point) (point-max))
-                (mistty--fake-nl-p (point))))
-    (goto-char (1+ (point)))))
-
-(defsubst mistty--end-of-scrolline-pos ()
-  "Position of the end of the current scrolline."
-  (save-excursion
-    (mistty--go-end-of-scrolline)
-    (point)))
-
-(defun mistty--current-scrolline-text (&optional no-properties)
-  "Return the text of the scrolline at point as a string.
-
-Any fake newlines are stripped.
-
-If NO-PROPERTIES is non-nil, strip text properties from the returned
-string."
-  (mistty--text-without-fake-lines (mistty--beginning-of-scrolline-pos)
-                                   (mistty--end-of-scrolline-pos)
-                                   no-properties))
-
-(defun mistty--scrolline-text-before-point (&optional no-properties)
-  "Return text from the beginning of the scrolline to the current point.
-
-Any fake newlines are stripped.
-
-If NO-PROPERTIES is non-nil, strip text properties from the returned
-string."
-  (mistty--text-without-fake-lines (mistty--beginning-of-scrolline-pos)
-                                   (point)
-                                   no-properties))
-
-(defun mistty--text-without-fake-lines (beg end &optional no-properties)
-  "Return text between BEG and END without fake newlines.
-
-If NO-PROPERTIES is non-nil, remove text properties."
-  (let ((text (buffer-substring beg end)))
-    (with-temp-buffer
-      (insert text)
-      (mistty--remove-text-with-property 'term-line-wrap)
-      (if no-properties
-          (buffer-substring-no-properties (point-min) (point-max))
-        (buffer-string)))))
 
 (cl-defstruct (mistty--fifo
                (:constructor mistty--make-fifo ())

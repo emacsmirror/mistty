@@ -24,10 +24,10 @@
 (eval-when-compile
   (require 'cl-lib))
 
+(require 'mistty-scrolline)
 (require 'mistty-util)
 (require 'mistty-log)
 (require 'mistty-accum)
-
 (eval-when-compile
   (require 'mistty-accum-macros))
 (require 'mistty-kbd)
@@ -253,7 +253,7 @@ Detected prompts can be found in `mistty-prompt'."
        (let* ((prompt (mistty--prompt))
               (inhibit-read-only t)
               (inhibit-modification-hooks t)
-              (scrolline (mistty--term-scrolline)))
+              (scrolline (mistty--scrolline-at-point)))
          (when (or (null prompt)
                    (memq (mistty--prompt-source prompt) '(regexp prompt_sp))
                    (not (mistty--prompt-contains prompt scrolline)))
@@ -264,9 +264,12 @@ Detected prompts can be found in `mistty-prompt'."
                   (eq 'prompt_sp (mistty--prompt-source prompt))
                   (mistty--prompt-contains prompt scrolline)
                   (< (mistty--prompt-start prompt) scrolline))
-             (mistty-log "Reusing prompt_sp start %s" (mistty--prompt-start prompt))
-             (setq scrolline (mistty--prompt-start prompt))
-             (add-text-properties (mistty--term-scrolline-pos scrolline) (pos-eol) '(mistty-updated t))))
+             (when-let* ((start-scrolline (mistty--prompt-start prompt))
+                         (start-pos (mistty--find-scrolline start-scrolline)))
+               (mistty-log "Reusing prompt_sp start %s@%s" start-scrolline start-pos)
+               (setq scrolline start-scrolline)
+               (when (> (pos-eol) start-pos)
+                 (add-text-properties start-pos (pos-eol) '(mistty-updated t))))))
            (setq prompt (mistty--make-prompt 'bracketed-paste scrolline))
            (mistty-log "Detected %s prompt #%s [%s-]"
                        (mistty--prompt-source prompt)
@@ -287,8 +290,8 @@ Detected prompts can be found in `mistty-prompt'."
      (when mistty-bracketed-paste
        (when-let* ((prompt (mistty--prompt))
                   (scrolline (if (eq ?\n (char-before (point)))
-                                 (mistty--term-scrolline)
-                               (1+ (mistty--term-scrolline)))))
+                                 (mistty--scrolline-at-point)
+                               (1+ (mistty--scrolline-at-point)))))
          (when (and (eq 'bracketed-paste (mistty--prompt-source prompt))
                     (null (mistty--prompt-end prompt))
                     (> scrolline (mistty--prompt-start prompt)))
@@ -316,7 +319,7 @@ Detected prompts can be found in `mistty-prompt'."
                       (string-match "^ *$" (buffer-substring (pos-bol) (pos-eol)))))
          (let* ((prompt (mistty--prompt))
                 (pos (pos-bol))
-                (scrolline (mistty--term-scrolline-at pos)))
+                (scrolline (mistty--scrolline-at pos)))
 
            (when (get-text-property (pos-eol 0) 'term-line-wrap)
              (mistty-raw--cleanup-prompt-sp (point))
@@ -347,16 +350,16 @@ The return value is meant to be
 terminal buffer has been updated."
   (let ((last-nonempty-scrolline 0))
     (lambda ()
-      (let ((scrolline (mistty--term-scrolline)))
+      (let ((scrolline (mistty--scrolline-at-point)))
         ;; Only look at new lines
         (when (> scrolline
                  (prog1 last-nonempty-scrolline
                    ;; for next time
                    (setq last-nonempty-scrolline
-                         (mistty--term-scrolline-at
+                         (mistty--scrolline-at
                           (mistty--last-non-ws)))))
           (let ((cursor (point))
-                (bos (mistty--beginning-of-scrolline-pos))
+                (bos (mistty--scrolline-start-pos))
                 (prompt (mistty--prompt)))
             (when (and (or (null prompt)
                            (and (mistty--prompt-end prompt)
@@ -627,41 +630,12 @@ Detected dead spaces are marked with the text property \\='mistty-skip
 This is useful after a reset, where scrolline have been lost. Generally,
 this allows arbitrarily manipulating the alignment between the work and
 terminal buffers. To avoid issues with prompt locations, it should only
-be used to increase the value of `mistty-raw--home'."
-  (setq mistty-raw--home-scrolline scrolline))
-
-(defun mistty--term-scrolline ()
-  "Return the current scrolline.
-
-The scrolline count starts at the very beginning of the virtual buffer
-and doesn't change as the buffer scrolls up or the terminal size
-changes.
-
-Before using a scrolline, convert it to a screen row or point."
-  (mistty--term-scrolline-at (point)))
-
-(defun mistty--term-scrolline-at (pos)
-  "Return the scrolline at POS.
-
-The scrolline count starts at the very beginning of the virtual buffer
-and doesn't change as the buffer scrolls up or the terminal size
-changes.
-
-Before using a scrolline, convert it to a screen row or point."
-  (+ mistty-raw--home-scrolline (mistty--count-scrollines mistty-raw--home pos)))
-
-(defun mistty--term-scrolline-pos (scrolline)
-  "Return the char position of the beginning of SCROLLINE.
-
-Return nil if the row isn't reachable on the terminal."
-  (save-excursion
-    (goto-char mistty-raw--home)
-    (when (zerop (mistty--go-down-scrollines (- scrolline mistty-raw--home-scrolline)))
-      (point))))
+be used to increase the value of `mistty--scrolline-base'."
+  (setq mistty--scrolline-home-num scrolline))
 
 (defun mistty--term-scrolline-at-screen-start()
   "Scrolline at the top of the screen."
-  mistty-raw--home-scrolline)
+  mistty--scrolline-home-num)
 
 (defun mistty-osc133 (_ osc-seq)
   "Handle OSC 133 codes.
@@ -683,7 +657,7 @@ Everything else is ignored."
       (pcase command-char
         (?A ;; start a new command
          ;; Overwrite any other prompt source.
-         (let ((prompt (mistty--make-prompt 'osc133 (mistty--term-scrolline))))
+         (let ((prompt (mistty--make-prompt 'osc133 (mistty--scrolline-at-point))))
            (setf (mistty--prompt) prompt)
            (mistty-log "Detected %s prompt #%s [%s-]"
                        (mistty--prompt-source prompt)
@@ -693,7 +667,7 @@ Everything else is ignored."
         (?B ;; end of prompt/start of user input
          (when-let* ((prompt (mistty--prompt)))
            (setf (mistty--prompt-user-input-start prompt)
-                 (cons (mistty--term-scrolline)
+                 (cons (mistty--scrolline-at-point)
                        (mistty-raw--cursor-chars)))))
 
         (?C ;; start of command output
@@ -703,7 +677,7 @@ Everything else is ignored."
                          (mistty--prompt-source prompt)
                          (mistty--prompt-input-id prompt)
                          (mistty--prompt-start prompt))
-             (setf (mistty--prompt-end prompt) (mistty--term-scrolline)))))
+             (setf (mistty--prompt-end prompt) (mistty--scrolline-at-point)))))
 
         (?D ;; end of command (possible anytime after ?A)
          (when-let* ((prompt (mistty--prompt)))
@@ -713,7 +687,7 @@ Everything else is ignored."
                          (mistty--prompt-source prompt)
                          (mistty--prompt-input-id prompt)
                          (mistty--prompt-start prompt))
-             (setf (mistty--prompt-end prompt) (mistty--term-scrolline)))))))))
+             (setf (mistty--prompt-end prompt) (mistty--scrolline-at-point)))))))))
 
 (defun mistty-call-term-mode-hook ()
   "Call the functions registered to `term-mode-hook'.

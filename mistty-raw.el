@@ -25,6 +25,7 @@
 (require 'mistty-util)
 (require 'mistty-kbd)
 (require 'mistty-log)
+(require 'mistty-scrolline)
 (eval-when-compile
   (require 'cl-lib))
 
@@ -57,9 +58,6 @@ operation.")
 (defvar-local mistty-raw--home nil
   "Marker that tracks the position of the top of the screen, following
 scrollback lines.")
-
-(defvar-local mistty-raw--home-scrolline 0
-  "Scrolline that correspond to `mistty-raw--home'")
 
 (defvar-local mistty-raw-columns nil
   "Width of the terminal, in columns. Set by `mistty-raw-resize'.")
@@ -112,7 +110,7 @@ process."
     (setq mistty-raw--cursor (copy-marker (point-min)))
     (setq mistty-raw--home (copy-marker (point-min)))
     (set-marker-insertion-type mistty-raw--home nil)
-    (setq mistty-raw--home-scrolline 0)
+    (mistty--init-scrolline mistty-raw--home 0)
     (setq mistty-raw-columns width)
     (setq mistty-raw-lines height)
     (mistty-log "MAKE VTERM %s lines, %s colums" height width)
@@ -235,10 +233,10 @@ The current buffer must have a virtual terminal associated."
   (when-let* ((vterm mistty-raw--vterm))
     (save-excursion
       (goto-char mistty-raw--home)
-      (cl-incf mistty-raw--home-scrolline (mistty-mod-write-scrollback vterm))
+      (cl-incf mistty--scrolline-home-num (mistty-mod-write-scrollback vterm))
       (set-marker mistty-raw--home (point))
       (mistty-mod-render-damaged vterm (point) (point-max) mistty-raw--cursor)
-      (mistty-log "RENDER @%s" mistty-raw--home-scrolline)
+      (mistty-log "RENDER @%s" mistty--scrolline-home-num)
       (when-let ((proc (get-buffer-process (current-buffer))))
         (when (process-live-p proc)
           (set-marker (process-mark proc) mistty-raw--cursor))))
