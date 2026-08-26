@@ -184,10 +184,10 @@ If END < BEG, return a negative number."
   "Call FUNC for each scroll for each scrolline from BEG to END.
 
 FUNC is called for each scrolline with two arguments, the beginning and
-the end position of the scrolline.
+the end position of the scrolline, including the final newline, if any.
 
-Empty lines are reported. If the buffer ends with a newline, no final
-empty line is reported.
+Empty lines are reported as a single newline. If the buffer ends with a
+newline, no final empty line is reported.
 
 If BEG and END are in the middle of a line, the first line starts at BEG
 and the last one ends at END; check with `mistty--scrolline-start-pos'
@@ -200,10 +200,10 @@ case."
         (while (> end (point))
           (let ((pos (point)))
             (mistty--goto-scrolline-end)
+            (when (eq ?\n (char-after))
+              (goto-char (1+ (point))))
             (save-excursion
-              (funcall func pos (min end (point)))))
-          ;; skip the newline at the end
-          (forward-char)))))
+              (funcall func pos (min end (point)))))))))
 
 (defun mistty--unwrap-lines (beg end)
   "Remove fake newlines from the region BEG to END.
@@ -223,6 +223,24 @@ Return the number of fake newlines that were removed."
             (cl-incf removed)))))
 
     removed))
+
+(defun mistty--unwrapped-scrolline-text ()
+  "Return the text within the current scrolline.
+
+The line wrap are removed from the returned string."
+  (string-replace "\n" ""
+                  (buffer-substring-no-properties
+                   (mistty--scrolline-start-pos)
+                   (mistty--scrolline-end-pos))))
+
+(defun mistty--unwrapped-scrolline-text-to-point ()
+  "Return the text before point within the current scrolline.
+
+The line wrap are removed from the returned string."
+  (string-replace "\n" ""
+                  (buffer-substring-no-properties
+                   (mistty--scrolline-start-pos)
+                   (point))))
 
 (provide 'mistty-scrolline)
 

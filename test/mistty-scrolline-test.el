@@ -701,10 +701,24 @@
       (mistty--for-each-scrolline
        (lambda (beg end)
          (push (buffer-substring-no-properties beg end) capture)))
-      (should (equal (list "abc\ndef\nghi"
-                           ""
-                           "jkl\nmno\npqr"
-                           "stu\nvwx\nyz")
+      (should (equal (list "abc\ndef\nghi\n"
+                           "\n"
+                           "jkl\nmno\npqr\n"
+                           "stu\nvwx\nyz\n")
+                     (nreverse capture))))))
+
+(ert-deftest mistty-scrolline-for-each-no-final-nl ()
+  (ert-with-test-buffer ()
+    (insert "abc" fakenl "def" fakenl "ghi\n")
+    (insert "jkl" fakenl "mno" fakenl "pqr")
+    (goto-char (point-min))
+
+    (let ((capture (list)))
+      (mistty--for-each-scrolline
+       (lambda (beg end)
+         (push (buffer-substring-no-properties beg end) capture)))
+      (should (equal (list "abc\ndef\nghi\n"
+                           "jkl\nmno\npqr")
                      (nreverse capture))))))
 
 (ert-deftest mistty-scrolline-for-each-partial ()
@@ -724,9 +738,22 @@
        (save-excursion
          (search-forward "w")
          (match-beginning 0)))
-      (should (equal (list "ef\nghi"
-                           "jkl\nmno\npqr"
+      (should (equal (list "ef\nghi\n"
+                           "jkl\nmno\npqr\n"
                            "stu\nv")
                      (nreverse capture))))))
+
+(ert-deftest mistty-unwrapped-scrolline-text ()
+  (ert-with-test-buffer ()
+    (insert "abc" fakenl "def" fakenl "ghi\n")
+    (insert "jkl" fakenl "mno" fakenl "pqr\n")
+    (insert "stu" fakenl "vwx" fakenl "yz\n")
+    (goto-char (point-min))
+
+    (search-forward "n")
+    (should
+     (equal "jklmnopqr" (mistty--unwrapped-scrolline-text)))
+    (should
+     (equal "jklmn" (mistty--unwrapped-scrolline-text-to-point)))))
 
 ;;; mistty-scrolline-test.el ends here
