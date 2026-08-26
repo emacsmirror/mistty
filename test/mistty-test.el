@@ -472,8 +472,16 @@
     (let ((loop-command "for i in {0..49}; do echo line $i; done"))
       (mistty-send-text loop-command)
       (should (equal (concat "$ " loop-command "<>") (mistty-test-content :show (point))))
-      (should (equal (mapconcat (lambda (i) (format "line %d" i)) (number-sequence 0 49) "\n")
-                     (mistty-send-and-capture-command-output))))))
+      (mistty-send-and-wait-for-prompt)
+      (should
+       (equal
+        (concat
+         "$ for i in {0..49}; do echo line $i; done\n"
+         (mapconcat (lambda (i)
+                      (format "line %d" i))
+                    (number-sequence 0 49)
+                    "\n"))
+        (mistty-test-content :strip-last-prompt t))))))
 
 (ert-deftest mistty-test-scroll-with-many-commands ()
   (mistty-with-test-buffer ()
@@ -2201,7 +2209,15 @@
          (mistty-test-goto "ls file.")
          (delete-region (point) (1- (match-end 0)))
          (insert "echo ok"))
-        (should (equal "ok." (mistty-send-and-capture-command-output)))))))
+        (let ((start (pos-bol)))
+          (mistty-send-and-wait-for-prompt)
+          (should
+           (equal
+            (concat
+             "$ echo ok.\n"
+             "ok.")
+            (mistty-test-content
+             :start start :strip-last-prompt t))))))))
 
 (ert-deftest mistty-test-nobracketed-paste-edit-before-prompt ()
   (mistty-with-test-buffer (:shell bash)
