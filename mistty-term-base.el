@@ -40,10 +40,13 @@ allows getting hold of the buffer and process.")
 (cl-defgeneric mistty--term-proc (term)
   "Return the terminal process.")
 
-(cl-defgeneric mistty--term-home-marker (term)
+(cl-defgeneric mistty--term-screen-top-pos (term)
   "Return the marker for the start of the terminal.
 
 The marker is only valid in the terminal buffer.")
+
+(cl-defgeneric mistty--term-screen-top-scrolline (term)
+  "Return the scrolline for he start of the terminal.")
 
 (cl-defgeneric mistty--term-lines (term)
   "Return the height of the terminal, in lines.")

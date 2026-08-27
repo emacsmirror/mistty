@@ -997,7 +997,7 @@ window."
       (setq mistty-work-buffer work-buffer)
       (setq mistty-term-buffer term-buffer)
       (unless mistty-sync-marker
-        (setq mistty-sync-marker (copy-marker (mistty--term-home-marker term))))
+        (setq mistty-sync-marker (copy-marker (mistty--term-screen-top-pos term))))
       (mistty--term-autoresize mistty--term nil)
       (mistty--term-setup-buffer term nil))
 
@@ -1599,13 +1599,13 @@ triggers realignment with the work buffer when that happens."
     (mistty--with-live-buffer term-buffer
       (setq sync-scrolline (mistty--with-live-buffer mistty-work-buffer
                              mistty--scrolline-home-num))
-      (setq home-scrolline (mistty--term-home-scrolline mistty--term))
+      (setq home-scrolline (mistty--term-screen-top-scrolline mistty--term))
       (cond
        ((< sync-scrolline home-scrolline)
         (mistty-log "Detected rapid scroll (sync @%s, home now @%s). Catching up."
                     sync-scrolline home-scrolline)
         (let* ((catchup-lines (- home-scrolline sync-scrolline))
-               (home (mistty--term-home-marker mistty--term))
+               (home (mistty--term-screen-top-pos mistty--term))
                (catchup-start (save-excursion
                                 (goto-char home)
                                 (pos-bol (1+ (- catchup-lines)))))
@@ -1632,7 +1632,7 @@ triggers realignment with the work buffer when that happens."
 This function removes excessive scrollback data. It will still leave a
 few lines of scrollback to help recovery."
   (mistty--require-term-buffer)
-  (let ((home-marker (mistty--term-home-marker mistty--term)))
+  (let ((home-marker (mistty--term-screen-top-pos mistty--term)))
     (when (>= mistty-sync-marker home-marker)
       (let ((chars (- home-marker (point-min))))
         (when (>= chars 1000)
@@ -1812,7 +1812,7 @@ Also updates prompt and point."
          (unless mistty--active-prompt
            (mistty--with-live-buffer mistty-term-buffer
              ;; Next time, only sync the visible portion of the terminal.
-             (when (< mistty-sync-marker (mistty--term-home-marker mistty--term))
+             (when (< mistty-sync-marker (mistty--term-screen-top-pos mistty--term))
                (let ((scrolline (mistty--term-scrolline-at-screen-start)))
                  (mistty--with-live-buffer mistty-work-buffer
                    (mistty--maybe-move-sync-mark scrolline))))))

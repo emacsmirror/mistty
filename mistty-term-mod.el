@@ -59,11 +59,11 @@
 (cl-defmethod mistty--term-proc ((term mistty--term-mod))
   (mistty--term-mod-proc term))
 
-(cl-defmethod mistty--term-home-marker ((term mistty--term-mod))
+(cl-defmethod mistty--term-screen-top-pos ((term mistty--term-mod))
   (with-current-buffer (mistty--term-mod-buf term)
     mistty-raw--home))
 
-(cl-defmethod mistty--term-home-scrolline ((term mistty--term-mod))
+(cl-defmethod mistty--term-screen-top-scrolline ((term mistty--term-mod))
   (with-current-buffer (mistty--term-mod-buf term)
     mistty--scrolline-home-num))
 

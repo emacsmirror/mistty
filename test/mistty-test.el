@@ -7147,12 +7147,12 @@ precmd_functions+=(prompt_header)
      (> (mistty--count-lines
          (point-min)
          (mistty--find-scrolline
-          (mistty--term-home-scrolline mistty--term)))
+          (mistty--term-screen-top-scrolline mistty--term)))
         30))
     ;; but the term buffer kept only a few
     (with-current-buffer mistty-term-buffer
       (should
        (< (mistty--count-lines
            (point-min)
-           (mistty--term-home-marker mistty--term))
+           (mistty--term-screen-top-pos mistty--term))
           3)))))
