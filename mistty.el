@@ -1468,9 +1468,18 @@ terminal region of WORK-BUFFER in sync with TERM-BUFFER."
      (mistty--with-live-buffer work-buffer
        (mistty--cancel-timeout mistty--queue)
        (mistty--refresh)
-       (mistty--maybe-truncate-when-idle)
        (mistty--dequeue mistty--queue 'intermediate)
        (mistty--dequeue-with-timer mistty--queue 'stable))))
+
+  (when (> 0 mistty-buffer-maximum-size)
+    (mistty--accum-add-post-processor accum
+     (lambda ()
+       (mistty--maybe-truncate-when-idle))))
+
+  (mistty--accum-add-post-processor accum
+   (lambda ()
+     (mistty--with-live-buffer term-buffer
+       (mistty--maybe-truncate-term-buffer))))
 
   (mistty--accum-add-processor
    accum '(seq ESC ?c) ;; Reset (incl. clear scrollback)
@@ -1612,14 +1621,26 @@ triggers realignment with the work buffer when that happens."
        ((/= mistty-sync-marker old-sync-position)
         (mistty-log "Detected terminal change above sync mark, at scrolline %s"
                     mistty--scrolline-home-num)
-        (mistty--realign-buffers)))
+        (mistty--realign-buffers))))))
 
-      ;; TODO: delete unnecessary scrollback data. Will it invalidate stored positions?
+(defun mistty--maybe-truncate-term-buffer ()
+  "Truncate scrollback area in term buffer.
 
-      ;; We don't need scrollback on term anymore
-      ;; (when (> home-marker (point))
-      ;;   (delete-region (point-min) home-marker))
-      )))
+This function removes excessive scrollback data. It will still leave a
+few lines of scrollback to help recovery."
+  (mistty--require-term-buffer)
+  (let ((home-marker (mistty--term-home-marker mistty--term)))
+    (when (>= mistty-sync-marker home-marker)
+      (let ((chars (- home-marker (point-min))))
+        (when (>= chars 1000)
+          (save-excursion
+            (goto-char (- home-marker 200))
+            (goto-char (pos-bol))
+            (unless (bobp)
+              (mistty-log "[term] truncate %s chars of scrollback, leaving %s."
+                          (- (point) (point-min))
+                          (- home-marker (point)))
+              (delete-region (point-min) (point)))))))))
 
 (defun mistty-goto-cursor ()
   "Move the point to the terminal's cursor."

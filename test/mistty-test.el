@@ -7090,3 +7090,22 @@ precmd_functions+=(prompt_header)
                      "line3\n"
                      "[\n]")
              (mistty-test-content :trim nil :show-property '(mistty-scrolline 14))))))
+
+(ert-deftest mistty-truncate-term-buffer ()
+  (mistty-with-test-buffer (:term-size '(125 . 25))
+    (mistty-send-text "for i in $(seq 0 55); do echo $(head -c 100 </dev/zero| tr '\\0' '-'); done")
+    (mistty-send-and-wait-for-prompt)
+    ;; there are about 30 lines above screen top on the work buffer
+    (should
+     (> (mistty--count-lines
+         (point-min)
+         (mistty--find-scrolline
+          (mistty--term-home-scrolline mistty--term)))
+        30))
+    ;; but the term buffer kept only a few
+    (with-current-buffer mistty-term-buffer
+      (should
+       (< (mistty--count-lines
+           (point-min)
+           (mistty--term-home-marker mistty--term))
+          3)))))
