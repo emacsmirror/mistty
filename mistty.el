@@ -968,8 +968,10 @@ window."
                                    (window-screen-lines))))))
     (mistty--attach
      (mistty--create-term 'mod
-                          (concat " mistty tty " (buffer-name)) command args
-                          width height)))
+                          (concat " mistty tty " (buffer-name))
+                          (cons command args)
+                          :width width
+                          :height height)))
   (mistty--wrap-capf-functions)
   (mistty--update-mode-lines)
   (run-hooks 'mistty-after-process-start-hook))

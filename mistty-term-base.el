@@ -21,7 +21,7 @@
 
 (require 'cl-lib)
 
-(cl-defgeneric mistty--create-term (type name program args width height)
+(cl-defgeneric mistty--create-term (type name command &key width height)
   "Create a new term buffer of the given TYPE with name NAME.
 
 The buffer runs PROGRAM with the given ARGS.

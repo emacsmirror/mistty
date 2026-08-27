@@ -33,8 +33,10 @@
                (:copier nil))
   proc buf)
 
-(cl-defmethod mistty--create-term ((_type (eql 'mod)) name program args width height)
-  (let ((term-buffer (generate-new-buffer name 'inhibit-buffer-hooks)))
+(cl-defmethod mistty--create-term ((_type (eql 'mod)) name command &key width height)
+  (let ((term-buffer (generate-new-buffer name 'inhibit-buffer-hooks))
+        (program (car command))
+        (args (cdr command)))
     (with-current-buffer term-buffer
       (mistty-raw-mode)
       (setq-local mistty--prompt-cell (mistty--make-prompt-cell))
