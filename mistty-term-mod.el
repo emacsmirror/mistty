@@ -94,26 +94,54 @@
 
 (cl-defmethod mistty--term-setup-buffer ((_term mistty--term-mod) &optional _fullscreen))
 
-(cl-defmethod mistty--term-setup-accum ((_term mistty--term-mod) accum enter-fullscreen-func)
+(cl-defmethod mistty--term-setup-accum  ((term mistty--term-mod) accum
+                                         &key enter-fullscreen active-prompt after-clear-screen)
   (mistty--add-prompt-detection accum)
   (mistty--add-osc-detection accum)
+  (unless enter-fullscreen (error ":enter-fullscreen required"))
   (mistty--accum-add-processor
    accum
    '(seq CSI (or "47" "?47" "?1047" "?1049") ?h)
    (lambda (ctx str)
      (mistty--accum-ctx-flush ctx)
-     (funcall enter-fullscreen-func)
-     (mistty--accum-ctx-push-down ctx str))))
+     (funcall enter-fullscreen)
+     (mistty--accum-ctx-push-down ctx str)))
 
-(cl-defmethod mistty--term-setup-accum-for-fullscreen ((_term mistty--term-mod) accum leave-fullscreen-func)
+  (unless active-prompt (error ":active-prompt required"))
+  (mistty--accum-add-processor
+   accum '(seq CSI ?2 ?J) ;; Clear screen
+   (lambda (ctx str)
+     (mistty--accum-ctx-flush ctx)
+     (if (when-let* ((p (funcall active-prompt)))
+           (equal
+            (mistty--prompt-start p)
+            (mistty--with-live-buffer (mistty--term-mod-buf term)
+              mistty--scrolline-home-num)))
+         (progn
+           (mistty-log "CLEAR PROMPT (%S)" str)
+           (mistty--accum-ctx-push-down
+            ctx
+            ;; This is equivalent to CSI 2J, but doesn't trigger
+            ;; alacritty's storing the current screen content into
+            ;; scrollback.
+            "\e[1J\e[0J"))
+       (mistty-log "CLEAR SCREEN (%S)" str)
+       (mistty--accum-ctx-push-down ctx str)
+       (mistty--accum-ctx-flush ctx)
+       (when after-clear-screen
+         (funcall after-clear-screen))))))
+
+(cl-defmethod mistty--term-setup-accum-for-fullscreen ((_term mistty--term-mod) accum
+                                                       &key leave-fullscreen)
   (mistty--add-osc-detection accum)
+  (unless leave-fullscreen (error ":leave-fullscreen required"))
   (mistty--accum-add-processor
    accum
    '(seq CSI (or "47" "?47" "?1047" "?1049") ?l)
    (lambda (ctx str)
      (mistty--accum-ctx-push-down ctx str)
      (mistty--accum-ctx-flush ctx)
-     (funcall leave-fullscreen-func))))
+     (funcall leave-fullscreen))))
 
 (provide 'mistty-term-mod)
 
