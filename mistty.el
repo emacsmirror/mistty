@@ -1471,12 +1471,14 @@ terminal region of WORK-BUFFER in sync with TERM-BUFFER."
        (mistty--dequeue mistty--queue 'intermediate)
        (mistty--dequeue-with-timer mistty--queue 'stable))))
 
-  (when (> 0 mistty-buffer-maximum-size)
-    (mistty--accum-add-post-processor accum
-     (lambda ()
+  (mistty--accum-add-post-processor
+   accum
+   (lambda ()
+     (mistty--with-live-buffer work-buffer
        (mistty--maybe-truncate-when-idle))))
 
-  (mistty--accum-add-post-processor accum
+  (mistty--accum-add-post-processor
+   accum
    (lambda ()
      (mistty--with-live-buffer term-buffer
        (mistty--maybe-truncate-term-buffer))))
