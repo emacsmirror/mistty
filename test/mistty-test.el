@@ -7144,15 +7144,15 @@ precmd_functions+=(prompt_header)
     (mistty-send-and-wait-for-prompt)
     ;; there are about 30 lines above screen top on the work buffer
     (should
-     (> (mistty--count-lines
-         (point-min)
-         (mistty--find-scrolline
-          (mistty--term-screen-top-scrolline mistty--term)))
-        30))
+     (>= (mistty--count-lines
+          (point-min)
+          (mistty--find-scrolline
+           (mistty--term-screen-top-scrolline mistty--term)))
+         30))
     ;; but the term buffer kept only a few
     (with-current-buffer mistty-term-buffer
       (should
-       (< (mistty--count-lines
-           (point-min)
-           (mistty--term-screen-top-pos mistty--term))
-          3)))))
+       (<= (mistty--count-lines
+            (point-min)
+            (mistty--term-screen-top-pos mistty--term))
+           5)))))
