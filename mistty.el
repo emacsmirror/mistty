@@ -1614,12 +1614,13 @@ triggers realignment with the work buffer when that happens."
           (move-marker mistty-sync-marker catchup-end)
           (setq mistty--scrolline-home-num home-scrolline)
           (mistty--with-live-buffer mistty-work-buffer
-            (goto-char mistty-sync-marker)
-            (let ((inhibit-modification-hooks t))
-              (delete-region mistty-sync-marker (point-max))
-              (insert-buffer-substring mistty-term-buffer catchup-start catchup-end))
-            (mistty--set-sync-mark (point-max) home-scrolline)
-            (setq mistty--need-refresh t))))
+            (let ((screen-top (save-excursion
+                                (goto-char mistty-sync-marker)
+                                (let ((inhibit-modification-hooks t))
+                                  (insert-buffer-substring
+                                   mistty-term-buffer catchup-start catchup-end))
+                                (point))))
+              (mistty--set-sync-mark screen-top home-scrolline)))))
        ((/= mistty-sync-marker old-sync-position)
         (mistty-log "Detected terminal change above sync mark, at scrolline %s"
                     mistty--scrolline-home-num)

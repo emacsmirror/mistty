@@ -1377,6 +1377,53 @@
     (mistty-next-output 1)
     (should (equal "two" (mistty-test-content :start (pos-bol) :end (pos-eol))))))
 
+(ert-deftest mistty-test-catchup ()
+  (let ((count 200))
+    (mistty-with-test-buffer ()
+      (ert-with-temp-file tempfile
+        (with-temp-file tempfile
+          (dotimes (n count)
+            (insert (format "line %d\n" n))))
+        (let ((cmd (format "cat '%s'" tempfile)))
+          ;; the output is meant to force mistty to catchup quickly,
+          ;; so lines go directly into scrollback.r
+          (mistty--send-string mistty-proc cmd)
+          (mistty-send-and-wait-for-prompt
+           :send (lambda ()
+                   (mistty-run-command
+                    (mistty-send-command))))
+
+          ;; There shouldn't be any missing lines.
+          (should
+           (equal
+            (concat
+             "$ " cmd "\n"
+             (mapconcat (lambda (i)
+                          (format "line %d\n" i))
+                        (number-sequence 0 (1- count)))
+             "<2>$ <><1>")
+            (mistty-test-content
+             :show (list
+                    ;; <>:
+                    (point)
+                    ;; <1>:
+                    (mistty-cursor)
+                    ;; <2>:
+                    mistty-sync-marker))))
+
+          ;; The scrolline area must have been processed and the
+          ;; scrolline text properties set.
+          (goto-char (point-min))
+          (let ((scrolline 0))
+            (while (< (point) mistty-sync-marker)
+              (should (equal scrolline (get-text-property (point) 'mistty-scrolline)))
+              (should-not (text-property-not-all (point) (pos-eol) 'mistty-scrolline scrolline))
+              (mistty-log
+               "scrolline %s ok: >>%s<<"
+               scrolline (buffer-substring-no-properties (point) (pos-eol)))
+              (cl-incf scrolline)
+              (forward-line 1))))))))
+
 ;; https://github.com/szermatt/mistty/issues/33
 (ert-deftest mistty-test-previous-output-zsh ()
   (mistty-with-test-buffer (:shell zsh)
