@@ -3299,7 +3299,7 @@ Return the prompt range that was accepted or nil."
 
 (defun mistty--post-command ()
   "Function called from the `post-command-hook' in `mistty-mode' buffers."
-  (with-demoted-errors "mistty: post-command error %S"
+  (mistty-with-errors-logged "post-command"
     (mistty--post-command-for-undo)
 
     (ignore-errors
@@ -3431,34 +3431,35 @@ This is the body of `mistty--post-command', which replays any
 modifications or cursor movement executed during the command. It
 is run in an idle timer to avoid failures inside of the
 post-command hook."
-  (mistty--with-live-buffer buf
-    (mistty--detect-foreign-overlays 'noschedule)
-    (mistty--inhibit-undo
-     (save-restriction
-       (widen)
-       (when (and (not mistty--inhibit)
-                  (process-live-p mistty-proc)
-                  (buffer-live-p mistty-term-buffer))
-         (let ((cs (mistty--active-changeset))
-               (replay nil))
-           (when cs
-             (if (setq replay (mistty--should-replay cs))
-                 ;; Give changeset over to the interaction to replay.
-                 (let ((last-interaction (mistty--queue-last-interact mistty--queue)))
-                   (unless (and last-interaction
-                                (eq 'replay (mistty--interact-type last-interaction))
-                                ;; append to existing interaction
-                                (mistty--call-interact last-interaction 'replay cs))
-                     (mistty--enqueue mistty--queue (mistty--replay-interaction cs))))
+  (mistty-with-errors-logged "post-command-1"
+    (mistty--with-live-buffer buf
+      (mistty--detect-foreign-overlays 'noschedule)
+      (mistty--inhibit-undo
+       (save-restriction
+         (widen)
+         (when (and (not mistty--inhibit)
+                    (process-live-p mistty-proc)
+                    (buffer-live-p mistty-term-buffer))
+           (let ((cs (mistty--active-changeset))
+                 (replay nil))
+             (when cs
+               (if (setq replay (mistty--should-replay cs))
+                   ;; Give changeset over to the interaction to replay.
+                   (let ((last-interaction (mistty--queue-last-interact mistty--queue)))
+                     (unless (and last-interaction
+                                  (eq 'replay (mistty--interact-type last-interaction))
+                                  ;; append to existing interaction
+                                  (mistty--call-interact last-interaction 'replay cs))
+                       (mistty--enqueue mistty--queue (mistty--replay-interaction cs))))
 
-               ;; Abandon changeset
-               (mistty--release-changeset cs)
-               (mistty--refresh-after-changeset)))
+                 ;; Abandon changeset
+                 (mistty--release-changeset cs)
+                 (mistty--refresh-after-changeset)))
 
-           (when (and (not replay) (not mistty--forbid-edit) point-moved (>= (point) mistty-sync-marker))
-             (mistty--enqueue mistty--queue (mistty--cursor-to-point-interaction)))
+             (when (and (not replay) (not mistty--forbid-edit) point-moved (>= (point) mistty-sync-marker))
+               (mistty--enqueue mistty--queue (mistty--cursor-to-point-interaction)))
 
-           (mistty--refresh)))))))
+             (mistty--refresh))))))))
 
 (defun mistty--should-replay (cs)
   "Decide whether CS should be replayed.
