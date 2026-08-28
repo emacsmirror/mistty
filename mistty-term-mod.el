@@ -1,4 +1,4 @@
-;;; mistty-term-mod.el --- Use term.el to create the terminal -*- lexical-binding: t -*-
+;;; mistty-term-mod.el --- Use module to create the terminal -*- lexical-binding: t -*-
 
 ;; This program is free software: you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -69,6 +69,10 @@
   (with-current-buffer (mistty--term-mod-buf term)
     mistty--scrolline-home-num))
 
+(cl-defmethod mistty--term-alt-screen-p ((term mistty--term-mod))
+  (with-current-buffer (mistty--term-mod-buf term)
+    (mistty-raw--alt-screen-p)))
+
 (cl-defmethod mistty--term-lines ((term mistty--term-mod))
   (with-current-buffer (mistty--term-mod-buf term)
     mistty-raw-lines))
@@ -76,6 +80,10 @@
 (cl-defmethod mistty--term-columns ((term mistty--term-mod))
   (with-current-buffer (mistty--term-mod-buf term)
     mistty-raw-columns))
+
+(cl-defmethod mistty--term-cursor-linecol ((term mistty--term-mod))
+  (with-current-buffer (mistty--term-mod-buf term)
+    (mistty-raw--cursor-linecol)))
 
 (cl-defmethod mistty--term-sentinel-func ((_term mistty--term-mod))
   #'mistty-raw--sentinel)
@@ -96,8 +104,8 @@
 
 (cl-defmethod mistty--term-setup-accum  ((term mistty--term-mod) accum
                                          &key enter-fullscreen active-prompt after-clear-screen)
-  (mistty--add-prompt-detection accum)
-  (mistty--add-osc-detection accum)
+  (mistty--add-prompt-detection accum term)
+  (mistty--term-mod-add-osc-detection accum term)
   (unless enter-fullscreen (error ":enter-fullscreen required"))
   (mistty--accum-add-processor
    accum
@@ -131,9 +139,9 @@
        (when after-clear-screen
          (funcall after-clear-screen))))))
 
-(cl-defmethod mistty--term-setup-accum-for-fullscreen ((_term mistty--term-mod) accum
+(cl-defmethod mistty--term-setup-accum-for-fullscreen ((term mistty--term-mod) accum
                                                        &key leave-fullscreen)
-  (mistty--add-osc-detection accum)
+  (mistty--term-mod-add-osc-detection accum term)
   (unless leave-fullscreen (error ":leave-fullscreen required"))
   (mistty--accum-add-processor
    accum
@@ -142,6 +150,36 @@
      (mistty--accum-ctx-push-down ctx str)
      (mistty--accum-ctx-flush ctx)
      (funcall leave-fullscreen))))
+
+(cl-defmethod mistty--term-clear-to-eol ((_term mistty--term-mod) pos)
+  (mistty-raw--clear-to-eol pos))
+
+(cl-defmethod mistty--term-cleanup-prompt-sp ((_term mistty--term-mod) pos)
+  (mistty-raw--cleanup-prompt-sp pos))
+
+(cl-defmethod mistty--term-postprocess-changed ((term mistty--term-mod))
+  (with-current-buffer (mistty--term-mod-buf term)
+    (when-let* ((change-start
+                 (text-property-any (point-min) (point-max) 'mistty-updated t)))
+      ;; TODO: use change-start instead of (point-min); this whole
+      ;; business with mistty-updated is just silly otherwise.
+      (mistty--term-postprocess (point-min) mistty-raw-columns)
+      (remove-text-properties change-start (point-max) '(mistty-updated t)))))
+
+(defun mistty--term-mod-add-osc-detection (accum term)
+  "Register handlers for OSC sequences in ACCUM for TERM."
+
+  ;; This intercepts just a few OSC sequences not supported by the
+  ;; alacritty, let others through.
+  (mistty--accum-add-processor-lambda
+   accum
+   (_ctx '(seq OSC "7;" (let text Pt) ST))
+   (mistty-osc7 "7" text))
+  (mistty--accum-add-processor-lambda
+   accum
+   (ctx '(seq OSC "133;" (let text Pt) ST))
+   (mistty--accum-ctx-flush ctx) ;; for accurate cursor pos
+   (mistty-osc133 "133" text term)))
 
 (provide 'mistty-term-mod)
 

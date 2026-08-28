@@ -31,8 +31,8 @@
 (eval-when-compile
   (require 'mistty-accum-macros))
 (require 'mistty-kbd)
-(require 'mistty-raw)
 (require 'mistty-osc7)
+(require 'mistty-term-base)
 
 ;;; Code:
 
@@ -219,27 +219,14 @@ The old value, if any, is pushed into `mistty--prompt-archive'."
        (or (null (mistty--prompt-end prompt))
            (< scrolline (mistty--prompt-end prompt)))))
 
-(defun mistty--add-osc-detection (accum)
-  "Handle OSC code in ACCUM.
-
-Known OSC codes are passed down to handlers registered in
-`mistty-osc-handlers'."
-  ;; Intercept just a few OSC sequences not supported by the terminal,
-  ;; let others through.
-  (mistty--accum-add-processor-lambda accum
-      (_ctx '(seq OSC "7;" (let text Pt) ST))
-    (mistty-osc7 "7" text))
-  (mistty--accum-add-processor-lambda accum
-      (ctx '(seq OSC "133;" (let text Pt) ST))
-    (mistty--accum-ctx-flush ctx) ;; for accurate cursor pos
-    (mistty-osc133 "133" text)))
-
-(defun mistty--add-prompt-detection (accum)
-  "Register processors to ACCUM for prompt detection.
+(defun mistty--add-prompt-detection (accum term)
+  "Register processors to ACCUM for prompt detection for TERM.
 
 Detected prompts can be found in `mistty-prompt'."
   (mistty--accum-add-post-processor
-   accum #'mistty--term-postprocess-changed)
+   accum
+   (lambda ()
+     (mistty--term-postprocess-changed term)))
   (mistty--accum-add-post-processor
    accum (mistty--regexp-prompt-detector))
 
@@ -313,7 +300,8 @@ Detected prompts can be found in `mistty-prompt'."
      ;; buffer just before the \r is taken into account.
      (when (string= "        " (mistty--accum-ctx-look-back ctx))
        (mistty--accum-ctx-flush ctx)
-       (when (or (and (= (1- mistty-raw-columns) (mistty-raw--cursor-column))
+       (when (or (and (= (1- (mistty--term-columns term))
+                         (cdr (mistty--term-cursor-linecol term)))
                       (eq ?\  (char-before (point))))
                  (and (get-text-property (pos-eol 0) 'term-line-wrap)
                       (string-match "^ *$" (buffer-substring (pos-bol) (pos-eol)))))
@@ -322,7 +310,7 @@ Detected prompts can be found in `mistty-prompt'."
                 (scrolline (mistty--scrolline-at pos)))
 
            (when (get-text-property (pos-eol 0) 'term-line-wrap)
-             (mistty-raw--cleanup-prompt-sp (point))
+             (mistty--term-cleanup-prompt-sp term (point))
              (let* ((eol (pos-eol 0)) (pos eol))
                (remove-text-properties eol (1+ eol) '(term-line-wrap nil))
                (while (eq ?\  (char-before pos))
@@ -401,17 +389,8 @@ the last set of properties to be registered is applied."
           (delq cell
                 mistty--term-properties-to-add-alist))))
 
-(defun mistty--term-postprocess-changed ()
-  "Process mistty-clear text properties.
-
-This function turns mistty-clear into mistty-skip properties on the
-lines that have changed since this processor was last rn."
-  (when-let* ((change-start
-               (text-property-any (point-min) (point-max) 'mistty-updated t)))
-      (mistty--term-postprocess (point-min) mistty-raw-columns)))
-
 (defun mistty--term-postprocess (region-start window-width)
-  "Set mistty-skip and yank handlers after REGION-START.
+  "Set mistty-skip and yank handlers between REGION-START and REGION-END.
 
 WINDOW-WIDTH is used to detect right prompts.
 
@@ -419,36 +398,36 @@ This sets properties from the mistty-clear properties,
 detecting regions looking at a complete line."
   (save-excursion
     (let ((inhibit-read-only t)
-          (inhibit-modification-hooks t))
+          (inhibit-modification-hooks t)
+          (region-end (point-max)))
       (goto-char region-start)
       (goto-char (pos-bol))
       (setq region-start (point))
       (remove-text-properties
-       region-start (point-max)
+       region-start region-end
        '(mistty-skip nil yank-handler nil mistty-updated nil))
-      (let ((region-end (point-max)))
-        (goto-char (point-max))
-        (while (and (> (point) region-start)
-                    (or (= (pos-bol) (pos-eol))
-                        (not (text-property-not-all (pos-bol) (pos-eol) 'mistty-clear t))))
-          (setq region-end (pos-eol 0))
-          (forward-line -1))
-        (when (< region-end (point-max))
-          (put-text-property region-end (point-max) 'mistty-skip 'empty-lines-at-eob))
-        (goto-char region-start)
-        (while
-            (progn
-              (let ((bol (pos-bol))
-                    (eol (pos-eol)))
-                (when (> eol bol)
-                  (unless (mistty--detect-right-prompt bol eol window-width)
-                    (let ((end (or (mistty--detect-continue-prompt bol)
-                                   (mistty--detect-indent bol eol))))
-                      (mistty--detect-trailing-spaces end eol)))))
+      (goto-char (point-max))
+      (while (and (> (point) region-start)
+                  (or (= (pos-bol) (pos-eol))
+                      (not (text-property-not-all (pos-bol) (pos-eol) 'mistty-clear t))))
+        (setq region-end (pos-eol 0))
+        (forward-line -1))
+      (when (< region-end (point-max))
+        (put-text-property region-end (point-max) 'mistty-skip 'empty-lines-at-eob))
+      (goto-char region-start)
+      (while
+          (progn
+            (let ((bol (pos-bol))
+                  (eol (pos-eol)))
+              (when (> eol bol)
+                (unless (mistty--detect-right-prompt bol eol window-width)
+                  (let ((end (or (mistty--detect-continue-prompt bol)
+                                 (mistty--detect-indent bol eol))))
+                    (mistty--detect-trailing-spaces end eol)))))
 
-              ;; process next line?
-              (forward-line 1)
-              (< (point) region-end)))))))
+            ;; process next line?
+            (forward-line 1)
+            (< (point) region-end))))))
 
 (defun mistty--detect-right-prompt (bol eol window-width)
   "Detect right prompt and return its left position or nil.
@@ -588,8 +567,8 @@ on the term face."
        (append (list props) rest '(term))))
     (_ value)))
 
-(defun mistty--detect-dead-spaces-after-insert (content beg)
-  "Mark dead trailing spaces left by the terminal after inserting CONTENT.
+(defun mistty--detect-dead-spaces-after-insert (term content beg)
+  "Mark dead trailing spaces left in TERM after inserting CONTENT.
 
 When inserting a newline in an existing line, the terminal often just
 overwrites the existing characters with space instead of re-creating the
@@ -620,7 +599,7 @@ Detected dead spaces are marked with the text property \\='mistty-skip
                 (when (> eol (point))
                   (mistty-log "@%s [%s-%s) %s dead spaces, %s real"
                               (point) (pos-bol) eol (- eol (point)) real-trailing-ws)
-                  (mistty-raw--clear-to-eol (point))
+                  (mistty--term-clear-to-eol term (point))
                   ;; in case the buffer is accessed before rendering again
                   (put-text-property (point) eol 'mistty-skip 'dead))))))))))
 
@@ -637,7 +616,7 @@ be used to increase the value of `mistty--scrolline-base'."
   "Scrolline at the top of the screen."
   mistty--scrolline-home-num)
 
-(defun mistty-osc133 (_ osc-seq)
+(defun mistty-osc133 (_ osc-seq term)
   "Handle OSC 133 codes.
 
 OSC-SEQ contains the subcode followed optionally by a semi-colon and
@@ -651,9 +630,9 @@ MisTTY supports code A-D:
  - D marks the end of the command.
 
 Everything else is ignored."
-  (when (and (length> osc-seq 0) (not (mistty-raw--alt-screen-p)))
+  (when (and (length> osc-seq 0) (not (mistty--term-alt-screen-p term)))
     (let ((command-char (aref osc-seq 0)))
-      (mistty-log "OSC 133 %c@%s" command-char (mistty-raw--cursor-linecol))
+      (mistty-log "OSC 133 %c@%s" command-char (mistty--term-cursor-linecol term))
       (pcase command-char
         (?A ;; start a new command
          ;; Overwrite any other prompt source.
@@ -668,7 +647,7 @@ Everything else is ignored."
          (when-let* ((prompt (mistty--prompt)))
            (setf (mistty--prompt-user-input-start prompt)
                  (cons (mistty--scrolline-at-point)
-                       (mistty-raw--cursor-chars)))))
+                       (- (point) (pos-bol))))))
 
         (?C ;; start of command output
          (when-let* ((prompt (mistty--prompt)))

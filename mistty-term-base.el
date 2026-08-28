@@ -48,11 +48,22 @@ The marker is only valid in the terminal buffer.")
 (cl-defgeneric mistty--term-screen-top-scrolline (term)
   "Return the scrolline for he start of the terminal.")
 
+(cl-defgeneric mistty--term-alt-screen-p (term)
+  "Return non-nil when displaying the alternate screen.")
+
 (cl-defgeneric mistty--term-lines (term)
   "Return the height of the terminal, in lines.")
 
 (cl-defgeneric mistty--term-columns (term)
   "Return the width of the terminal, in columns.")
+
+(cl-defgeneric mistty--term-cursor-linecol (term)
+  "Return the position of the cursor as (LINE . COL).
+
+The position of the cursor in terms of characters is available as the
+process marker. This is different, especially the column number as in
+general, in unicode, there's no direct link between character count and
+column number.")
 
 (cl-defgeneric mistty--term-sentinel-func (term)
   "Return the hardcoded sentinel function or the terminal.")
@@ -95,6 +106,36 @@ leaves fullscreen mode.")
 
 ENTER-FULLSCREEN-FUNC is a function that takes he TERM instance and
 enters fullscreen mode.")
+
+(cl-defgeneric mistty--term-clear-to-eol (term pos)
+  "Mark spaces in TERM from POS to end-of-line as unmodified.")
+
+(cl-defgeneric mistty--term-cleanup-prompt-sp (term pos)
+  "Cleanup after the shell using the prompt-sp hack.
+
+This command cleans up the terminal after a trick used to detect output
+that doesn't end in a newline is called prompt sp. That trick consists
+of outputing an optional end-of-line marker, then columns-1 spaces and a
+CR. If we end up still on the same line, the output ended with a NL and
+the whole line, and the marker, is then overwritten. If we end up on
+another line due to line wrap, the previous line and the marker stay in
+the previous line.
+
+This results in a continuation line that shouldn't be continued and a
+large number of newlines, both of which will look bad when they enter
+scrollback.
+
+To work around it, this call transform the fake newline into a real one
+and marks the spaces at the end of the previous line as blank.
+
+POS should be the position where the CR is called in the prompt-sp
+sequence.")
+
+(cl-defgeneric mistty--term-postprocess-changed (term)
+  "Post-process the regions changed since last call.
+
+This should call `mistty--term-postprocess', which sets \=='mistty-skip
+properties on the changed regions.")
 
 (provide 'mistty-term-base)
 
