@@ -97,10 +97,10 @@ Defaults to (point-min).")
 This is handled by `mistty-test-report-issue' and must contain
 the symbol of the expected issues, in order.")
 
-(cl-defmacro mistty-deftest (name (&key shell selected term-size) &body body)
-  "Declare multi-shell tests with a mistty shell buffer.
+(cl-defmacro mistty-deftest (name (&key shell type selected term-size) &body body)
+  "Declare multi-shell, multi-terminal emulator tests with a mistty buffer.
 
-To select multiple shells, pass a list to the :key argument containing
+To select multiple shells, pass a list to the :shell argument containing
 the symbol of the shell (bash, fish, zsh, ipython) instead of a single
 symbol.
 
@@ -111,30 +111,67 @@ symbol and then the init sequence.
 
 For example: :shell ((zsh init-zsh) (fish init-fish))
 
+To select multiple terminal types, pass a list to the :type argument.
+
+For example: :type (eterm alacritty)
+
 This is a wrapper around `ert-deftest' and `mistty-with-test-buffer'
 that will generate one identical test per shell."
   (declare (indent 2))
   `(progn
      ,@(let* ((shell (or shell '(bash)))
-              (multishell (length> shell 1)))
+              (multishell (length> shell 1))
+              (type (cond ((null type) '(nil))
+                          ((eq type 'all) '(alacritty eterm))
+                          ((listp type) type)
+                          (t (list type))))
+              (multitype (length> type 1)))
          (mapcar
-          (lambda (shell)
-            (let ((shell-name (if (listp shell) (car shell) shell))
-                  (shell-init (if (listp shell) (cadr shell) nil)))
-              `(ert-deftest ,(if multishell
-                                 (intern
-                                  (concat (symbol-name name) "/" (symbol-name shell-name)))
-                               name) ()
-                 (mistty-with-test-buffer (:shell ,shell-name :init ,shell-init)
+          (lambda (arg)
+            (let* ((shell (car arg))
+                   (type (cadr arg))
+                   (shell-name (if (symbolp shell) shell (car shell)))
+                   (shell-init (if (symbolp shell) nil (cadr shell))))
+              `(ert-deftest ,(mistty--testing-test-name
+                              name (when multishell shell-name) (when multitype type)) ()
+                 (mistty-with-test-buffer (:shell ,shell-name :type ,type :init ,shell-init)
                    ,@body))))
-          shell))))
+          (mistty--combine shell type)))))
+
+(defun mistty--testing-test-name (name shell type)
+  "Built a test name based on NAME, including SHELL and/or TYPE.
+
+SHELL or TYPE appear as parameters in the test name, separated with a /
+instead of the usual -."
+  (if (and (null shell) (null type))
+      name
+    (intern
+     (concat
+      (symbol-name name)
+      (if shell (concat "/" (symbol-name shell)))
+      (if type (concat "/" (symbol-name type)))))))
+
+(defun mistty--combine (lista listb)
+  "Return LISTA x LISTB.
+
+If, for example LISTA contains (a b) and LISTB contains (c d e) the
+result will be ((a c) (a d) (a e) (b c) (b d) (b e))."
+  (mapcan
+   (lambda (elta)
+     (mapcar
+      (lambda (eltb) (list elta eltb))
+      listb))
+   lista))
 
 (cl-defmacro mistty-with-test-buffer
-    ((&key (shell 'bash) selected init term-size cd) &body body)
+    ((&key (shell 'bash) type selected init term-size cd) &body body)
   "Run BODY in a MisTTY buffer.
 
 SHELL specifies the program that is run in that buffer, bash,
 zsh, or fish.
+
+TYPE sets `mistty-terminal-type', which selects either the eterm or
+alacritty terminal emulator.
 
 INIT is a string to append to the shell RC file.
 
@@ -169,6 +206,7 @@ default, the default directory is a temp directory created for the test."
                (mistty-left-fullscreen-hook nil)
                (mistty-allow-clearing-scrollback nil)
                (mistty-default-terminal-size nil)
+               (mistty-terminal-type (quote ,type))
                (mistty-log mistty-test-log))
            (message "RUNNING: %s" (ert-test-name (ert-running-test)))
            (ert-with-temp-directory mistty-tmpdir

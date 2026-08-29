@@ -30,7 +30,7 @@
 (require 'mistty-log)
 (require 'mistty-queue)
 
-(mistty-deftest mistty-test-simple-command (:shell (bash zsh fish))
+(mistty-deftest mistty-test-simple-command (:shell (bash zsh fish) :type all)
   (mistty-with-test-buffer ()
     (mistty-send-text "echo hello")
     (should (equal "hello" (mistty-send-and-capture-command-output)))))

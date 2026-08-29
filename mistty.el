@@ -56,6 +56,7 @@
 (require 'mistty-undo)
 (require 'mistty-term-base)
 (require 'mistty-term-alacritty)
+(require 'mistty-term-eterm)
 
 ;;; Code:
 
@@ -85,6 +86,26 @@ this variable for different hosts by setting mistty-shell-command
 as a connection-local variable."
   :type '(repeat string)
   :group 'mistty)
+
+(defcustom mistty-terminal-type nil
+  "Choose a terminal emulator.
+
+The terminal emulator MisTTY uses can be either:
+
+- \\='eterm the pure elisp terminal that's part of Emacs. It's found in
+  eterm.el.
+
+- \\='alacritty a modern terminal emulator implemented in Rust.
+
+Alacritty is more standard-compliant and supports more features than
+eterm, but it requires installing and loading an Emacs module.
+
+If this option is nil (auto), MisTTY uses alacritty if the module is
+available and otherwise fallback."
+  :group 'mistty
+  :type '(choice (const :tag "auto" nil)
+                 (const :tag "eterm (built-in)" eterm)
+                 (const :tag "alacritty (module required)" alacritty)))
 
 (defcustom mistty-variables-to-copy
   '(default-directory
@@ -967,7 +988,10 @@ window."
         (setq height (floor (with-selected-window win
                                    (window-screen-lines))))))
     (mistty--attach
-     (mistty--create-term 'alacritty
+     (mistty--create-term (or mistty-terminal-type
+                              (if (require 'mistty-alacritty-vt nil 'noerror)
+                                  'alacritty
+                                'eterm))
                           (concat " mistty tty " (buffer-name))
                           (cons command args)
                           :width width
