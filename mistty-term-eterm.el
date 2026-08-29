@@ -17,7 +17,7 @@
 ;;; Commentary:
 ;;
 ;; This file implements generic methods defined in mistty-term-base.el
-;; on top of mistty-raw.el The resulting terminal is an alacritty
+;; on top of mistty-alacritty.el The resulting terminal is an alacritty
 ;; terminal (TERM=eterm).
 
 (require 'cl-lib)

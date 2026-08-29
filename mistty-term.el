@@ -433,7 +433,7 @@ detecting regions looking at a complete line."
   "Detect right prompt and return its left position or nil.
 
 BOL and EOL define the region to look in. WINDOW-WIDTH must be the width
-of the terminal, usually `mistty-raw-columns'."
+of the terminal, usually `mistty-alacritty-columns'."
 
   (let ((pos (1- eol))
         in-prompt)

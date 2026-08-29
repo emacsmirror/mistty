@@ -4554,7 +4554,7 @@
     ;; initial window, half height
     (should (equal (cons 79 10)
                    (with-current-buffer mistty-term-buffer
-                     (cons mistty-raw-columns mistty-raw-lines))))
+                     (cons mistty-alacritty-columns mistty-alacritty-lines))))
     (mistty-send-text "echo $(tput cols)x$(tput lines)")
     (should (equal "79x10" (mistty-send-and-capture-command-output)))
 
@@ -4564,7 +4564,7 @@
     ;; full height
     (should (equal (cons 79 22)
                    (with-current-buffer mistty-term-buffer
-                     (cons mistty-raw-columns mistty-raw-lines))))
+                     (cons mistty-alacritty-columns mistty-alacritty-lines))))
 
     ;; make sure the process was told about the change
     (mistty-send-text "echo $(tput cols)x$(tput lines)")
@@ -4673,13 +4673,13 @@
          (buffer-local-value 'mistty-fullscreen work-buffer)))
 
       ;; In fullscreen mode, terminal size should come from the window
-      (should (equal 79 (buffer-local-value 'mistty-raw-columns term-buffer)))
-      (should (equal 22 (buffer-local-value 'mistty-raw-lines term-buffer)))
+      (should (equal 79 (buffer-local-value 'mistty-alacritty-columns term-buffer)))
+      (should (equal 22 (buffer-local-value 'mistty-alacritty-lines term-buffer)))
 
       (split-window-vertically)
       (should (redisplay t))
-      (should (equal 79 (buffer-local-value 'mistty-raw-columns term-buffer)))
-      (should (equal 10 (buffer-local-value 'mistty-raw-lines term-buffer)))
+      (should (equal 79 (buffer-local-value 'mistty-alacritty-columns term-buffer)))
+      (should (equal 10 (buffer-local-value 'mistty-alacritty-lines term-buffer)))
 
       ;; Leave fullscreen
       (mistty--send-string proc "\n")
@@ -6825,8 +6825,8 @@ precmd_functions+=(prompt_header)
     (ert-with-test-buffer ()
       (mistty-mode)
       (mistty-exec mistty-test-bash-exe)
-      (should (equal 160 (buffer-local-value 'mistty-raw-columns mistty-term-buffer)))
-      (should (equal 50 (buffer-local-value 'mistty-raw-lines mistty-term-buffer))))))
+      (should (equal 160 (buffer-local-value 'mistty-alacritty-columns mistty-term-buffer)))
+      (should (equal 50 (buffer-local-value 'mistty-alacritty-lines mistty-term-buffer))))))
 
 (ert-deftest mistty-test-exec-called-multiple-times ()
   (mistty-with-test-buffer ()

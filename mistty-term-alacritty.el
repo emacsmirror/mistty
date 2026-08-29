@@ -22,7 +22,7 @@
 
 (require 'cl-lib)
 (require 'mistty-term-base)
-(require 'mistty-raw)
+(require 'mistty-alacritty)
 (require 'mistty-term)
 (require 'mistty-accum)
 (require 'mistty-scrolline)
@@ -39,7 +39,7 @@
         (program (car command))
         (args (cdr command)))
     (with-current-buffer term-buffer
-      (mistty-raw-mode)
+      (mistty-alacritty-mode)
       (setq-local mistty--prompt-cell (mistty--make-prompt-cell))
       (setq-local scroll-margin 0)
       (let ((process-environment
@@ -47,7 +47,7 @@
                  (cons (format "EMACS=%s" emacs-version)
                        process-environment)
                process-environment)))
-        (mistty-raw-exec name program args width height))
+        (mistty-alacritty-exec name program args width height))
       (let* ((proc (get-buffer-process term-buffer))
              (term (mistty--make-term-alacritty :buf term-buffer :proc proc)))
         (set-process-filter proc (mistty--make-accumulator
@@ -64,7 +64,7 @@
 
 (cl-defmethod mistty--term-screen-top-pos ((term mistty--term-alacritty))
   (with-current-buffer (mistty--term-alacritty-buf term)
-    mistty-raw--home))
+    mistty-alacritty--home))
 
 (cl-defmethod mistty--term-screen-top-scrolline ((term mistty--term-alacritty))
   (with-current-buffer (mistty--term-alacritty-buf term)
@@ -72,34 +72,34 @@
 
 (cl-defmethod mistty--term-alt-screen-p ((term mistty--term-alacritty))
   (with-current-buffer (mistty--term-alacritty-buf term)
-    (mistty-raw--alt-screen-p)))
+    (mistty-alacritty--alt-screen-p)))
 
 (cl-defmethod mistty--term-lines ((term mistty--term-alacritty))
   (with-current-buffer (mistty--term-alacritty-buf term)
-    mistty-raw-lines))
+    mistty-alacritty-lines))
 
 (cl-defmethod mistty--term-columns ((term mistty--term-alacritty))
   (with-current-buffer (mistty--term-alacritty-buf term)
-    mistty-raw-columns))
+    mistty-alacritty-columns))
 
 (cl-defmethod mistty--term-cursor-linecol ((term mistty--term-alacritty))
   (with-current-buffer (mistty--term-alacritty-buf term)
-    (mistty-raw--cursor-linecol)))
+    (mistty-alacritty--cursor-linecol)))
 
 (cl-defmethod mistty--term-sentinel-func ((_term mistty--term-alacritty))
-  #'mistty-raw--sentinel)
+  #'mistty-alacritty--sentinel)
 
 (cl-defmethod mistty--term-filter-func ((_term mistty--term-alacritty))
-  #'mistty-raw--process-filter)
+  #'mistty-alacritty--process-filter)
 
 (cl-defmethod mistty--term-resize ((term mistty--term-alacritty) width height)
   (with-current-buffer (mistty--term-alacritty-buf term)
-    (mistty-raw-resize width height))
+    (mistty-alacritty-resize width height))
   (set-process-window-size (mistty--term-alacritty-proc term) height width))
 
 (cl-defmethod mistty--term-autoresize ((term mistty--term-alacritty) enable)
   (with-current-buffer (mistty--term-alacritty-buf term)
-    (mistty-raw-auto-resize enable)))
+    (mistty-alacritty-auto-resize enable)))
 
 (cl-defmethod mistty--term-setup-buffer ((_term mistty--term-alacritty) &optional _fullscreen))
 
@@ -153,10 +153,10 @@
      (funcall leave-fullscreen))))
 
 (cl-defmethod mistty--term-clear-to-eol ((_term mistty--term-alacritty) pos)
-  (mistty-raw--clear-to-eol pos))
+  (mistty-alacritty--clear-to-eol pos))
 
 (cl-defmethod mistty--term-cleanup-prompt-sp ((_term mistty--term-alacritty) pos)
-  (mistty-raw--cleanup-prompt-sp pos))
+  (mistty-alacritty--cleanup-prompt-sp pos))
 
 (cl-defmethod mistty--term-postprocess-changed ((term mistty--term-alacritty))
   (with-current-buffer (mistty--term-alacritty-buf term)
@@ -164,7 +164,7 @@
                  (text-property-any (point-min) (point-max) 'mistty-updated t)))
       ;; TODO: use change-start instead of (point-min); this whole
       ;; business with mistty-updated is just silly otherwise.
-      (mistty--term-postprocess (point-min) mistty-raw-columns)
+      (mistty--term-postprocess (point-min) mistty-alacritty-columns)
       (remove-text-properties change-start (point-max) '(mistty-updated t)))))
 
 (defun mistty--term-alacritty-add-osc-detection (accum term)
