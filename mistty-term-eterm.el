@@ -1,4 +1,4 @@
-;;; mistty-term-builtin.el --- Use term.el to create the terminal -*- lexical-binding: t -*-
+;;; mistty-term-eterm.el --- Use term.el to create the terminal -*- lexical-binding: t -*-
 
 ;; This program is free software: you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -17,7 +17,8 @@
 ;;; Commentary:
 ;;
 ;; This file implements generic methods defined in mistty-term-base.el
-;; on top of mistty-raw.el
+;; on top of mistty-raw.el The resulting terminal is an alacritty
+;; terminal (TERM=eterm).
 
 (require 'cl-lib)
 (require 'term)
@@ -108,12 +109,12 @@ This is allows running `term-mode-hook' or not, from
 This is used to decide whether and on what region of the buffer
 to call `mistty--term-postprocess'.")
 
-(cl-defstruct (mistty--term-builtin
-               (:constructor mistty--make-term-builtin)
+(cl-defstruct (mistty--term-eterm
+               (:constructor mistty--make-term-eterm)
                (:copier nil))
   proc buf)
 
-(cl-defmethod mistty--create-term ((_type (eql 'builtin)) name command &key width height)
+(cl-defmethod mistty--create-term ((_type (eql 'eterm)) name command &key width height)
   (let ((term-buffer (generate-new-buffer name 'inhibit-buffer-hooks)))
     (with-current-buffer term-buffer
       (let* ((mistty-shadowed-term-mode-hook term-mode-hook)
@@ -140,7 +141,7 @@ to call `mistty--term-postprocess'.")
 
       (mistty-term--exec (car command) (cdr command))
       (let* ((proc (get-buffer-process term-buffer))
-             (term (mistty--make-term-builtin :buf term-buffer :proc proc)))
+             (term (mistty--make-term-eterm :buf term-buffer :proc proc)))
         ;; TRAMP sets adjust-window-size-function to #'ignore, which
         ;; prevents normal terminal resizing from working. This turns
         ;; it on again.
@@ -154,49 +155,49 @@ to call `mistty--term-postprocess'.")
 
         term))))
 
-(cl-defmethod mistty--term-buf ((term mistty--term-builtin))
-  (mistty--term-builtin-buf term))
+(cl-defmethod mistty--term-buf ((term mistty--term-eterm))
+  (mistty--term-eterm-buf term))
 
-(cl-defmethod mistty--term-proc ((term mistty--term-builtin))
-  (mistty--term-builtin-proc term))
+(cl-defmethod mistty--term-proc ((term mistty--term-eterm))
+  (mistty--term-eterm-proc term))
 
-(cl-defmethod mistty--term-screen-top-pos ((term mistty--term-builtin))
-  (with-current-buffer (mistty--term-builtin-buf term)
+(cl-defmethod mistty--term-screen-top-pos ((term mistty--term-eterm))
+  (with-current-buffer (mistty--term-eterm-buf term)
     term-home-marker))
 
-(cl-defmethod mistty--term-screen-top-scrolline ((term mistty--term-builtin))
-  (with-current-buffer (mistty--term-builtin-buf term)
+(cl-defmethod mistty--term-screen-top-scrolline ((term mistty--term-eterm))
+  (with-current-buffer (mistty--term-eterm-buf term)
     (mistty--scrolline-at term-home-marker)))
 
-(cl-defmethod mistty--term-alt-screen-p ((term mistty--term-builtin))
-  (with-current-buffer (mistty--term-builtin-buf term)
+(cl-defmethod mistty--term-alt-screen-p ((term mistty--term-eterm))
+  (with-current-buffer (mistty--term-eterm-buf term)
     (term-using-alternate-sub-buffer)))
 
-(cl-defmethod mistty--term-lines ((term mistty--term-builtin))
-  (with-current-buffer (mistty--term-builtin-buf term)
+(cl-defmethod mistty--term-lines ((term mistty--term-eterm))
+  (with-current-buffer (mistty--term-eterm-buf term)
     term-height))
 
-(cl-defmethod mistty--term-columns ((term mistty--term-builtin))
-  (with-current-buffer (mistty--term-builtin-buf term)
+(cl-defmethod mistty--term-columns ((term mistty--term-eterm))
+  (with-current-buffer (mistty--term-eterm-buf term)
     term-width))
 
-(cl-defmethod mistty--term-cursor-linecol ((term mistty--term-builtin))
-  (with-current-buffer (mistty--term-builtin-buf term)
+(cl-defmethod mistty--term-cursor-linecol ((term mistty--term-eterm))
+  (with-current-buffer (mistty--term-eterm-buf term)
     (cons (term-current-row) (term-current-column))))
 
-(cl-defmethod mistty--term-sentinel-func ((_term mistty--term-builtin))
+(cl-defmethod mistty--term-sentinel-func ((_term mistty--term-eterm))
   #'term-sentinel)
 
-(cl-defmethod mistty--term-filter-func ((_term mistty--term-builtin))
+(cl-defmethod mistty--term-filter-func ((_term mistty--term-eterm))
   #'mistty--emulate-terminal)
 
-(cl-defmethod mistty--term-resize ((term mistty--term-builtin) width height)
-  (with-current-buffer (mistty--term-builtin-buf term)
+(cl-defmethod mistty--term-resize ((term mistty--term-eterm) width height)
+  (with-current-buffer (mistty--term-eterm-buf term)
     (term-reset-size height width)))
 
-(cl-defmethod mistty--term-autoresize ((_term mistty--term-builtin) _enable))
+(cl-defmethod mistty--term-autoresize ((_term mistty--term-eterm) _enable))
 
-(cl-defmethod mistty--term-setup-buffer ((_term mistty--term-builtin) &optional fullscreen)
+(cl-defmethod mistty--term-setup-buffer ((_term mistty--term-eterm) &optional fullscreen)
   (if fullscreen
       (progn
         (jit-lock-mode t)
@@ -204,7 +205,7 @@ to call `mistty--term-postprocess'.")
     (font-lock-mode -1)
     (jit-lock-mode nil)))
 
-(cl-defmethod mistty--term-setup-accum  ((term mistty--term-builtin) accum
+(cl-defmethod mistty--term-setup-accum  ((term mistty--term-eterm) accum
                                          &key enter-fullscreen active-prompt after-clear-screen)
   (mistty--add-prompt-detection accum term)
   (mistty--add-da1 accum)
@@ -232,7 +233,7 @@ to call `mistty--term-postprocess'.")
        (if (when-let* ((p (funcall active-prompt)))
              (equal
               (mistty--prompt-start p)
-              (mistty--with-live-buffer (mistty--term-builtin-buf term)
+              (mistty--with-live-buffer (mistty--term-eterm-buf term)
                 mistty--scrolline-home-num)))
            (progn
              (mistty-log "CLEAR PROMPT (%S)" str)
@@ -245,7 +246,7 @@ to call `mistty--term-postprocess'.")
          (when after-clear-screen
            (funcall after-clear-screen)))))))
 
-(cl-defmethod mistty--term-setup-accum-for-fullscreen ((_term mistty--term-builtin) accum
+(cl-defmethod mistty--term-setup-accum-for-fullscreen ((_term mistty--term-eterm) accum
                                                        &key leave-fullscreen)
   (mistty--add-osc-detection accum)
   (mistty--add-da1 accum)
@@ -271,17 +272,17 @@ to call `mistty--term-postprocess'.")
        (move-marker end nil)
        (funcall leave-fullscreen)))))
 
-(cl-defmethod mistty--term-clear-to-eol ((_term mistty--term-builtin) _pos)
+(cl-defmethod mistty--term-clear-to-eol ((_term mistty--term-eterm) _pos)
   ;; nothing to do; it's enough to clear the text properties.
   )
 
 
-(cl-defmethod mistty--term-cleanup-prompt-sp ((_term mistty--term-builtin) _pos)
+(cl-defmethod mistty--term-cleanup-prompt-sp ((_term mistty--term-eterm) _pos)
   ;; nothing to do; it's enough to clear the text properties.
   )
 
-(cl-defmethod mistty--term-postprocess-changed ((term mistty--term-builtin))
-  (with-current-buffer (mistty--term-builtin-buf term)
+(cl-defmethod mistty--term-postprocess-changed ((term mistty--term-eterm))
+  (with-current-buffer (mistty--term-eterm-buf term)
     (when (and mistty--term-changed (< mistty--term-changed (point-min)))
       (setq mistty--term-changed (point-min)))
     (when (and mistty--term-changed (>= mistty--term-changed (point-max)))
@@ -585,6 +586,6 @@ Known OSC codes are passed down to handlers registered in
        (funcall handler code
                 (decode-coding-string text locale-coding-system t))))))
 
-(provide 'mistty-term-builtin)
+(provide 'mistty-term-eterm)
 
-;;; mistty-term-builtin.el ends here
+;;; mistty-term-eterm.el ends here

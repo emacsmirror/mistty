@@ -1,4 +1,4 @@
-;;; mistty-term-mod.el --- Use module to create the terminal -*- lexical-binding: t -*-
+;;; mistty-term-alacritty.el --- Use the alacritty library to run the terminall -*- lexical-binding: t -*-
 
 ;; This program is free software: you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -17,7 +17,8 @@
 ;;; Commentary:
 ;;
 ;; This file implements generic methods defined in mistty-term-base.el
-;; on top of mistty-raw.el
+;; on top of the module using the alacritty library. The resulting
+;; terminal is an alacritty terminal (TERM=alacritty).
 
 (require 'cl-lib)
 (require 'mistty-term-base)
@@ -28,12 +29,12 @@
 (eval-when-compile
   (require 'mistty-accum-macros))
 
-(cl-defstruct (mistty--term-mod
-               (:constructor mistty--make-term-mod)
+(cl-defstruct (mistty--term-alacritty
+               (:constructor mistty--make-term-alacritty)
                (:copier nil))
   proc buf)
 
-(cl-defmethod mistty--create-term ((_type (eql 'mod)) name command &key width height)
+(cl-defmethod mistty--create-term ((_type (eql 'alacritty)) name command &key width height)
   (let ((term-buffer (generate-new-buffer name 'inhibit-buffer-hooks))
         (program (car command))
         (args (cdr command)))
@@ -48,64 +49,64 @@
                process-environment)))
         (mistty-raw-exec name program args width height))
       (let* ((proc (get-buffer-process term-buffer))
-             (term (mistty--make-term-mod :buf term-buffer :proc proc)))
+             (term (mistty--make-term-alacritty :buf term-buffer :proc proc)))
         (set-process-filter proc (mistty--make-accumulator
                                   (mistty--term-filter-func term)))
         (process-put proc 'mistty-term term)
 
         term))))
 
-(cl-defmethod mistty--term-buf ((term mistty--term-mod))
-  (mistty--term-mod-buf term))
+(cl-defmethod mistty--term-buf ((term mistty--term-alacritty))
+  (mistty--term-alacritty-buf term))
 
-(cl-defmethod mistty--term-proc ((term mistty--term-mod))
-  (mistty--term-mod-proc term))
+(cl-defmethod mistty--term-proc ((term mistty--term-alacritty))
+  (mistty--term-alacritty-proc term))
 
-(cl-defmethod mistty--term-screen-top-pos ((term mistty--term-mod))
-  (with-current-buffer (mistty--term-mod-buf term)
+(cl-defmethod mistty--term-screen-top-pos ((term mistty--term-alacritty))
+  (with-current-buffer (mistty--term-alacritty-buf term)
     mistty-raw--home))
 
-(cl-defmethod mistty--term-screen-top-scrolline ((term mistty--term-mod))
-  (with-current-buffer (mistty--term-mod-buf term)
+(cl-defmethod mistty--term-screen-top-scrolline ((term mistty--term-alacritty))
+  (with-current-buffer (mistty--term-alacritty-buf term)
     mistty--scrolline-home-num))
 
-(cl-defmethod mistty--term-alt-screen-p ((term mistty--term-mod))
-  (with-current-buffer (mistty--term-mod-buf term)
+(cl-defmethod mistty--term-alt-screen-p ((term mistty--term-alacritty))
+  (with-current-buffer (mistty--term-alacritty-buf term)
     (mistty-raw--alt-screen-p)))
 
-(cl-defmethod mistty--term-lines ((term mistty--term-mod))
-  (with-current-buffer (mistty--term-mod-buf term)
+(cl-defmethod mistty--term-lines ((term mistty--term-alacritty))
+  (with-current-buffer (mistty--term-alacritty-buf term)
     mistty-raw-lines))
 
-(cl-defmethod mistty--term-columns ((term mistty--term-mod))
-  (with-current-buffer (mistty--term-mod-buf term)
+(cl-defmethod mistty--term-columns ((term mistty--term-alacritty))
+  (with-current-buffer (mistty--term-alacritty-buf term)
     mistty-raw-columns))
 
-(cl-defmethod mistty--term-cursor-linecol ((term mistty--term-mod))
-  (with-current-buffer (mistty--term-mod-buf term)
+(cl-defmethod mistty--term-cursor-linecol ((term mistty--term-alacritty))
+  (with-current-buffer (mistty--term-alacritty-buf term)
     (mistty-raw--cursor-linecol)))
 
-(cl-defmethod mistty--term-sentinel-func ((_term mistty--term-mod))
+(cl-defmethod mistty--term-sentinel-func ((_term mistty--term-alacritty))
   #'mistty-raw--sentinel)
 
-(cl-defmethod mistty--term-filter-func ((_term mistty--term-mod))
+(cl-defmethod mistty--term-filter-func ((_term mistty--term-alacritty))
   #'mistty-raw--process-filter)
 
-(cl-defmethod mistty--term-resize ((term mistty--term-mod) width height)
-  (with-current-buffer (mistty--term-mod-buf term)
+(cl-defmethod mistty--term-resize ((term mistty--term-alacritty) width height)
+  (with-current-buffer (mistty--term-alacritty-buf term)
     (mistty-raw-resize width height))
-  (set-process-window-size (mistty--term-mod-proc term) height width))
+  (set-process-window-size (mistty--term-alacritty-proc term) height width))
 
-(cl-defmethod mistty--term-autoresize ((term mistty--term-mod) enable)
-  (with-current-buffer (mistty--term-mod-buf term)
+(cl-defmethod mistty--term-autoresize ((term mistty--term-alacritty) enable)
+  (with-current-buffer (mistty--term-alacritty-buf term)
     (mistty-raw-auto-resize enable)))
 
-(cl-defmethod mistty--term-setup-buffer ((_term mistty--term-mod) &optional _fullscreen))
+(cl-defmethod mistty--term-setup-buffer ((_term mistty--term-alacritty) &optional _fullscreen))
 
-(cl-defmethod mistty--term-setup-accum  ((term mistty--term-mod) accum
+(cl-defmethod mistty--term-setup-accum  ((term mistty--term-alacritty) accum
                                          &key enter-fullscreen active-prompt after-clear-screen)
   (mistty--add-prompt-detection accum term)
-  (mistty--term-mod-add-osc-detection accum term)
+  (mistty--term-alacritty-add-osc-detection accum term)
   (unless enter-fullscreen (error ":enter-fullscreen required"))
   (mistty--accum-add-processor
    accum
@@ -123,7 +124,7 @@
      (if (when-let* ((p (funcall active-prompt)))
            (equal
             (mistty--prompt-start p)
-            (mistty--with-live-buffer (mistty--term-mod-buf term)
+            (mistty--with-live-buffer (mistty--term-alacritty-buf term)
               mistty--scrolline-home-num)))
          (progn
            (mistty-log "CLEAR PROMPT (%S)" str)
@@ -139,9 +140,9 @@
        (when after-clear-screen
          (funcall after-clear-screen))))))
 
-(cl-defmethod mistty--term-setup-accum-for-fullscreen ((term mistty--term-mod) accum
+(cl-defmethod mistty--term-setup-accum-for-fullscreen ((term mistty--term-alacritty) accum
                                                        &key leave-fullscreen)
-  (mistty--term-mod-add-osc-detection accum term)
+  (mistty--term-alacritty-add-osc-detection accum term)
   (unless leave-fullscreen (error ":leave-fullscreen required"))
   (mistty--accum-add-processor
    accum
@@ -151,14 +152,14 @@
      (mistty--accum-ctx-flush ctx)
      (funcall leave-fullscreen))))
 
-(cl-defmethod mistty--term-clear-to-eol ((_term mistty--term-mod) pos)
+(cl-defmethod mistty--term-clear-to-eol ((_term mistty--term-alacritty) pos)
   (mistty-raw--clear-to-eol pos))
 
-(cl-defmethod mistty--term-cleanup-prompt-sp ((_term mistty--term-mod) pos)
+(cl-defmethod mistty--term-cleanup-prompt-sp ((_term mistty--term-alacritty) pos)
   (mistty-raw--cleanup-prompt-sp pos))
 
-(cl-defmethod mistty--term-postprocess-changed ((term mistty--term-mod))
-  (with-current-buffer (mistty--term-mod-buf term)
+(cl-defmethod mistty--term-postprocess-changed ((term mistty--term-alacritty))
+  (with-current-buffer (mistty--term-alacritty-buf term)
     (when-let* ((change-start
                  (text-property-any (point-min) (point-max) 'mistty-updated t)))
       ;; TODO: use change-start instead of (point-min); this whole
@@ -166,7 +167,7 @@
       (mistty--term-postprocess (point-min) mistty-raw-columns)
       (remove-text-properties change-start (point-max) '(mistty-updated t)))))
 
-(defun mistty--term-mod-add-osc-detection (accum term)
+(defun mistty--term-alacritty-add-osc-detection (accum term)
   "Register handlers for OSC sequences in ACCUM for TERM."
 
   ;; This intercepts just a few OSC sequences not supported by the
@@ -182,6 +183,6 @@
    (unless (mistty--term-alt-screen-p term)
      (mistty-osc133 "133" text))))
 
-(provide 'mistty-term-mod)
+(provide 'mistty-term-alacritty)
 
-;;; mistty-term-mod.el ends here
+;;; mistty-term-alacritty.el ends here

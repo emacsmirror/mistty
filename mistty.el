@@ -55,7 +55,7 @@
 (require 'mistty-scrolline)
 (require 'mistty-undo)
 (require 'mistty-term-base)
-(require 'mistty-term-mod)
+(require 'mistty-term-alacritty)
 
 ;;; Code:
 
@@ -967,7 +967,7 @@ window."
         (setq height (floor (with-selected-window win
                                    (window-screen-lines))))))
     (mistty--attach
-     (mistty--create-term 'mod
+     (mistty--create-term 'alacritty
                           (concat " mistty tty " (buffer-name))
                           (cons command args)
                           :width width
