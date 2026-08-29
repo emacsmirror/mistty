@@ -616,7 +616,7 @@ be used to increase the value of `mistty--scrolline-base'."
   "Scrolline at the top of the screen."
   mistty--scrolline-home-num)
 
-(defun mistty-osc133 (_ osc-seq term)
+(defun mistty-osc133 (_ osc-seq)
   "Handle OSC 133 codes.
 
 OSC-SEQ contains the subcode followed optionally by a semi-colon and
@@ -630,9 +630,9 @@ MisTTY supports code A-D:
  - D marks the end of the command.
 
 Everything else is ignored."
-  (when (and (length> osc-seq 0) (not (mistty--term-alt-screen-p term)))
+  (when (and (length> osc-seq 0))
     (let ((command-char (aref osc-seq 0)))
-      (mistty-log "OSC 133 %c@%s" command-char (mistty--term-cursor-linecol term))
+      (mistty-log "OSC 133 %c" command-char)
       (pcase command-char
         (?A ;; start a new command
          ;; Overwrite any other prompt source.

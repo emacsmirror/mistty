@@ -179,7 +179,8 @@
    accum
    (ctx '(seq OSC "133;" (let text Pt) ST))
    (mistty--accum-ctx-flush ctx) ;; for accurate cursor pos
-   (mistty-osc133 "133" text term)))
+   (unless (mistty--term-alt-screen-p term)
+     (mistty-osc133 "133" text))))
 
 (provide 'mistty-term-mod)
 
