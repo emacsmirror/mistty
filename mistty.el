@@ -1656,7 +1656,9 @@ few lines of scrollback to help recovery."
               (mistty-log "[term] truncate %s chars of scrollback, leaving %s."
                           (- (point) (point-min))
                           (- home-marker (point)))
-              (delete-region (point-min) (point)))))))))
+              (let ((inhibit-read-only t)
+                    (inhibit-modification-hooks t))
+                (delete-region (point-min) (point))))))))))
 
 (defun mistty-goto-cursor ()
   "Move the point to the terminal's cursor."
