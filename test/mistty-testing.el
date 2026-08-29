@@ -134,7 +134,9 @@ that will generate one identical test per shell."
                    (shell-init (if (symbolp shell) nil (cadr shell))))
               `(ert-deftest ,(mistty--testing-test-name
                               name (when multishell shell-name) (when multitype type)) ()
-                 (mistty-with-test-buffer (:shell ,shell-name :type ,type :init ,shell-init)
+                 (mistty-with-test-buffer
+                     (:shell ,shell-name :type ,type :init ,shell-init
+                             :selected ,selected :term-size ,term-size)
                    ,@body))))
           (mistty--combine shell type)))))
 
