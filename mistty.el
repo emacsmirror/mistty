@@ -1379,39 +1379,40 @@ See the documentation of `mistty-create' for details."
 
 PROC is the process, which might not be live anymore, and MSG is
 a special string describing the new process state."
-  (mistty--update-mode-lines proc)
+  (mistty-with-errors-logged "process sentinel"
+    (mistty--update-mode-lines proc)
 
-  (let ((work-buffer (process-get proc 'mistty-work-buffer))
-        (term-buffer (process-buffer proc)))
-    (mistty--with-live-buffer work-buffer
-      (when (memq (process-status proc) '(signal exit))
-        (while (accept-process-output proc 0 0 t))))
-
-    (cond
-     ((and (buffer-live-p term-buffer)
-           (buffer-live-p work-buffer))
-      (mistty--term-sentinel proc msg)
+    (let ((work-buffer (process-get proc 'mistty-work-buffer))
+          (term-buffer (process-buffer proc)))
       (mistty--with-live-buffer work-buffer
-        (mistty--needs-refresh) ;; term-buffer was modified by term-sentinel
-        (save-restriction
-          (widen)
-          (mistty--refresh)
-          (when (and (processp mistty-proc)
-                     (>= (point) (mistty-cursor)))
-            (goto-char (point-max)))
-          (mistty--detach)))
-      (kill-buffer term-buffer))
+        (when (memq (process-status proc) '(signal exit))
+          (while (accept-process-output proc 0 0 t))))
 
-     ((buffer-live-p work-buffer)
-      (with-current-buffer work-buffer
-        (mistty--detach)
-        (delete-region (mistty--blank-end-start) (point-max))
-        (goto-char (point-max))
-        (insert "\n\nTerminal killed.\n")))
+      (cond
+       ((and (buffer-live-p term-buffer)
+             (buffer-live-p work-buffer))
+        (mistty--term-sentinel proc msg)
+        (mistty--with-live-buffer work-buffer
+          (mistty--needs-refresh) ;; term-buffer was modified by term-sentinel
+          (save-restriction
+            (widen)
+            (mistty--refresh)
+            (when (and (processp mistty-proc)
+                       (>= (point) (mistty-cursor)))
+              (goto-char (point-max)))
+            (mistty--detach)))
+        (kill-buffer term-buffer))
 
-     ((buffer-live-p term-buffer)
-      (kill-buffer term-buffer)))
-    (mistty--run-after-process-end-hooks work-buffer proc)))
+       ((buffer-live-p work-buffer)
+        (with-current-buffer work-buffer
+          (mistty--detach)
+          (delete-region (mistty--blank-end-start) (point-max))
+          (goto-char (point-max))
+          (insert "\n\nTerminal killed.\n")))
+
+       ((buffer-live-p term-buffer)
+        (kill-buffer term-buffer)))
+      (mistty--run-after-process-end-hooks work-buffer proc))))
 
 (defun mistty--run-after-process-end-hooks (buf proc)
   "Run hooks on `mistty-after-process-end-hook'.
