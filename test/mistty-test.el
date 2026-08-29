@@ -17,6 +17,7 @@
 (require 'ert)
 (require 'ert-x)
 (require 'term)
+(defvar term-width) ;; term.el
 (defvar term-height) ;; term.el
 (defvar term-home-marker) ;; term.el
 (require 'turtles)
@@ -3194,24 +3195,6 @@
                           (mistty-test-content :show (point))))))
 
 ;; TODO: make it run on eterm
-(mistty-deftest mistty-test-zsh-right-prompt-set-field
-    (:shell ((zsh (concat mistty-test-zsh-osc133-b
-                          mistty-test-zsh-right-prompt))) :type alacritty)
-  ;; In tests, zsh right prompts aren't close enough to the right
-  ;; border to be recognized as such, so this test fails under zsh but
-  ;; succeeds under fish. It doesn't seem to affect real-life usage.
-  :expected-result '(or :failed :passed)
-
-  (mistty-send-text "echo foo")
-  (mistty-send-and-wait-for-prompt)
-  (mistty-send-text "echo bar")
-  (goto-char (point-min))
-  (search-forward "echo foo")
-  (should (equal "$ echo foo"
-                 (string-trim-right (buffer-substring-no-properties (line-beginning-position)
-                                                                    (line-end-position))))))
-
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-zsh-right-prompt-skip-empty-spaces-empty-prompt
     (:selected t :shell ((zsh mistty-test-zsh-right-prompt)) :type alacritty)
   (let ((mistty-skip-empty-spaces t)
@@ -3227,7 +3210,7 @@
 
 ;; TODO: make it run on eterm
 (mistty-deftest mistty-test-zsh-right-prompt-insert-newlines
-    (:shell ((zsh mistty-test-zsh-right-prompt)) :type alacritti)
+    (:shell ((zsh mistty-test-zsh-right-prompt)) :type alacritty)
   ;; This test makes sure that there's no timeout here, as right
   ;; prompts used to cause issues when detecting text with newlines
   ;; that was just replayed.
@@ -4522,267 +4505,265 @@
       (let ((kill-buffer-query-functions nil))
         (kill-buffer buf)))))
 
-(turtles-ert-deftest mistty-test-window-size (:instance 'mistty)
-  (mistty-with-test-buffer (:selected t :term-size 'window)
+;; TODO: make it run on eterm
+(mistty-deftest mistty-test-window-size
+    (:selected t :term-size 'window :type alacritty :turtles t)
+  ;; initial window, half height
+  (should (equal (cons 79 10)
+                 (with-current-buffer mistty-term-buffer
+                   (cons mistty-alacritty-columns mistty-alacritty-lines))))
+  (mistty-send-text "echo $(tput cols)x$(tput lines)")
+  (should (equal "79x10" (mistty-send-and-capture-command-output)))
+
+  (delete-other-windows)
+  (should (redisplay t)) ;; recompute size
+
+  ;; full height
+  (should (equal (cons 79 22)
+                 (with-current-buffer mistty-term-buffer
+                   (cons mistty-alacritty-columns mistty-alacritty-lines))))
+
+  ;; make sure the process was told about the change
+  (mistty-send-text "echo $(tput cols)x$(tput lines)")
+  (should (equal "79x22" (mistty-send-and-capture-command-output))))
+
+;; TODO: make it run on eterm
+(mistty-deftest mistty-test-window-size-resize-other-window
+    (:selected t :term-size 'window :type alacritty :turtles t)
+  (let ((work-buffer mistty-work-buffer)
+        (work-window (selected-window)))
     ;; initial window, half height
-    (should (equal (cons 79 10)
-                   (with-current-buffer mistty-term-buffer
-                     (cons mistty-alacritty-columns mistty-alacritty-lines))))
     (mistty-send-text "echo $(tput cols)x$(tput lines)")
     (should (equal "79x10" (mistty-send-and-capture-command-output)))
 
-    (delete-other-windows)
-    (should (redisplay t)) ;; recompute size
+    (should (equal 11 (window-size work-window)))
+    (other-window 1)
+    (shrink-window 2)
+    (should (equal 13 (window-size work-window)))
 
-    ;; full height
-    (should (equal (cons 79 22)
-                   (with-current-buffer mistty-term-buffer
-                     (cons mistty-alacritty-columns mistty-alacritty-lines))))
+    (should (redisplay t)) ;; recompute terminal size
 
-    ;; make sure the process was told about the change
-    (mistty-send-text "echo $(tput cols)x$(tput lines)")
-    (should (equal "79x22" (mistty-send-and-capture-command-output)))))
-
-(turtles-ert-deftest mistty-test-window-size-resize-other-window (:instance 'mistty)
-  (mistty-with-test-buffer (:selected t :term-size 'window)
-    (let ((work-buffer mistty-work-buffer)
-          (work-window (selected-window)))
-      ;; initial window, half height
+    (with-current-buffer work-buffer
       (mistty-send-text "echo $(tput cols)x$(tput lines)")
-      (should (equal "79x10" (mistty-send-and-capture-command-output)))
+      (should (equal "79x12" (mistty-send-and-capture-command-output))))))
 
-      (should (equal 11 (window-size work-window)))
-      (other-window 1)
-      (shrink-window 2)
-      (should (equal 13 (window-size work-window)))
+;; TODO: make it run on eterm
+(mistty-deftest mistty-test-window-width
+    (:selected t :term-size 'window :type alacritty :turtles t)
+  (delete-other-windows)
+  (should (redisplay t)) ;; recompute size
 
-      (should (redisplay t)) ;; recompute terminal size
+  (mistty-send-text "tput cols")
+  (should (equal "79" (mistty-send-and-capture-command-output)))
 
-      (with-current-buffer work-buffer
-        (mistty-send-text "echo $(tput cols)x$(tput lines)")
-        (should (equal "79x12" (mistty-send-and-capture-command-output)))))))
+  (mistty-send-text "tput lines")
+  (should (equal "22" (mistty-send-and-capture-command-output)))
 
-(turtles-ert-deftest mistty-test-window-width (:instance 'mistty)
-  (mistty-with-test-buffer (:selected t :term-size 'window)
-    (delete-other-windows)
-    (should (redisplay t)) ;; recompute size
+  ;; Since window width is 79, there should be just enough space to
+  ;; display B on one line. A is shorter and C is too long to fit.
+  ;; This makes sure that the computed window width is correct.
+  (mistty-send-text "printf 'A%.0s'  {1..78}; echo; printf 'B%.0s'  {1..79}; echo; printf 'C%.0s'  {1..80}; echo")
+  (mistty-send-and-wait-for-prompt)
 
-    (mistty-send-text "tput cols")
-    (should (equal "79" (mistty-send-and-capture-command-output)))
+  (turtles-with-grab-buffer (:trim nil)
+    (let (start end)
+      (goto-char (point-min))
+      (search-forward "AAAA")
+      (setq start (match-beginning 0))
 
-    (mistty-send-text "tput lines")
-    (should (equal "22" (mistty-send-and-capture-command-output)))
+      (goto-char (point-max))
+      (search-backward "C")
+      (setq end (match-end 0))
 
-    ;; Since window width is 79, there should be just enough space to
-    ;; display B on one line. A is shorter and C is too long to fit.
-    ;; This makes sure that the computed window width is correct.
-    (mistty-send-text "printf 'A%.0s'  {1..78}; echo; printf 'B%.0s'  {1..79}; echo; printf 'C%.0s'  {1..80}; echo")
-    (mistty-send-and-wait-for-prompt)
+      (should
+       (equal
+        (concat
+         "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"
+         "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\n"
+         "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\\\n"
+         "C")
+        (buffer-substring start end))))))
 
-    (turtles-with-grab-buffer (:trim nil)
-      (let (start end)
-        (goto-char (point-min))
-        (search-forward "AAAA")
-        (setq start (match-beginning 0))
+;; TODO: make it run on eterm
+(mistty-deftest mistty-test-set-terminal-size
+    (:selected t :term-size 'window :type alacritty :turtles t)
+  (mistty-set-terminal-size 40 10)
+  (mistty-send-text "echo $(tput cols)x$(tput lines)")
+  (should (equal "40x10" (mistty-send-and-capture-command-output)))
 
-        (goto-char (point-max))
-        (search-backward "C")
-        (setq end (match-end 0))
+  (delete-other-windows)
+  (should (redisplay t))
 
-        (should
-         (equal
-          (concat
-           "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA  \n"
-           "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB \n"
-           "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\\\n"
-           "C")
-          (buffer-substring start end)))))))
+  ;; The above should not have changed the terminal size
+  (mistty-send-text "echo $(tput cols)x$(tput lines)")
+  (should (equal "40x10" (mistty-send-and-capture-command-output)))
 
-(turtles-ert-deftest mistty-test-set-terminal-size (:instance 'mistty)
-  (mistty-with-test-buffer (:selected t :term-size 'window)
+  (mistty-set-terminal-size 160 25)
+  (mistty-send-text "echo $(tput cols)x$(tput lines)")
+  (should (equal "160x25" (mistty-send-and-capture-command-output)))
+
+  ;; This should re-enable window size tracking
+  (mistty-terminal-size-tracks-window)
+  (mistty-send-text "echo $(tput cols)x$(tput lines)")
+  (should (equal "79x22" (mistty-send-and-capture-command-output)))
+
+  (split-window)
+  (should (redisplay t))
+
+  (mistty-send-text "echo $(tput cols)x$(tput lines)")
+  (should (equal "79x10" (mistty-send-and-capture-command-output))))
+
+;; TODO: make it run on eterm
+(mistty-deftest mistty-test-set-terminal-size-and-fullscreen
+    (:selected t :term-size 'window :type alacritty :turtles t)
+  (let ((proc mistty-proc)
+        (work-buffer mistty-work-buffer)
+        (term-buffer mistty-term-buffer))
+
     (mistty-set-terminal-size 40 10)
-    (mistty-send-text "echo $(tput cols)x$(tput lines)")
-    (should (equal "40x10" (mistty-send-and-capture-command-output)))
-
     (delete-other-windows)
     (should (redisplay t))
 
-    ;; The above should not have changed the terminal size
+    ;; Enter fullscreen
+    (mistty--send-string
+     proc "printf '\\e[?1047hPress ENTER: ' && read && printf '\\e[?1047lfullscreen off'\n")
+    (mistty-wait-for-output
+     :proc proc
+     :test
+     (lambda ()
+       (buffer-local-value 'mistty-fullscreen work-buffer)))
+
+    ;; In fullscreen mode, terminal size should come from the window
+    (should (equal 79 (buffer-local-value 'mistty-alacritty-columns term-buffer)))
+    (should (equal 22 (buffer-local-value 'mistty-alacritty-lines term-buffer)))
+
+    (split-window-vertically)
+    (should (redisplay t))
+    (should (equal 79 (buffer-local-value 'mistty-alacritty-columns term-buffer)))
+    (should (equal 10 (buffer-local-value 'mistty-alacritty-lines term-buffer)))
+
+    ;; Leave fullscreen
+    (mistty--send-string proc "\n")
+    (mistty-wait-for-output
+     :proc proc
+     :test
+     (lambda ()
+       (not (buffer-local-value 'mistty-fullscreen work-buffer))))
+
+    ;; We're back to the fixed terminal size
     (mistty-send-text "echo $(tput cols)x$(tput lines)")
     (should (equal "40x10" (mistty-send-and-capture-command-output)))
 
-    (mistty-set-terminal-size 160 25)
-    (mistty-send-text "echo $(tput cols)x$(tput lines)")
-    (should (equal "160x25" (mistty-send-and-capture-command-output)))
-
-    ;; This should re-enable window size tracking
-    (mistty-terminal-size-tracks-window)
-    (mistty-send-text "echo $(tput cols)x$(tput lines)")
-    (should (equal "79x22" (mistty-send-and-capture-command-output)))
-
-    (split-window)
+    ;; And ignoring window change sizes
+    (delete-other-windows)
     (should (redisplay t))
 
     (mistty-send-text "echo $(tput cols)x$(tput lines)")
-    (should (equal "79x10" (mistty-send-and-capture-command-output)))))
+    (should (equal "40x10" (mistty-send-and-capture-command-output)))))
 
-(turtles-ert-deftest mistty-test-set-terminal-size-and-fullscreen (:instance 'mistty)
-  (mistty-with-test-buffer (:selected t :term-size 'window)
-    (let ((proc mistty-proc)
-          (work-buffer mistty-work-buffer)
-          (term-buffer mistty-term-buffer))
+(mistty-deftest mistty-enforce-min-terminal-size ( :type all)
+  (should-error (mistty-set-terminal-size 2 20))
+  (should-error (mistty-set-terminal-size 80 2))
+  (should-error (mistty-exec "/usr/bin/false" :width 2 :height 20))
+  (should-error (mistty-exec "/usr/bin/false" :width 80 :height 2)))
 
-      (mistty-set-terminal-size 40 10)
-      (delete-other-windows)
-      (should (redisplay t))
+;; TODO: make it run on eterm
+(mistty-deftest mistty-terminal-type-accepts-min-terminal-size
+    (:selected t :term-size 'window :type alacritty :turtles t)
+  (let ((mistty--inhibit-fake-nl-cleanup nil))
+    (should (equal 8 mistty-min-terminal-width))
+    (should (equal 4 mistty-min-terminal-height))
 
-      ;; Enter fullscreen
-      (mistty--send-string
-       proc "printf '\\e[?1047hPress ENTER: ' && read && printf '\\e[?1047lfullscreen off'\n")
-      (mistty-wait-for-output
-       :proc proc
-       :test
-       (lambda ()
-         (buffer-local-value 'mistty-fullscreen work-buffer)))
+    (mistty-set-terminal-size 8 4)
+    (mistty--send-string mistty-proc "echo $(tput cols)x$(tput lines)\n")
+    (mistty-wait-for-output :str "8x4")))
 
-      ;; In fullscreen mode, terminal size should come from the window
-      (should (equal 79 (buffer-local-value 'mistty-alacritty-columns term-buffer)))
-      (should (equal 22 (buffer-local-value 'mistty-alacritty-lines term-buffer)))
+(mistty-deftest mistty-test-min-terminal-size (:selected t :term-size '(8 . 4) :type all :turtles t)
+  (let ((mistty--inhibit-fake-nl-cleanup nil))
+    (mistty-set-terminal-size 8 4)
 
-      (split-window-vertically)
-      (should (redisplay t))
-      (should (equal 79 (buffer-local-value 'mistty-alacritty-columns term-buffer)))
-      (should (equal 10 (buffer-local-value 'mistty-alacritty-lines term-buffer)))
+    (mistty--send-string mistty-proc "echo hello, world")
+    (mistty-wait-for-output :regexp "o\n?r\n?l\n?d")
 
-      ;; Leave fullscreen
-      (mistty--send-string proc "\n")
-      (mistty-wait-for-output
-       :proc proc
-       :test
-       (lambda ()
-         (not (buffer-local-value 'mistty-fullscreen work-buffer))))
+    ;; Fake newlines exist on the terminal...
+    (should (equal "$ echo h\nello, wo\nrld"
+                   (mistty-test-content)))
 
-      ;; We're back to the fixed terminal size
-      (mistty-send-text "echo $(tput cols)x$(tput lines)")
-      (should (equal "40x10" (mistty-send-and-capture-command-output)))
+    ;; ... but they're invisible
+    (turtles-with-grab-buffer ()
+      (should (equal "$ echo hello, world" (buffer-string))))
 
-      ;; And ignoring window change sizes
-      (delete-other-windows)
-      (should (redisplay t))
+    (mistty--send-string mistty-proc "\n")
+    (mistty-wait-for-output :regexp "^hel")
+    (mistty--send-string mistty-proc "echo foo\n")
+    (mistty-wait-for-output :regexp "^foo")
 
-      (mistty-send-text "echo $(tput cols)x$(tput lines)")
-      (should (equal "40x10" (mistty-send-and-capture-command-output))))))
+    ;; After leaving the terminal area, only the correct newlines are left.
+    (should (equal (concat
+                    "$ echo hello, world\n"
+                    "hello, world\n"
+                    "$ echo foo\n"
+                    "foo\n"
+                    "$")
+                   (mistty-test-content)))))
 
-(ert-deftest mistty-enforce-min-terminal-size ()
-  (mistty-with-test-buffer ()
-    (should-error (mistty-set-terminal-size 2 20))
-    (should-error (mistty-set-terminal-size 80 2))
-    (should-error (mistty-exec "/usr/bin/false" :width 2 :height 20))
-    (should-error (mistty-exec "/usr/bin/false" :width 80 :height 2))))
+(mistty-deftest mistty-test-detect-foreign-overlays-labelled ( :type all)
+  (let ((mistty-detect-foreign-overlays t) test-overlay)
+    (mistty-send-text "echo hello, world")
+    (mistty-run-command
+     (mistty-test-goto "hello")
+     (setq test-overlay (make-overlay (point) (+ 5 (point))))
+     (overlay-put test-overlay 'mistty-long-running-command t))
 
-(turtles-ert-deftest mistty-terminal-type-accepts-min-terminal-size (:instance 'mistty)
-  (mistty-with-test-buffer (:selected t :term-size 'window)
-    (let ((mistty--inhibit-fake-nl-cleanup nil))
-      (should (equal 8 mistty-min-terminal-width))
-      (should (equal 4 mistty-min-terminal-height))
+    (mistty-wait-for-output :test (lambda ()
+                                    (equal '(mistty-overlays) mistty--inhibit)))
+    (should (mistty-long-running-command-p))))
 
-      (mistty-set-terminal-size 8 4)
-      (mistty--send-string mistty-proc "echo $(tput cols)x$(tput lines)\n")
-      (mistty-wait-for-output :str "8x4"))))
+(mistty-deftest mistty-test-foreign-overlay-detection-disabled ( :type all)
+  (let ((mistty-detect-foreign-overlays nil) test-overlay)
+    (mistty-send-text "echo hello, world")
+    (mistty-run-command
+     (mistty-test-goto "hello")
+     (setq test-overlay (make-overlay (point) (+ 5 (point))))
+     (overlay-put test-overlay 'mistty-long-running-command t))
 
-(turtles-ert-deftest mistty-test-min-terminal-size (:instance 'mistty)
-  (mistty-with-test-buffer (:selected t :term-size '(8 . 4))
-    (let ((mistty--inhibit-fake-nl-cleanup nil))
-      (mistty-set-terminal-size 8 4)
+    (should-not (mistty-long-running-command-p))))
 
-      (mistty--send-string mistty-proc "echo hello, world")
-      (mistty-wait-for-output :regexp "o\n?r\n?l\n?d")
-
-      ;; Fake newlines exist on the terminal...
-      (should (equal "$ echo h\nello, wo\nrld"
-                     (mistty-test-content)))
-
-      ;; ... but they're invisible
-      (turtles-with-grab-buffer ()
-        (should (equal "$ echo hello, world" (buffer-string))))
-
-      (mistty--send-string mistty-proc "\n")
-      (mistty-wait-for-output :regexp "^hel")
-      (mistty--send-string mistty-proc "echo foo\n")
-      (mistty-wait-for-output :regexp "^foo")
-
-      ;; After leaving the terminal area, only the correct newlines are left.
-      (should (equal (concat
-                      "$ echo hello, world\n"
-                      "hello, world\n"
-                      "$ echo foo\n"
-                      "foo\n"
-                      "$")
-                     (mistty-test-content))))))
-
-(ert-deftest mistty-test-detect-foreign-overlays-labelled ()
+(mistty-deftest mistty-test-ignore-unlabelled-foreign-overlays ( :type all)
   (let ((mistty-detect-foreign-overlays t))
-    (mistty-with-test-buffer ()
-      (let (test-overlay)
-        (mistty-send-text "echo hello, world")
-        (mistty-run-command
-         (mistty-test-goto "hello")
-         (setq test-overlay (make-overlay (point) (+ 5 (point))))
-         (overlay-put test-overlay 'mistty-long-running-command t))
+    (mistty-send-text "echo hello, world")
+    (mistty-run-command
+     (mistty-test-goto "hello")
+     (make-overlay (point) (+ 5 (point))))
 
-        (mistty-wait-for-output :test (lambda ()
-                                        (equal '(mistty-overlays) mistty--inhibit)))
-        (should (mistty-long-running-command-p))))))
+    (should-not mistty--inhibit)))
 
-(ert-deftest mistty-test-foreign-overlay-detection-disabled ()
-  (let ((mistty-detect-foreign-overlays nil))
-    (mistty-with-test-buffer ()
-      (let (test-overlay)
-        (mistty-send-text "echo hello, world")
-        (mistty-run-command
-         (mistty-test-goto "hello")
-         (setq test-overlay (make-overlay (point) (+ 5 (point))))
-         (overlay-put test-overlay 'mistty-long-running-command t))
-
-        (should-not (mistty-long-running-command-p))))))
-
-(ert-deftest mistty-test-ignore-unlabelled-foreign-overlays ()
+(mistty-deftest mistty-test-ignore-detected-foreign-overlays-after-C-g ( :type all)
   (let ((mistty-detect-foreign-overlays t))
-    (mistty-with-test-buffer ()
+    (let (test-overlay)
       (mistty-send-text "echo hello, world")
       (mistty-run-command
        (mistty-test-goto "hello")
-       (make-overlay (point) (+ 5 (point))))
+       (setq test-overlay (make-overlay (point) (+ 5 (point))))
+       (overlay-put test-overlay 'mistty-long-running-command t))
 
-      (should-not mistty--inhibit))))
+      ;; A long command was detected.
+      (mistty-wait-for-output :test (lambda ()
+                                      (equal '(mistty-overlays) mistty--inhibit)))
+      (should (mistty-long-running-command-p))
 
-(ert-deftest mistty-test-ignore-detected-foreign-overlays-after-C-g ()
-  (let ((mistty-detect-foreign-overlays t))
-    (mistty-with-test-buffer ()
-      (let (test-overlay)
-        (mistty-send-text "echo hello, world")
-        (mistty-run-command
-         (mistty-test-goto "hello")
-         (setq test-overlay (make-overlay (point) (+ 5 (point))))
-         (overlay-put test-overlay 'mistty-long-running-command t))
+      ;; Simulate C-g
+      (let ((this-command 'keyboard-quit))
+        (mistty--pre-command)
+        (mistty--post-command))
 
-        ;; A long command was detected.
-        (mistty-wait-for-output :test (lambda ()
-                                        (equal '(mistty-overlays) mistty--inhibit)))
-        (should (mistty-long-running-command-p))
+      ;; We're back to normal.
+      (mistty-wait-for-output :test (lambda ()
+                                      (not mistty--inhibit)))
+      (should-not (mistty-long-running-command-p))
 
-        ;; Simulate C-g
-        (let ((this-command 'keyboard-quit))
-          (mistty--pre-command)
-          (mistty--post-command))
-
-        ;; We're back to normal.
-        (mistty-wait-for-output :test (lambda ()
-                                        (not mistty--inhibit)))
-        (should-not (mistty-long-running-command-p))
-
-        (should (equal "hello, world"
-                       (mistty-send-and-capture-command-output)))))))
+      (should (equal "hello, world"
+                     (mistty-send-and-capture-command-output))))))
 
 (ert-deftest mistty-test-autoignore-early-foreign-overlays ()
   (let ((mistty-detect-foreign-overlays t)
@@ -4794,84 +4775,79 @@
     (mistty-with-test-buffer ()
       (should-not mistty-detect-foreign-overlays))))
 
-(ert-deftest mistty-test-detect-completion-in-region ()
-  (mistty-with-test-buffer ()
-    (mistty-send-text "echo hello")
-    (setq completion-in-region-mode t)
-    (run-hooks 'completion-in-region-mode-hook)
-    (should (equal '(mistty-completion-in-region) mistty--inhibit))
-    (mistty-run-command
-     (insert ","))
-    (mistty-run-command
-     (insert " world"))
-    (should (equal "$ echo hello, world" (mistty-test-content)))
-    (setq completion-in-region-mode nil)
-    (run-hooks 'completion-in-region-mode-hook)
-    (should (equal nil mistty--inhibit))
-    (mistty-wait-for-output :str "hello, world")))
+(mistty-deftest mistty-test-detect-completion-in-region ( :type all)
+  (mistty-send-text "echo hello")
+  (setq completion-in-region-mode t)
+  (run-hooks 'completion-in-region-mode-hook)
+  (should (equal '(mistty-completion-in-region) mistty--inhibit))
+  (mistty-run-command
+   (insert ","))
+  (mistty-run-command
+   (insert " world"))
+  (should (equal "$ echo hello, world" (mistty-test-content)))
+  (setq completion-in-region-mode nil)
+  (run-hooks 'completion-in-region-mode-hook)
+  (should (equal nil mistty--inhibit))
+  (mistty-wait-for-output :str "hello, world"))
 
-(ert-deftest mistty-test-report-long-running-command ()
-  (mistty-with-test-buffer ()
-    (should-not (mistty-long-running-command-p))
-    (should (equal ":run" mode-line-process))
+(mistty-deftest mistty-test-report-long-running-command ( :type all)
+  (should-not (mistty-long-running-command-p))
+  (should (equal ":run" mode-line-process))
 
-    (mistty-report-long-running-command 'test t)
-    (should (mistty-long-running-command-p))
-    (should (equal " CMD:run" mode-line-process))
+  (mistty-report-long-running-command 'test t)
+  (should (mistty-long-running-command-p))
+  (should (equal " CMD:run" mode-line-process))
 
-    (insert "echo hello, world")
-    (mistty-report-long-running-command 'test nil)
-    (should-not (mistty-long-running-command-p))
-    (should (equal ":run" mode-line-process))
+  (insert "echo hello, world")
+  (mistty-report-long-running-command 'test nil)
+  (should-not (mistty-long-running-command-p))
+  (should (equal ":run" mode-line-process))
 
-    ;; the change made during the long-running command have been
-    ;; replayed.
-    (mistty-wait-for-output :str "hello, world")))
+  ;; the change made during the long-running command have been
+  ;; replayed.
+  (mistty-wait-for-output :str "hello, world"))
 
-(ert-deftest mistty-test-ignore-long-running-command ()
-  (mistty-with-test-buffer ()
-    (mistty-report-long-running-command 'test-1 t)
-    (should (mistty-long-running-command-p))
-    (mistty-report-long-running-command 'test-2 t)
+(mistty-deftest mistty-test-ignore-long-running-command ( :type all)
+  (mistty-report-long-running-command 'test-1 t)
+  (should (mistty-long-running-command-p))
+  (mistty-report-long-running-command 'test-2 t)
 
-    (insert "echo hello, world")
+  (insert "echo hello, world")
 
-    (mistty-ignore-long-running-command)
-    (should-not (mistty-long-running-command-p))
+  (mistty-ignore-long-running-command)
+  (should-not (mistty-long-running-command-p))
 
-    ;; the change made during the long-running command have been
-    ;; replayed.
-    (mistty-wait-for-output :str "hello, world")))
+  ;; the change made during the long-running command have been
+  ;; replayed.
+  (mistty-wait-for-output :str "hello, world"))
 
-(ert-deftest mistty-test-replays-are-queued ()
-  (mistty-with-test-buffer ()
-    (let ((unfreeze (mistty-test-freeze-queue)))
-      ;; the queue is frozen for now
+(mistty-deftest mistty-test-replays-are-queued ( :type all)
+  (let ((unfreeze (mistty-test-freeze-queue)))
+    ;; the queue is frozen for now
 
-      ;; put two replays in the queue
-      (mistty-run-command-nowait
-       (insert "echo hello"))
+    ;; put two replays in the queue
+    (mistty-run-command-nowait
+     (insert "echo hello"))
 
-      (mistty-run-command-nowait
-       (insert " world."))
+    (mistty-run-command-nowait
+     (insert " world."))
 
-      ;; the work buffer is still frozen, showing a preview.
-      (should (equal "$ echo hello world.<>" (mistty-test-content :show (point))))
+    ;; the work buffer is still frozen, showing a preview.
+    (should (equal "$ echo hello world.<>" (mistty-test-content :show (point))))
 
-      ;; restart the queue and wait until it's empty
-      (funcall unfreeze)
-      (mistty-wait-for-output
-       :test (lambda ()
-               (mistty--queue-empty-p mistty--queue)))
+    ;; restart the queue and wait until it's empty
+    (funcall unfreeze)
+    (mistty-wait-for-output
+     :test (lambda ()
+             (mistty--queue-empty-p mistty--queue)))
 
-      (mistty-wait-for-output :str "echo hello world.")
-      (should (equal "$ echo hello world.<>" (mistty-test-content :show (point)))))))
+    (mistty-wait-for-output :str "echo hello world.")
+    (should (equal "$ echo hello world.<>" (mistty-test-content :show (point))))))
 
-(ert-deftest mistty-test-interactive-inserts ()
+(mistty-deftest mistty-test-interactive-inserts ( :type all)
   (let ((mistty-interactive-insert-hook nil))
-    (mistty-with-test-buffer ()
-      (let ((start (point))
-            (calls))
+    (let ((start (point))
+          (calls))
       (add-hook 'mistty-interactive-insert-hook
                 (lambda ()
                   (push (mistty--safe-bufstring start (point))
@@ -4886,66 +4862,70 @@
       (mistty-wait-for-output :str "echo ok")
       (should (length> calls 0))
       (should (equal "echo ok" (car calls)))
-      (should (equal "ok" (mistty-send-and-capture-command-output)))))))
-
-(ert-deftest mistty-test-simulate-self-insert-commands ()
-  (mistty-with-test-buffer ()
-    (let ((mistty-interactive-insert-hook '(mistty-simulate-self-insert-command))
-          (mistty-simulate-self-insert-command t)
-          pre-calls
-          post-calls)
-      (add-hook 'pre-command-hook
-                (lambda ()
-                  (push this-command pre-calls)))
-      (add-hook 'post-command-hook
-                (lambda ()
-                  (push this-command post-calls)))
-      (cl-loop for key across "echo ok"
-               do (progn
-                    (setq this-command 'mistty-self-insert)
-                    (mistty-run-command
-                     (mistty-self-insert 1 key))
-                    (setq last-command 'mistty-self-insert)))
-      (mistty-wait-for-output :str "echo ok")
-      (should (length> pre-calls 0))
-      (should (length> post-calls 0))
-      (should (equal 'self-insert-command (car pre-calls)))
-      (should (equal 'self-insert-command (car post-calls)))
-      (should (= (length post-calls) (length pre-calls)))
       (should (equal "ok" (mistty-send-and-capture-command-output))))))
 
-(ert-deftest mistty-test-toggle-fringe ()
-  (mistty-with-test-buffer ()
-    (mistty-fringe-mode nil)
-    (should mistty-fringe-mode)
-    (should (overlay-get mistty--sync-ov 'line-prefix))
+(mistty-deftest mistty-test-simulate-self-insert-commands ( :type all)
+  (let ((mistty-interactive-insert-hook '(mistty-simulate-self-insert-command))
+        (mistty-simulate-self-insert-command t)
+        pre-calls
+        post-calls)
+    (add-hook 'pre-command-hook
+              (lambda ()
+                (push this-command pre-calls)))
+    (add-hook 'post-command-hook
+              (lambda ()
+                (push this-command post-calls)))
+    (cl-loop for key across "echo ok"
+             do (progn
+                  (setq this-command 'mistty-self-insert)
+                  (mistty-run-command
+                   (mistty-self-insert 1 key))
+                  (setq last-command 'mistty-self-insert)))
+    (mistty-wait-for-output :str "echo ok")
+    (should (length> pre-calls 0))
+    (should (length> post-calls 0))
+    (should (equal 'self-insert-command (car pre-calls)))
+    (should (equal 'self-insert-command (car post-calls)))
+    (should (= (length post-calls) (length pre-calls)))
+    (should (equal "ok" (mistty-send-and-capture-command-output)))))
 
-    (mistty-fringe-mode -1)
-    (should-not mistty-fringe-mode)
-    (should-not (overlay-get mistty--sync-ov 'line-prefix))))
+(mistty-deftest mistty-test-toggle-fringe ( :type all)
+  (mistty-fringe-mode nil)
+  (should mistty-fringe-mode)
+  (should (overlay-get mistty--sync-ov 'line-prefix))
 
-(ert-deftest mistty-test-fringe-enabled ()
+  (mistty-fringe-mode -1)
+  (should-not mistty-fringe-mode)
+  (should-not (overlay-get mistty--sync-ov 'line-prefix)))
+
+(mistty-deftest mistty-test-fringe-enabled ( :type all)
   (let ((orig-value mistty-fringe-enabled))
-    (mistty-with-test-buffer ()
-      (customize-set-variable 'mistty-fringe-enabled t)
-      (should mistty-fringe-mode)
+    (customize-set-variable 'mistty-fringe-enabled t)
+    (should mistty-fringe-mode)
 
-      (customize-set-variable 'mistty-fringe-enabled nil)
-      (should-not mistty-fringe-mode)
+    (customize-set-variable 'mistty-fringe-enabled nil)
+    (should-not mistty-fringe-mode)
 
-      (customize-set-variable 'mistty-fringe-enabled orig-value))))
+    (customize-set-variable 'mistty-fringe-enabled orig-value)))
 
-(ert-deftest mistty-kill-buffer-after-exit ()
-  (mistty-with-test-buffer ()
-    (let ((mistty-at-end 'kill-buffer-and-window))
-      (add-hook 'mistty-after-process-end-hook #'mistty--at-end)
-      (let ((term-proc mistty-proc)
-            (term-buffer mistty-term-buffer))
-        (mistty-send-text "exit")
-        (mistty-send-command)
-        (mistty-wait-for-term-buffer-and-proc-to-die term-buffer term-proc)))))
+(mistty-deftest mistty-kill-buffer-after-exit ( :type all)
+  (let ((mistty-at-end 'kill-buffer-and-window))
+    (add-hook 'mistty-after-process-end-hook #'mistty--at-end)
+    (let ((term-proc mistty-proc)
+          (term-buffer mistty-term-buffer))
+      (mistty-send-text "exit")
+      (mistty-send-command)
+      (mistty-wait-for-term-buffer-and-proc-to-die term-buffer term-proc))))
 
-(ert-deftest mistty-keep-buffer-after-immediate-exit ()
+(ert-deftest mistty-keep-buffer-after-immediate-exit/alacritty ()
+  (let ((mistty-terminal-type 'alacritty))
+    (mistty-keep-buffer-after-immediate-exit)))
+
+(ert-deftest mistty-keep-buffer-after-immediate-exit/eterm ()
+  (let ((mistty-terminal-type 'eterm))
+    (mistty-keep-buffer-after-immediate-exit)))
+
+(defun mistty-keep-buffer-after-immediate-exit ()
   (let ((mistty-after-process-start-hook nil)
         (mistty-after-process-end-hook '(mistty--at-end))
         (mistty-at-end 'kill-buffer-and-window))
@@ -4961,46 +4941,43 @@
       (process-send-string mistty-proc "\C-d")
       (mistty-wait-for-output :str "finished\n"))))
 
-(ert-deftest mistty-kill-buffer-keeps-buffer-if-fails ()
-  (mistty-with-test-buffer ()
-    (let ((mistty-at-end 'kill-buffer-and-window)
-          (mistty-after-process-end-hook '(mistty--at-end))
-          (called nil))
-      (add-hook 'mistty-after-process-end-hook (lambda (_proc)
-                                                 (setq called t)))
-      (mistty-send-text "exit 10")
-      (mistty-send-command)
-      (mistty-wait-for-output :test (lambda () called)))))
+(mistty-deftest mistty-kill-buffer-keeps-buffer-if-fails ( :type all)
+  (let ((mistty-at-end 'kill-buffer-and-window)
+        (mistty-after-process-end-hook '(mistty--at-end))
+        (called nil))
+    (add-hook 'mistty-after-process-end-hook (lambda (_proc)
+                                               (setq called t)))
+    (mistty-send-text "exit 10")
+    (mistty-send-command)
+    (mistty-wait-for-output :test (lambda () called))))
 
-(ert-deftest mistty-kill-buffer-and-window-stop-when-buffer-killed ()
-  (mistty-with-test-buffer ()
-    (let ((mistty-at-end 'kill-buffer-and-window)
-          (called-first nil)
-          (called-last nil)
-          term-proc term-buffer work-buffer)
-      (setq mistty-after-process-end-hook
-            (list (lambda (_) (setq called-first (current-buffer)))
-                  #'mistty--at-end
-                  (lambda (_) (setq called-last (current-buffer)))))
-      (setq term-proc mistty-proc)
-      (setq term-buffer mistty-term-buffer)
-      (setq work-buffer mistty-work-buffer)
+(mistty-deftest mistty-kill-buffer-and-window-stop-when-buffer-killed ( :type all)
+  (let ((mistty-at-end 'kill-buffer-and-window)
+        (called-first nil)
+        (called-last nil)
+        term-proc term-buffer work-buffer)
+    (setq mistty-after-process-end-hook
+          (list (lambda (_) (setq called-first (current-buffer)))
+                #'mistty--at-end
+                (lambda (_) (setq called-last (current-buffer)))))
+    (setq term-proc mistty-proc)
+    (setq term-buffer mistty-term-buffer)
+    (setq work-buffer mistty-work-buffer)
+    (mistty-send-text "exit")
+    (mistty-send-command)
+    (mistty-wait-for-term-buffer-and-proc-to-die term-buffer term-proc)
+    (should (equal work-buffer called-first))
+    (should-not called-last)))
+
+(mistty-deftest mistty-kill-buffer-after-exit-multiple-times ( :type all)
+  (let ((mistty-at-end 'kill-buffer-and-window))
+    (add-hook 'mistty-after-process-end-hook #'mistty--at-end)
+    (add-hook 'mistty-after-process-end-hook #'mistty-kill-buffer)
+    (let ((term-proc mistty-proc)
+          (term-buffer mistty-term-buffer))
       (mistty-send-text "exit")
       (mistty-send-command)
-      (mistty-wait-for-term-buffer-and-proc-to-die term-buffer term-proc)
-      (should (equal work-buffer called-first))
-      (should-not called-last))))
-
-(ert-deftest mistty-kill-buffer-after-exit-multiple-times ()
-  (mistty-with-test-buffer ()
-    (let ((mistty-at-end 'kill-buffer-and-window))
-      (add-hook 'mistty-after-process-end-hook #'mistty--at-end)
-      (add-hook 'mistty-after-process-end-hook #'mistty-kill-buffer)
-      (let ((term-proc mistty-proc)
-            (term-buffer mistty-term-buffer))
-        (mistty-send-text "exit")
-        (mistty-send-command)
-        (mistty-wait-for-term-buffer-and-proc-to-die term-buffer term-proc)))))
+      (mistty-wait-for-term-buffer-and-proc-to-die term-buffer term-proc))))
 
 (ert-deftest mistty-test-buffer-name ()
   (let ((mistty-buffer-name '("mistty")))
@@ -5015,7 +4992,15 @@
         (mistty-shell-command '("/usr/bin/fish" "-i")))
     (should (equal "*fish*" (mistty-new-buffer-name)))))
 
-(ert-deftest mistty-test-set-EMACS ()
+(ert-deftest mistty-test-set-EMACS/alacritty ()
+  (let ((mistty-terminal-type 'alacritty))
+    (mistty-test-set-EMACS)))
+
+(ert-deftest mistty-test-set-EMACS/eterm ()
+  (let ((mistty-terminal-type 'eterm))
+    (mistty-test-set-EMACS)))
+
+(defun mistty-test-set-EMACS ()
   (setenv "EMACS" nil) ;; Sometimes set to run Eldev
 
   (let ((mistty-set-EMACS nil))
@@ -5028,176 +5013,186 @@
       (should (equal (format "EMACS=%s" emacs-version )
                      (mistty-send-and-capture-command-output))))))
 
-(turtles-ert-deftest mistty-test-change-term-colors ( :instance 'mistty)
+(turtles-ert-deftest mistty-test-change-term-colors/alacritty ( :instance 'mistty)
   (unwind-protect
       (progn
         (load-theme 'modus-vivendi 'no-confirm) ;; dark theme
-        (mistty-with-test-buffer ()
-          ;; A prompt that sets a color and switches back to the default.
-          (mistty--send-string mistty-proc "PS1='\\e[48;5;94m\\e[38;5;15m$ \\e[0m'")
-          (mistty-send-and-wait-for-prompt)
-
-          ;; Text should still reference the default face and not
-          ;; specific colors.
-          (mistty-send-text "echo hello")
-          (mistty-send-and-wait-for-prompt)
-
-          (mistty-send-text "echo world")
-
-          (disable-theme 'modus-vivendi)
-          (load-theme 'modus-operandi 'no-confirm) ;; light theme
-
-          ;; Allow some time for terminal refresh.
-          (accept-process-output mistty-proc 0.1)
-          (while (accept-process-output mistty-proc 0))
-
-          ;; We switched from a dark to a light  theme. Make sure the
-          ;; background of normal text is light .
-          (turtles-with-grab-buffer ()
-            (goto-char (point-min))
-
-            ;; scrollback region
-            (search-forward "echo hello")
-            (goto-char (match-beginning 0))
-            (should (equal (color-values (background-color-at-point))
-                           (color-values (face-background 'default))))
-
-            ;; terminal region
-            (search-forward "echo hello")
-            (goto-char (match-beginning 0))
-            (should (equal (color-values (background-color-at-point))
-                           (color-values (face-background 'default)))))))
+        (mistty-with-test-buffer (:type alacritty)
+          (test-change-term-colors)))
     (dolist (theme custom-enabled-themes)
       (disable-theme theme))))
 
-(turtles-ert-deftest mistty-test-scroll-window-up ( :instance 'mistty)
-  (mistty-with-test-buffer (:shell fish :selected t)
-    (let ((win (selected-window))
-          (testbuf (current-buffer))
-          (lastline (lambda (&optional buf)
-                      (with-current-buffer (or buf (current-buffer))
-                        (save-excursion
-                          (goto-char (mistty--blank-end-start))
-                          (buffer-substring-no-properties
-                           (pos-bol) (pos-eol)))))))
-      (delete-other-windows)
+(turtles-ert-deftest mistty-test-change-term-colors/eterm ( :instance 'mistty)
+  (unwind-protect
+      (progn
+        (load-theme 'modus-vivendi 'no-confirm) ;; dark theme
+        (mistty-with-test-buffer (:type eterm)
+          (test-change-term-colors)))
+    (dolist (theme custom-enabled-themes)
+      (disable-theme theme))))
 
-      ;; Make sure "fi" is at the bottom of the window
-      (mistty-send-text "for i in (seq 0 30); echo line $i; end")
-      (mistty-send-and-wait-for-prompt)
+(defun test-change-term-colors ()
+  ;; A prompt that sets a color and switches back to the default.
+  (mistty--send-string mistty-proc "PS1='\\e[48;5;94m\\e[38;5;15m$ \\e[0m'")
+  (mistty-send-and-wait-for-prompt)
 
-      (mistty-send-text "fi")
+  ;; Text should still reference the default face and not
+  ;; specific colors.
+  (mistty-send-text "echo hello")
+  (mistty-send-and-wait-for-prompt)
 
-      (recenter nil 'redisplay)
-      (turtles-with-grab-buffer (:win win)
-        (should (string-match "^\\$ fi" (funcall lastline))))
+  (mistty-send-text "echo world")
 
-      ;; Command completion should display a few lines below the
-      ;; prompt. Since we're at the bottom of the window, these
-      ;; lines would normally not be visible.
-      (mistty-run-command
-       (mistty-tab-command))
-      (mistty-wait-for-output :regexp "^fi")
-      (turtles-with-grab-buffer (:win win)
-        (goto-char (point-max))
-        (should (equal
-                 (string-trim (funcall lastline testbuf))
-                 (string-trim (funcall lastline))))))))
+  (disable-theme 'modus-vivendi)
+  (load-theme 'modus-operandi 'no-confirm) ;; light theme
 
-(ert-deftest mistty-test-keep-active-mark-on-prompt ()
-  (mistty-with-test-buffer ()
-    (transient-mark-mode 1)
+  ;; Allow some time for terminal refresh.
+  (accept-process-output mistty-proc 0.1)
+  (while (accept-process-output mistty-proc 0))
 
-    (mistty-send-text "echo hello, world")
-    (mistty-test-goto "hello")
+  ;; We switched from a dark to a light  theme. Make sure the
+  ;; background of normal text is light .
+  (turtles-with-grab-buffer ()
+    (goto-char (point-min))
 
-    ;; The terminal moving the cursor should not deactivate the mark.
-    (mistty-run-command
-     (set-mark (point)))
-    (mistty-run-command
-     (call-interactively #'mistty-end-of-line-or-goto-cursor))
-    (should mark-active)
-    (should (equal "hello, world"
-                   (buffer-substring-no-properties (mark) (point))))))
+    ;; scrollback region
+    (search-forward "echo hello")
+    (goto-char (match-beginning 0))
+    (should (equal (color-values (background-color-at-point))
+                   (color-values (face-background 'default))))
 
-(ert-deftest mistty-test-deactivate-mark-on-send ()
-  (mistty-with-test-buffer ()
-    (transient-mark-mode 1)
+    ;; terminal region
+    (search-forward "echo hello")
+    (goto-char (match-beginning 0))
+    (should (equal (color-values (background-color-at-point))
+                   (color-values (face-background 'default))))))
 
-    (mistty-send-text "echo hello, world")
-    (mistty-run-command
-     (mistty-test-goto "hello")
-     (set-mark (point)))
-    (mistty-send-text "hello,")
-    (mistty-send-and-wait-for-prompt :send #'mistty-send-command)
-    (should-not mark-active)))
+;; TODO: make it run on eterm
+(mistty-deftest mistty-test-scroll-window-up
+    (:shell fish :selected t :type alacritty :turtles t)
+  (let ((win (selected-window))
+        (testbuf (current-buffer))
+        (lastline (lambda (&optional buf)
+                    (with-current-buffer (or buf (current-buffer))
+                      (save-excursion
+                        (goto-char (mistty--blank-end-start))
+                        (buffer-substring-no-properties
+                         (pos-bol) (pos-eol)))))))
+    (delete-other-windows)
 
-(ert-deftest mistty-test-recovery ()
-  (mistty-with-test-buffer (:term-size '(80 . 20))
-    ;; Make sure that there's more text in the term buffer than the
-    ;; window height allows.
-    (dotimes (i 20)
-      (mistty-send-text (format "echo line %d" i))
-      (mistty-send-and-wait-for-prompt))
-
-    (mistty-send-text "echo one")
+    ;; Make sure "fi" is at the bottom of the window
+    (mistty-send-text "for i in (seq 0 30); echo line $i; end")
     (mistty-send-and-wait-for-prompt)
-    (mistty-send-text "echo two")
+
+    (mistty-send-text "fi")
+
+    (recenter nil 'redisplay)
+    (turtles-with-grab-buffer (:win win)
+      (should (string-match "^\\$ fi" (funcall lastline))))
+
+    ;; Command completion should display a few lines below the
+    ;; prompt. Since we're at the bottom of the window, these
+    ;; lines would normally not be visible.
+    (mistty-run-command
+     (mistty-tab-command))
+    (mistty-wait-for-output :regexp "^fi")
+    (turtles-with-grab-buffer (:win win)
+      (goto-char (point-max))
+      (should (equal
+               (string-trim (funcall lastline testbuf))
+               (string-trim (funcall lastline)))))))
+
+(mistty-deftest mistty-test-keep-active-mark-on-prompt ( :type all)
+  (transient-mark-mode 1)
+
+  (mistty-send-text "echo hello, world")
+  (mistty-test-goto "hello")
+
+  ;; The terminal moving the cursor should not deactivate the mark.
+  (mistty-run-command
+   (set-mark (point)))
+  (mistty-run-command
+   (call-interactively #'mistty-end-of-line-or-goto-cursor))
+  (should mark-active)
+  (should (equal "hello, world"
+                 (buffer-substring-no-properties (mark) (point)))))
+
+(mistty-deftest mistty-test-deactivate-mark-on-send ( :type all)
+  (transient-mark-mode 1)
+
+  (mistty-send-text "echo hello, world")
+  (mistty-run-command
+   (mistty-test-goto "hello")
+   (set-mark (point)))
+  (mistty-send-text "hello,")
+  (mistty-send-and-wait-for-prompt :send #'mistty-send-command)
+  (should-not mark-active))
+
+(mistty-deftest mistty-test-recovery (:term-size '(80 . 20) :type all)
+  ;; Make sure that there's more text in the term buffer than the
+  ;; window height allows.
+  (dotimes (i 20)
+    (mistty-send-text (format "echo line %d" i))
+    (mistty-send-and-wait-for-prompt))
+
+  (mistty-send-text "echo one")
+  (mistty-send-and-wait-for-prompt)
+  (mistty-send-text "echo two")
+  (mistty-send-and-wait-for-prompt)
+  (mistty-send-text "for i in {0..5}; do")
+  (mistty-send-text "\n  echo -n \"$ \"")
+  (mistty-send-text "\n  read")
+  (mistty-send-text "\n  echo \"line $i\"")
+  (mistty-send-text "\ndone ; printf \"\\r\\e[6;AMODIFIED\\r\\e[6;BDONE\\n\"")
+  (dotimes (_ 7)
     (mistty-send-and-wait-for-prompt)
-    (mistty-send-text "for i in {0..5}; do")
-    (mistty-send-text "\n  echo -n \"$ \"")
-    (mistty-send-text "\n  read")
-    (mistty-send-text "\n  echo \"line $i\"")
-    (mistty-send-text "\ndone ; printf \"\\r\\e[6;AMODIFIED\\r\\e[6;BDONE\\n\"")
-    (dotimes (_ 7)
-      (mistty-send-and-wait-for-prompt)
-      (mistty-send-key 1 (kbd "C-a")))
-    (mistty-send-text "echo three")
-    (mistty-send-and-wait-for-prompt)
-    (should
-     (equal
-      (concat
-       ;; Skipped beginning "line 0 - 39" at the beginning of the
-       ;; buffer.
-       "$ echo one\n"
-       "one\n"
-       "$ echo two\n"
-       "two\n"
-       "$ for i in {0..5}; do\n"
-       ">   echo -n \"$ \"\n"
-       ">   read\n"
-       ">   echo \"line $i\"\n"
-       "> done ; printf \"\\r\\e[6;AMODIFIED\\r\\e[6;BDONE\\n\"\n"
+    (mistty-send-key 1 (kbd "C-a")))
+  (mistty-send-text "echo three")
+  (mistty-send-and-wait-for-prompt)
+  (should
+   (equal
+    (concat
+     ;; Skipped beginning "line 0 - 39" at the beginning of the
+     ;; buffer.
+     "$ echo one\n"
+     "one\n"
+     "$ echo two\n"
+     "two\n"
+     "$ for i in {0..5}; do\n"
+     ">   echo -n \"$ \"\n"
+     ">   read\n"
+     ">   echo \"line $i\"\n"
+     "> done ; printf \"\\r\\e[6;AMODIFIED\\r\\e[6;BDONE\\n\"\n"
 
-       ;; These are the fake prompts generated by the script above
-       ;; to fool MisTTY.
+     ;; These are the fake prompts generated by the script above
+     ;; to fool MisTTY.
 
-       "$ ^A\n"
-       "line 0\n"
-       "$ ^A\n"
-       "line 1\n"
-       "$ ^A\n"
-       "line 2\n"
+     "$ ^A\n"
+     "line 0\n"
+     "$ ^A\n"
+     "line 1\n"
+     "$ ^A\n"
+     "line 2\n"
 
-       ;; If recovery doesn't work, we'll see repeated content here.
-       "MODIFIED\n"
-       "line 3\n"
-       "$ ^A\n"
-       "line 4\n"
-       "$ ^A\n"
-       "line 5\n"
-       ;; Next prompt after recovery
-       "DONE\n"
-       "$ echo three\n"
-       "three\n"
-       "$")
-      (mistty-test-content
-       :start (save-excursion (goto-char (point-min))
-                              (mistty-test-pos "$ echo one")))))))
+     ;; If recovery doesn't work, we'll see repeated content here.
+     "MODIFIED\n"
+     "line 3\n"
+     "$ ^A\n"
+     "line 4\n"
+     "$ ^A\n"
+     "line 5\n"
+     ;; Next prompt after recovery
+     "DONE\n"
+     "$ echo three\n"
+     "three\n"
+     "$")
+    (mistty-test-content
+     :start (save-excursion (goto-char (point-min))
+                            (mistty-test-pos "$ echo one"))))))
 
-(ert-deftest mistty-test-recovery-despite-fakenl-cleanup ()
-  (let ((mistty--inhibit-fake-nl-cleanup nil))
-    (mistty-with-test-buffer (:term-size '(20 . 20))
+;; TODO: review this test. Is fakenl cleanup really enabled?
+(mistty-deftest mistty-test-recovery-despite-fakenl-cleanup
+    (:term-size '(20 . 20) :type all)
       ;; Insert text that'll be too long for the window, so term
       ;; inserts fake newlines, which later get cleaned up when the
       ;; zone transitions to scrollback. These changes should not
@@ -5247,58 +5242,56 @@
          "$")
         (mistty-test-content
          :start (save-excursion (goto-char (point-min))
-                                (mistty-test-pos "$ ^A\nline 0\n"))))))))
+                                (mistty-test-pos "$ ^A\nline 0\n"))))))
 
-(ert-deftest mistty-mark-scrollines-for-recovery-gradual-scrollback ()
-  (mistty-with-test-buffer (:term-size '(80 . 20))
-    (let ((mistty--inhibit-fake-nl-cleanup nil))
-      ;; a very long line that will have to be broken up, to be
-      ;; sure we count scrollines and not terminal lines
-      (mistty-send-text "for i in $(seq 0 60); do echo -n '= '; done; echo")
-      (mistty-send-and-wait-for-prompt)
+(mistty-deftest mistty-mark-scrollines-for-recovery-gradual-scrollback (:term-size '(80 . 20) :type all)
+  (let ((mistty--inhibit-fake-nl-cleanup nil))
+    ;; a very long line that will have to be broken up, to be
+    ;; sure we count scrollines and not terminal lines
+    (mistty-send-text "for i in $(seq 0 60); do echo -n '= '; done; echo")
+    (mistty-send-and-wait-for-prompt)
 
-      ;; gradual scroll, handled by mistty--cleanup-scrollback
-      (dotimes (i 12)
-        (mistty-send-text (format "echo line %d" i))
-        (mistty-send-and-wait-for-prompt))
+    ;; gradual scroll, handled by mistty--cleanup-scrollback
+    (dotimes (i 12)
+      (mistty-send-text (format "echo line %d" i))
+      (mistty-send-and-wait-for-prompt))
 
-      ;; make sure all lines in the scrollback have been marked with
-      ;; mistty-scrolline
-      (goto-char (point-min))
-      (let ((scrolline 0))
-        (while (< (point) mistty-sync-marker)
-          (should (equal scrolline (get-text-property (point) 'mistty-scrolline)))
-          (should-not (text-property-not-all (point) (pos-eol) 'mistty-scrolline scrolline))
-          (mistty-log
-           "scrolline %s ok: >>%s<<"
-           scrolline (buffer-substring-no-properties (point) (pos-eol)))
-          (cl-incf scrolline)
-          (forward-line 1))))))
+    ;; make sure all lines in the scrollback have been marked with
+    ;; mistty-scrolline
+    (goto-char (point-min))
+    (let ((scrolline 0))
+      (while (< (point) mistty-sync-marker)
+        (should (equal scrolline (get-text-property (point) 'mistty-scrolline)))
+        (should-not (text-property-not-all (point) (pos-eol) 'mistty-scrolline scrolline))
+        (mistty-log
+         "scrolline %s ok: >>%s<<"
+         scrolline (buffer-substring-no-properties (point) (pos-eol)))
+        (cl-incf scrolline)
+        (forward-line 1)))))
 
-(ert-deftest mistty-mark-scrollines-for-recovery-quick-scrollback ()
-  (mistty-with-test-buffer (:term-size '(80 . 20))
-    (let ((mistty--inhibit-fake-nl-cleanup nil))
-      ;; a very long line that will have to be broken up, to be
-      ;; sure we count scrollines and not terminal lines
-      (mistty-send-text "for i in $(seq 0 60); do echo -n '= '; done; echo")
-      (mistty-send-and-wait-for-prompt)
+(mistty-deftest mistty-mark-scrollines-for-recovery-quick-scrollback (:term-size '(80 . 20) :type all)
+  (let ((mistty--inhibit-fake-nl-cleanup nil))
+    ;; a very long line that will have to be broken up, to be
+    ;; sure we count scrollines and not terminal lines
+    (mistty-send-text "for i in $(seq 0 60); do echo -n '= '; done; echo")
+    (mistty-send-and-wait-for-prompt)
 
-      ;; quick scroll, handled by catchup
-      (mistty-send-text "for i in $(seq 0 25); do echo $i; done")
-      (mistty-send-and-wait-for-prompt)
+    ;; quick scroll, handled by catchup
+    (mistty-send-text "for i in $(seq 0 25); do echo $i; done")
+    (mistty-send-and-wait-for-prompt)
 
-      ;; make sure all lines in the scrollback have been marked with
-      ;; mistty-scrolline
-      (goto-char (point-min))
-      (let ((scrolline 0))
-        (while (< (point) mistty-sync-marker)
-          (should (equal scrolline (get-text-property (point) 'mistty-scrolline)))
-          (should-not (text-property-not-all (point) (pos-eol) 'mistty-scrolline scrolline))
-          (mistty-log
-           "scrolline %s ok: >>%s<<"
-           scrolline (buffer-substring-no-properties (point) (pos-eol)))
-          (cl-incf scrolline)
-          (forward-line 1))))))
+    ;; make sure all lines in the scrollback have been marked with
+    ;; mistty-scrolline
+    (goto-char (point-min))
+    (let ((scrolline 0))
+      (while (< (point) mistty-sync-marker)
+        (should (equal scrolline (get-text-property (point) 'mistty-scrolline)))
+        (should-not (text-property-not-all (point) (pos-eol) 'mistty-scrolline scrolline))
+        (mistty-log
+         "scrolline %s ok: >>%s<<"
+         scrolline (buffer-substring-no-properties (point) (pos-eol)))
+        (cl-incf scrolline)
+        (forward-line 1)))))
 
 (defconst mistty-test-clear-before-prompt "
 function prompt {
@@ -5318,108 +5311,103 @@ function prompt {
     printf \"${clear}Got: $input\\n\"
 }")
 
-(ert-deftest mistty-test-recovery-clear-before-prompt ()
-  (mistty-with-test-buffer (:init mistty-test-clear-before-prompt)
-    (mistty-send-text "prompt")
-    (mistty-send-command)
-    (mistty-wait-for-output :str "Prompt: ")
+(mistty-deftest mistty-test-recovery-clear-before-prompt (:shell ((bash mistty-test-clear-before-prompt)) :type all)
+  (mistty-send-text "prompt")
+  (mistty-send-command)
+  (mistty-wait-for-output :str "Prompt: ")
 
-    ;; The prompt hasn't been realized, so the sync marker is at the
-    ;; beginning of the output.
-    (should (equal "$ prompt\n<>====\n==== 0\nPrompt:"
-                   (mistty-test-content :show mistty-sync-marker)))
-    (mistty--realize-possible-prompt)
+  ;; The prompt hasn't been realized, so the sync marker is at the
+  ;; beginning of the output.
+  (should (equal "$ prompt\n<>====\n==== 0\nPrompt:"
+                 (mistty-test-content :show mistty-sync-marker)))
+  (mistty--realize-possible-prompt)
 
-    ;; The sync marker is at the beginning of the newly realized
-    ;; prompt (but this is wrong, because text changes above the
-    ;; prompt).
-    (should (equal "$ prompt\n====\n==== 0\n<>Prompt:"
-                   (mistty-test-content :show mistty-sync-marker)))
+  ;; The sync marker is at the beginning of the newly realized
+  ;; prompt (but this is wrong, because text changes above the
+  ;; prompt).
+  (should (equal "$ prompt\n====\n==== 0\n<>Prompt:"
+                 (mistty-test-content :show mistty-sync-marker)))
 
-    (mistty-send-text "bar")
+  (mistty-send-text "bar")
 
-    ;; The sync marker was moved before the line that changes, below
-    ;; the line that doesn't.
-    (should (equal "$ prompt\n====\n<>==== 3\nPrompt: bar"
-                   (mistty-test-content :show mistty-sync-marker)))
-    (mistty-send-command)
+  ;; The sync marker was moved before the line that changes, below
+  ;; the line that doesn't.
+  (should (equal "$ prompt\n====\n<>==== 3\nPrompt: bar"
+                 (mistty-test-content :show mistty-sync-marker)))
+  (mistty-send-command)
 
-    ;; Even that sync marker was wrong, as ==== was replaced by Got:
-    ;; bar, but that's ok.
-    (mistty-wait-for-output :str "Got: bar")
-    (should (equal "$ prompt\nGot: bar\n<>$"
-                   (mistty-test-content :show mistty-sync-marker)))))
+  ;; Even that sync marker was wrong, as ==== was replaced by Got:
+  ;; bar, but that's ok.
+  (mistty-wait-for-output :str "Got: bar")
+  (should (equal "$ prompt\nGot: bar\n<>$"
+                 (mistty-test-content :show mistty-sync-marker))))
 
-(ert-deftest mistty-test-recovery-clear-before-prompt-removed-buffer-start ()
-  (mistty-with-test-buffer (:init mistty-test-clear-before-prompt)
-      (mistty-send-text "echo one")
-      (mistty-send-and-wait-for-prompt)
+(mistty-deftest mistty-test-recovery-clear-before-prompt-removed-buffer-start (:shell ((bash mistty-test-clear-before-prompt)) :type all)
+  (mistty-send-text "echo one")
+  (mistty-send-and-wait-for-prompt)
 
-      (mistty-send-text "echo two")
-      (mistty-send-and-wait-for-prompt)
+  (mistty-send-text "echo two")
+  (mistty-send-and-wait-for-prompt)
 
-      (delete-region (mistty-test-pos "$ echo one")
-                     (mistty-test-pos-after "\none\n"))
+  (delete-region (mistty-test-pos "$ echo one")
+                 (mistty-test-pos-after "\none\n"))
 
-      (setq start (pos-bol))
-      (mistty-send-text "prompt")
-      (mistty-send-command)
-      (mistty-wait-for-output :str "Prompt: ")
-      (mistty--realize-possible-prompt)
-      (mistty-send-text "bar")
+  (setq start (pos-bol))
+  (mistty-send-text "prompt")
+  (mistty-send-command)
+  (mistty-wait-for-output :str "Prompt: ")
+  (mistty--realize-possible-prompt)
+  (mistty-send-text "bar")
 
-      ;; The deleted prompt reappeared.
-      (should (equal "$ echo one\none\n$ echo two\ntwo\n$ prompt\n====\n==== 3\nPrompt: bar"
-                     (mistty-test-content)))))
+  ;; The deleted prompt reappeared.
+  (should (equal "$ echo one\none\n$ echo two\ntwo\n$ prompt\n====\n==== 3\nPrompt: bar"
+                 (mistty-test-content))))
 
-(ert-deftest mistty-test-recovery-clear-before-prompt-removed-before-prompt ()
-  (mistty-with-test-buffer (:init mistty-test-clear-before-prompt)
-    (dotimes (i 20)
-      (mistty-send-text (format "echo %d" i))
-      (mistty-send-and-wait-for-prompt))
+(mistty-deftest mistty-test-recovery-clear-before-prompt-removed-before-prompt (:shell ((bash mistty-test-clear-before-prompt)) :type all)
+  (dotimes (i 20)
+    (mistty-send-text (format "echo %d" i))
+    (mistty-send-and-wait-for-prompt))
 
-    (mistty-send-text "echo deleteme")
-    (mistty-send-and-wait-for-prompt)
+  (mistty-send-text "echo deleteme")
+  (mistty-send-and-wait-for-prompt)
 
-    (delete-region (mistty-test-pos "$ echo deleteme")
-                   (mistty-test-pos-after "\ndeleteme"))
+  (delete-region (mistty-test-pos "$ echo deleteme")
+                 (mistty-test-pos-after "\ndeleteme"))
 
-    (mistty-send-text "prompt")
-    (mistty-send-command)
-    (mistty-wait-for-output :str "Prompt: ")
-    (mistty--realize-possible-prompt)
-    (mistty-send-text "bar")
+  (mistty-send-text "prompt")
+  (mistty-send-command)
+  (mistty-wait-for-output :str "Prompt: ")
+  (mistty--realize-possible-prompt)
+  (mistty-send-text "bar")
 
-    ;; The deleted prompt reappeared.
-    (should (equal "$ echo 19\n19\n$ echo deleteme\ndeleteme\n$ prompt\n====\n==== 3\nPrompt: bar"
-                   (mistty-test-content
-                    :start (mistty-test-pos "$ echo 19"))))))
+  ;; The deleted prompt reappeared.
+  (should (equal "$ echo 19\n19\n$ echo deleteme\ndeleteme\n$ prompt\n====\n==== 3\nPrompt: bar"
+                 (mistty-test-content
+                  :start (mistty-test-pos "$ echo 19")))))
 
-(ert-deftest mistty-test-recovery-clear-before-prompt-removed-almost-everything-before-prompt ()
-  (mistty-with-test-buffer (:init mistty-test-clear-before-prompt)
-    (mistty-send-text "echo keep me")
-    (mistty-send-and-wait-for-prompt)
+(mistty-deftest mistty-test-recovery-clear-before-prompt-removed-almost-everything-before-prompt (:shell ((bash mistty-test-clear-before-prompt)) :type all)
+  (mistty-send-text "echo keep me")
+  (mistty-send-and-wait-for-prompt)
 
-    (dotimes (i 20)
-      (mistty-send-text (format "echo %d" i))
-      (mistty-send-and-wait-for-prompt))
+  (dotimes (i 20)
+    (mistty-send-text (format "echo %d" i))
+    (mistty-send-and-wait-for-prompt))
 
-    (delete-region (mistty-test-pos "$ echo 1")
-                   (mistty-test-pos-after "\n19"))
+  (delete-region (mistty-test-pos "$ echo 1")
+                 (mistty-test-pos-after "\n19"))
 
-    (mistty-send-text "prompt")
-    (mistty-send-command)
-    (mistty-wait-for-output :str "Prompt: ")
-    (mistty--realize-possible-prompt)
-    (mistty-send-text "bar")
+  (mistty-send-text "prompt")
+  (mistty-send-command)
+  (mistty-wait-for-output :str "Prompt: ")
+  (mistty--realize-possible-prompt)
+  (mistty-send-text "bar")
 
-    ;; Some of the deleted prompts reappeared.
-    (should (equal "$ echo 19\n19\n$ prompt\n====\n==== 3\nPrompt: bar"
-                   (mistty-test-content
-                    :start (mistty-test-pos "$ echo 19"))))))
+  ;; Some of the deleted prompts reappeared.
+  (should (equal "$ echo 19\n19\n$ prompt\n====\n==== 3\nPrompt: bar"
+                 (mistty-test-content
+                  :start (mistty-test-pos "$ echo 19")))))
 
-(ert-deftest mistty-issue47 ()
-  (mistty-with-test-buffer (:init "
+(mistty-deftest mistty-issue47 (:type all :shell ((bash "
 function prompt {
     printf \"====\nPrompt: \"
     while [[ \"$c\" != $'\n' ]]; do
@@ -5432,199 +5420,201 @@ function prompt {
         read -s -N 1 c
     done
     printf \"\\r\\e[0KGot: $input\n\"
-}")
-    (mistty-send-text "prompt")
-    (mistty-send-command)
-    (mistty-wait-for-output :str "Prompt:")
-    (should (equal "$ prompt\n<>====\nPrompt:"
-                   (mistty-test-content :show mistty-sync-marker)))
-    (mistty--realize-possible-prompt)
-    ;; The detected prompt has a line before it, ====, that's constantly
-    ;; erased and re-created. That shouldn't cause resets.
-    (should (equal "$ prompt\n====\n<>Prompt:"
-                   (mistty-test-content :show mistty-sync-marker)))
-    (mistty--send-string mistty-proc "f")
-    (mistty-wait-for-output :str "Prompt: f")
-    (should (equal "$ prompt\n====\n<>Prompt: f"
-                   (mistty-test-content :show mistty-sync-marker)))
-    (mistty--send-string mistty-proc "o")
-    (mistty-wait-for-output :str "Prompt: fo")
-    (should (equal "$ prompt\n====\n<>Prompt: fo"
-                   (mistty-test-content :show mistty-sync-marker)))
-    (mistty--send-string mistty-proc "o")
-    (mistty-wait-for-output :str "Prompt: foo")
-    (should (equal "$ prompt\n====\n<>Prompt: foo"
-                   (mistty-test-content :show mistty-sync-marker)))
-     (mistty--send-string mistty-proc "bar")
-    (mistty-wait-for-output :str "bar")
-    (should (equal "$ prompt\n====\n<>Prompt: foobar"
-                   (mistty-test-content :show mistty-sync-marker)))
-    (mistty--send-string mistty-proc (mistty--repeat-string 3 mistty-del))
-    (mistty-wait-for-output :str "foo" :cursor-at-end t)
-    (should (equal "$ prompt\n====\n<>Prompt: foo"
-                   (mistty-test-content :show mistty-sync-marker)))
-    (mistty-send-command)
-    (mistty-wait-for-output :regexp "foo *\n\\$ ")
-    (should (equal "$ prompt\n====\nGot: foo\n$"
-                   (mistty-test-content)))))
+}")))
+  (mistty-send-text "prompt")
+  (mistty-send-command)
+  (mistty-wait-for-output :str "Prompt:")
+  (should (equal "$ prompt\n<>====\nPrompt:"
+                 (mistty-test-content :show mistty-sync-marker)))
+  (mistty--realize-possible-prompt)
+  ;; The detected prompt has a line before it, ====, that's constantly
+  ;; erased and re-created. That shouldn't cause resets.
+  (should (equal "$ prompt\n====\n<>Prompt:"
+                 (mistty-test-content :show mistty-sync-marker)))
+  (mistty--send-string mistty-proc "f")
+  (mistty-wait-for-output :str "Prompt: f")
+  (should (equal "$ prompt\n====\n<>Prompt: f"
+                 (mistty-test-content :show mistty-sync-marker)))
+  (mistty--send-string mistty-proc "o")
+  (mistty-wait-for-output :str "Prompt: fo")
+  (should (equal "$ prompt\n====\n<>Prompt: fo"
+                 (mistty-test-content :show mistty-sync-marker)))
+  (mistty--send-string mistty-proc "o")
+  (mistty-wait-for-output :str "Prompt: foo")
+  (should (equal "$ prompt\n====\n<>Prompt: foo"
+                 (mistty-test-content :show mistty-sync-marker)))
+  (mistty--send-string mistty-proc "bar")
+  (mistty-wait-for-output :str "bar")
+  (should (equal "$ prompt\n====\n<>Prompt: foobar"
+                 (mistty-test-content :show mistty-sync-marker)))
+  (mistty--send-string mistty-proc (mistty--repeat-string 3 mistty-del))
+  (mistty-wait-for-output :str "foo" :cursor-at-end t)
+  (should (equal "$ prompt\n====\n<>Prompt: foo"
+                 (mistty-test-content :show mistty-sync-marker)))
+  (mistty-send-command)
+  (mistty-wait-for-output :regexp "foo *\n\\$ ")
+  (should (equal "$ prompt\n====\nGot: foo\n$"
+                 (mistty-test-content))))
 
 ;; https://github.com/szermatt/mistty/issues/27
-(turtles-ert-deftest mistty-test-bash-reverse-i-search-and-nl ( :instance 'mistty)
+(mistty-deftest mistty-test-bash-reverse-i-search-and-nl
+    (:shell bash :selected t :turtles t :type all)
   ;; This is a turtles test, because the problem only appears when you
   ;; take invisibility into account.
-  (mistty-with-test-buffer (:shell bash :selected t)
-    (mistty-send-text "(sleep 0.0 && echo hi)")
-    (mistty-send-and-wait-for-prompt)
+  (mistty-send-text "(sleep 0.0 && echo hi)")
+  (mistty-send-and-wait-for-prompt)
 
-    (mistty--send-string mistty-proc "\C-rec\n")
-    (mistty-send-and-wait-for-prompt)
+  (mistty--send-string mistty-proc "\C-rec\n")
+  (mistty-send-and-wait-for-prompt)
 
-    (turtles-with-grab-buffer (:win (selected-window))
-      (should (equal (concat "$ (sleep 0.0 && echo hi)\n"
-                             "hi\n"
-                             "$ (sleep 0.0 && echo hi)\n"
-                             "hi\n"
-                             "$")
-                     (buffer-string))))))
+  (turtles-with-grab-buffer (:win (selected-window))
+    (should (equal (concat "$ (sleep 0.0 && echo hi)\n"
+                           "hi\n"
+                           "$ (sleep 0.0 && echo hi)\n"
+                           "hi\n"
+                           "$")
+                   (buffer-string)))))
 
-(ert-deftest mistty-test-ipython ()
-  (mistty-with-test-buffer (:shell ipython)
-    (mistty-send-text "print('hello')")
-    (should (equal "hello" (mistty-send-and-capture-command-output)))))
+(mistty-deftest mistty-test-ipython (:shell ipython :type all)
+  (mistty-send-text "print('hello')")
+  (should (equal "hello" (mistty-send-and-capture-command-output))))
 
-(ert-deftest mistty-test-ipython-detect-continue-prompt ()
-  (mistty-with-test-buffer (:shell ipython)
+(mistty-deftest mistty-test-ipython-detect-continue-prompt (:shell ipython :type all)
+  (mistty--send-string mistty-proc "for i in (1, 2, 3):\nif i > 2:\nprint(i)")
+  (mistty-wait-for-output :test (lambda () (save-excursion
+                                             (goto-char (point-min))
+                                             (and (search-forward "...:" nil 'noerror)
+                                                  (search-forward "...:" nil 'noerror)))))
+
+  (should (equal (concat "In [1]: for i in (1, 2, 3):\n"
+                         "[   ...: ]    if i > 2:\n"
+                         "[   ...: ]        print(i)")
+                 (mistty-test-content
+                  :start (save-excursion
+                           (goto-char (point-min))
+                           (search-forward "In [")
+                           (match-beginning 0))
+                  :show-property '(mistty-skip continue-prompt)))))
+
+(mistty-deftest mistty-test-ipython-skip-continue-prompt (:shell ipython :selected t :type all)
+  (let ((win (selected-window))
+        (mistty-skip-empty-spaces t))
     (mistty--send-string mistty-proc "for i in (1, 2, 3):\nif i > 2:\nprint(i)")
     (mistty-wait-for-output :test (lambda () (save-excursion
                                                (goto-char (point-min))
                                                (and (search-forward "...:" nil 'noerror)
                                                     (search-forward "...:" nil 'noerror)))))
 
-    (should (equal (concat "In [1]: for i in (1, 2, 3):\n"
-                           "[   ...: ]    if i > 2:\n"
-                           "[   ...: ]        print(i)")
-                   (mistty-test-content
-                    :start (save-excursion
-                             (goto-char (point-min))
-                             (search-forward "In [")
-                             (match-beginning 0))
-                    :show-property '(mistty-skip continue-prompt))))))
+    (mistty-test-goto "    if i > 2")
+    (mistty--cursor-skip win)
+    (goto-char (1- (point)))
+    (mistty--cursor-skip win)
 
-(ert-deftest mistty-test-ipython-skip-continue-prompt ()
-  (mistty-with-test-buffer (:shell ipython :selected t)
-    (let ((win (selected-window))
-          (mistty-skip-empty-spaces t))
-      (mistty--send-string mistty-proc "for i in (1, 2, 3):\nif i > 2:\nprint(i)")
-      (mistty-wait-for-output :test (lambda () (save-excursion
-                                                 (goto-char (point-min))
-                                                 (and (search-forward "...:" nil 'noerror)
-                                                      (search-forward "...:" nil 'noerror)))))
+    (should (equal
+             "In [1]: for i in (1, 2, 3):<>"
+             (mistty-test-content
+              :show (point)
+              :start (pos-bol) :end (pos-eol))))))
 
-      (mistty-test-goto "    if i > 2")
-      (mistty--cursor-skip win)
-      (goto-char (1- (point)))
-      (mistty--cursor-skip win)
-
-      (should (equal
-               "In [1]: for i in (1, 2, 3):<>"
-               (mistty-test-content
-                :show (point)
-                :start (pos-bol) :end (pos-eol)))))))
-
-(ert-deftest mistty-test-ipython-reconcile-in-another-line ()
-  (mistty-with-test-buffer (:shell ipython)
-    (mistty--send-string mistty-proc "for i in (1, 2, 3):\nif i > 2:\nprint(i)")
-    (mistty-wait-for-output :test (lambda () (save-excursion
-                                               (goto-char (point-min))
-                                               (and (search-forward "...:" nil 'noerror)
-                                                    (search-forward "...:" nil 'noerror)))))
-    (narrow-to-region (save-excursion
-                        (goto-char (point-min))
-                        (search-forward "In [")
-                        (match-beginning 0))
-                      (point-max))
+(mistty-deftest mistty-test-ipython-reconcile-in-another-line (:shell ipython :type all)
+  (mistty--send-string mistty-proc "for i in (1, 2, 3):\nif i > 2:\nprint(i)")
+  (mistty-wait-for-output :test (lambda () (save-excursion
+                                             (goto-char (point-min))
+                                             (and (search-forward "...:" nil 'noerror)
+                                                  (search-forward "...:" nil 'noerror)))))
+  (narrow-to-region (save-excursion
+                      (goto-char (point-min))
+                      (search-forward "In [")
+                      (match-beginning 0))
+                    (point-max))
 
 
-      (should (equal (concat "In [1]: for i in (1, 2, 3):\n"
-                             "   ...:     if i > 2:\n"
-                             "   ...:         print(i)")
-                     (mistty-test-content)))
+  (should (equal (concat "In [1]: for i in (1, 2, 3):\n"
+                         "   ...:     if i > 2:\n"
+                         "   ...:         print(i)")
+                 (mistty-test-content)))
 
-      (mistty-run-command
-       (goto-char (point-min))
-       (search-forward "(1, 2, 3)")
-       (replace-match "(10, 11)" nil t))
+  (mistty-run-command
+   (goto-char (point-min))
+   (search-forward "(1, 2, 3)")
+   (replace-match "(10, 11)" nil t))
 
-      (should (equal (concat "In [1]: for i in (10, 11):\n"
-                             "   ...:     if i > 2:\n"
-                             "   ...:         print(i)")
-                     (mistty-test-content)))))
+  (should (equal (concat "In [1]: for i in (10, 11):\n"
+                         "   ...:     if i > 2:\n"
+                         "   ...:         print(i)")
+                 (mistty-test-content))))
 
-(ert-deftest mistty-test-ipython-reconcile-multiline-delete ()
-  (mistty-with-test-buffer (:shell ipython)
-    (mistty--send-string mistty-proc "for i in (1, 2, 3):\nif i > 2:\nprint(i)")
-    (mistty-wait-for-output :test (lambda () (save-excursion
-                                               (goto-char (point-min))
-                                               (and (search-forward "...:" nil 'noerror)
-                                                    (search-forward "...:" nil 'noerror)))))
-    (narrow-to-region (save-excursion
-                        (goto-char (point-min))
-                        (search-forward "In [")
-                        (match-beginning 0))
-                      (point-max))
+(mistty-deftest mistty-test-ipython-reconcile-multiline-delete (:shell ipython :type all)
+  (mistty--send-string mistty-proc "for i in (1, 2, 3):\nif i > 2:\nprint(i)")
+  (mistty-wait-for-output :test (lambda () (save-excursion
+                                             (goto-char (point-min))
+                                             (and (search-forward "...:" nil 'noerror)
+                                                  (search-forward "...:" nil 'noerror)))))
+  (narrow-to-region (save-excursion
+                      (goto-char (point-min))
+                      (search-forward "In [")
+                      (match-beginning 0))
+                    (point-max))
 
-    (should (equal (concat "In [1]: for i in (1, 2, 3):\n"
-                           "   ...:     if i > 2:\n"
-                           "   ...:         print(i)")
-                   (mistty-test-content)))
+  (should (equal (concat "In [1]: for i in (1, 2, 3):\n"
+                         "   ...:     if i > 2:\n"
+                         "   ...:         print(i)")
+                 (mistty-test-content)))
 
-    (mistty-run-command
-     (goto-char (point-min))
-     (search-forward-regexp "if i > 2\\(.\\|\n\\)*print(i)")
-     (replace-match "total += i" nil t))
-    (mistty-wait-for-output :str "total += i")
+  (mistty-run-command
+   (goto-char (point-min))
+   (search-forward-regexp "if i > 2\\(.\\|\n\\)*print(i)")
+   (replace-match "total += i" nil t))
+  (mistty-wait-for-output :str "total += i")
 
-    (should (equal (concat "In [1]: for i in (1, 2, 3):\n"
-                           "   ...:     total += i")
-                   (mistty-test-content)))))
+  (should (equal (concat "In [1]: for i in (1, 2, 3):\n"
+                         "   ...:     total += i")
+                 (mistty-test-content))))
 
-(ert-deftest mistty-test-ipython-move-cursor ()
-  (mistty-with-test-buffer (:shell ipython)
-    (mistty--send-string mistty-proc "for i in (1, 2, 3):\nif i > 2:\nprint(i)")
-    (mistty-wait-for-output :test (lambda () (save-excursion
-                                               (goto-char (point-min))
-                                               (and (search-forward "...:" nil 'noerror)
-                                                    (search-forward "...:" nil 'noerror)))))
-    (narrow-to-region (save-excursion
-                        (goto-char (point-min))
-                        (search-forward "In [")
-                        (match-beginning 0))
-                      (point-max))
+(mistty-deftest mistty-test-ipython-move-cursor (:shell ipython :type all)
+  (mistty--send-string mistty-proc "for i in (1, 2, 3):\nif i > 2:\nprint(i)")
+  (mistty-wait-for-output :test (lambda () (save-excursion
+                                             (goto-char (point-min))
+                                             (and (search-forward "...:" nil 'noerror)
+                                                  (search-forward "...:" nil 'noerror)))))
+  (narrow-to-region (save-excursion
+                      (goto-char (point-min))
+                      (search-forward "In [")
+                      (match-beginning 0))
+                    (point-max))
 
-    (should (equal (concat "In [1]: for i in (1, 2, 3):\n"
-                           "   ...:     if i > 2:\n"
-                           "   ...:         print(i)<>")
-                   (mistty-test-content :show (mistty-cursor))))
+  (should (equal (concat "In [1]: for i in (1, 2, 3):\n"
+                         "   ...:     if i > 2:\n"
+                         "   ...:         print(i)<>")
+                 (mistty-test-content :show (mistty-cursor))))
 
-    (mistty-run-command
-     (goto-char (point-min))
-     (mistty-test-goto "(1, 2, 3)"))
+  (mistty-run-command
+   (goto-char (point-min))
+   (mistty-test-goto "(1, 2, 3)"))
 
-    (should (equal (concat "In [1]: for i in <>(1, 2, 3):\n"
-                           "   ...:     if i > 2:\n"
-                           "   ...:         print(i)")
-                   (mistty-test-content :show (mistty-cursor))))
+  (should (equal (concat "In [1]: for i in <>(1, 2, 3):\n"
+                         "   ...:     if i > 2:\n"
+                         "   ...:         print(i)")
+                 (mistty-test-content :show (mistty-cursor))))
 
-    (mistty-run-command
-     (goto-char (point-min))
-     (mistty-test-goto "if"))
+  (mistty-run-command
+   (goto-char (point-min))
+   (mistty-test-goto "if"))
 
-    (should (equal (concat "In [1]: for i in (1, 2, 3):\n"
-                           "   ...:     <>if i > 2:\n"
-                           "   ...:         print(i)")
-                   (mistty-test-content :show (mistty-cursor))))))
+  (should (equal (concat "In [1]: for i in (1, 2, 3):\n"
+                         "   ...:     <>if i > 2:\n"
+                         "   ...:         print(i)")
+                 (mistty-test-content :show (mistty-cursor)))))
 
-(ert-deftest mistty-test-list-live-buffers ()
+(ert-deftest mistty-test-list-live-buffers/alacritty ()
+  (let ((mistty-terminal-type 'alacritty))
+    (mistty-test-list-live-buffers)))
+
+(ert-deftest mistty-test-list-live-buffers/eterm ()
+  (let ((mistty-terminal-type 'eterm))
+    (mistty-test-list-live-buffers)))
+
+(defun mistty-test-list-live-buffers ()
   (mistty-test-with-isolated-buffers
    (let ((mistty-buffer-name '("mistty")))
      (should (equal nil (mistty-list-live-buffers)))
@@ -5647,7 +5637,15 @@ function prompt {
      (should (equal '("*mistty*" "*mistty*<3>")
                     (mapcar #'buffer-name (mistty-list-live-buffers)))))))
 
-(ert-deftest mistty-test-mistty-command-cycle ()
+(ert-deftest mistty-test-mistty-command-cycle/alacritty ()
+  (let ((mistty-terminal-type 'alacritty))
+    (mistty-test-mistty-command-cycle)))
+
+(ert-deftest mistty-test-mistty-command-cycle/eterm ()
+  (let ((mistty-terminal-type 'eterm))
+    (mistty-test-mistty-command-cycle)))
+
+(defun mistty-test-mistty-command-cycle ()
   (mistty-test-with-isolated-buffers
    (let ((mistty-buffer-name '("mistty")))
      (get-buffer-create "not a mistty buffer")
@@ -5664,7 +5662,15 @@ function prompt {
      (mistty-test-run-in-selected-window #'mistty)
      (should (equal "*mistty*<4>" (buffer-name (window-buffer (selected-window))))))))
 
-(ert-deftest mistty-command-create-then-cycle ()
+(ert-deftest mistty-command-create-then-cycle/alacritty ()
+  (let ((mistty-terminal-type 'alacritty))
+    (mistty-command-create-then-cycle)))
+  
+(ert-deftest mistty-command-create-then-cycle/eterm ()
+  (let ((mistty-terminal-type 'eterm))
+    (mistty-command-create-then-cycle)))
+  
+(defun mistty-command-create-then-cycle ()
   (mistty-test-with-isolated-buffers
    (let ((mistty-buffer-name '("mistty")))
      (should (equal nil (mistty-list-live-buffers)))
@@ -5690,7 +5696,15 @@ function prompt {
      (should (equal "*mistty*<2>" (buffer-name (window-buffer (selected-window)))))
      (should (equal '("*mistty*<2>" "*mistty*") (mapcar #'buffer-name (buffer-list)))))))
 
-(ert-deftest mistty-test-mistty-command-reuse-buffer-names ()
+(ert-deftest mistty-test-mistty-command-reuse-buffer-names/alacritty ()
+  (let ((mistty-terminal-type 'alacritty))
+    (mistty-test-mistty-command-reuse-buffer-names)))
+
+(ert-deftest mistty-test-mistty-command-reuse-buffer-names/eterm ()
+  (let ((mistty-terminal-type 'eterm))
+    (mistty-test-mistty-command-reuse-buffer-names)))
+
+(defun mistty-test-mistty-command-reuse-buffer-names ()
   (mistty-test-with-isolated-buffers
    (let ((mistty-buffer-name '("mistty"))
          (mistty-force-reuse-buffer-name t))
@@ -5715,7 +5729,15 @@ function prompt {
      ;; There shouldn't ever be a "*mistty*<3>"
      (should-not (get-buffer "*mistty*<3>")))))
 
-(ert-deftest mistty-test-mistty-command-dont-reuse-buffer-names ()
+(ert-deftest mistty-test-mistty-command-dont-reuse-buffer-names/alacritty ()
+  (let ((mistty-terminal-type 'alacritty))
+    (mistty-test-mistty-command-dont-reuse-buffer-names)))
+
+(ert-deftest mistty-test-mistty-command-dont-reuse-buffer-names/eterm ()
+  (let ((mistty-terminal-type 'eterm))
+    (mistty-test-mistty-command-dont-reuse-buffer-names)))
+
+(defun mistty-test-mistty-command-dont-reuse-buffer-names ()
   (mistty-test-with-isolated-buffers
    (let ((mistty-buffer-name '("mistty"))
          (mistty-force-reuse-buffer-name nil))
@@ -5739,73 +5761,107 @@ function prompt {
      (should-not (mistty-live-buffer-p (get-buffer "*mistty*")))
      (should (mistty-live-buffer-p (get-buffer "*mistty*<3>"))))))
 
-(ert-deftest mistty-test-zsh-no-nl-before-prompt ()
-  (mistty-with-test-buffer (:shell zsh :selected t)
-    (mistty-send-text "echo ok")
-    (should (equal "ok" (mistty-send-and-capture-command-output)))
-    (mistty-send-text "echo -n ok")
-    (should (equal "ok%" (mistty-send-and-capture-command-output)))
 
-    (should (equal
-             "$ echo ok\nok\n$ echo -n ok\nok%\n$"
-             (mistty-test-content)))))
+;; TODO: make it run on eterm
+(mistty-deftest mistty-test-zsh-no-nl-before-prompt
+    (:shell zsh :selected t :type alacritty)
+  (mistty-send-text "echo ok")
+  (should (equal "ok" (mistty-send-and-capture-command-output)))
+  (mistty-send-text "echo -n ok")
+  (should (equal "ok%" (mistty-send-and-capture-command-output)))
 
-(ert-deftest mistty-test-fish-no-nl-before-prompt-1 ()
-  (mistty-with-test-buffer (:shell fish :selected t)
-    (mistty-send-text "echo ok")
-    (should (equal "ok" (mistty-send-and-capture-command-output)))
-    (mistty-send-text "echo -n ok")
-    (should (equal "ok⏎" (mistty-send-and-capture-command-output)))
+  (should (equal
+           "$ echo ok\nok\n$ echo -n ok\nok%\n$"
+           (mistty-test-content))))
 
-    (should (equal "$ echo ok\nok\n$ echo -n ok\nok⏎\n$" (mistty-test-content)))))
+;; TODO: make it run on eterm
+(mistty-deftest mistty-test-fish-no-nl-before-prompt-1
+    (:shell fish :selected t :type alacritty)
+  (mistty-send-text "echo ok")
+  (should (equal "ok" (mistty-send-and-capture-command-output)))
+  (mistty-send-text "echo -n ok")
+  (should (equal "ok⏎" (mistty-send-and-capture-command-output)))
 
-(ert-deftest mistty-test-bash-no-nl-before-prompt ()
-  (mistty-with-test-buffer (:shell bash :selected t)
-    (mistty-send-text "echo ok")
-    (should (equal "ok" (mistty-send-and-capture-command-output)))
-    (mistty-send-text "echo -n ok")
-    (mistty-send-command)
-    (mistty-wait-for-output :str "ok$")
+  (should (equal "$ echo ok\nok\n$ echo -n ok\nok⏎\n$" (mistty-test-content))))
 
-    (should (equal
-             "$ echo ok\nok\n$ echo -n ok\nok$"
-             (mistty-test-content)))
+;; TODO: make it run on eterm
+(mistty-deftest mistty-test-bash-no-nl-before-prompt
+    (:shell bash :selected t :type alacritty)
+  (mistty-send-text "echo ok")
+  (should (equal "ok" (mistty-send-and-capture-command-output)))
+  (mistty-send-text "echo -n ok")
+  (mistty-send-command)
+  (mistty-wait-for-output :str "ok$")
 
-    ;; The prompt doesn't start at a NL. It should have been detected
-    ;; nevertheless, so replay works.
-    (mistty-run-command
-     (insert "echo foobar"))
-    (should (equal "foobar" (mistty-send-and-capture-command-output)))))
+  (should (equal
+           "$ echo ok\nok\n$ echo -n ok\nok$"
+           (mistty-test-content)))
+
+  ;; The prompt doesn't start at a NL. It should have been detected
+  ;; nevertheless, so replay works.
+  (mistty-run-command
+   (insert "echo foobar"))
+  (should (equal "foobar" (mistty-send-and-capture-command-output))))
 
 (defconst mistty-test-zsh-fancy-prompt
   (concat "precmd() { \n"
           " print 'left...............................right'\n"
           " }\n"))
 
-(ert-deftest mistty-test-detect-zsh-multiline-prompt-start ()
-  (mistty-with-test-buffer (:shell zsh :init mistty-test-zsh-fancy-prompt)
-    (mistty-send-text "echo hello")
-    (mistty-send-and-wait-for-prompt)
+(mistty-deftest mistty-test-detect-zsh-multiline-prompt-start (:shell ((zsh mistty-test-zsh-fancy-prompt)) :type all)
+  (mistty-send-text "echo hello")
+  (mistty-send-and-wait-for-prompt)
 
-    (should
-     (equal
-      (concat "left...............................right\n"
-              "$")
-      (mistty-test-content :start mistty-sync-marker)))
+  (should
+   (equal
+    (concat "left...............................right\n"
+            "$")
+    (mistty-test-content :start mistty-sync-marker)))
 
-    ;; The prompt is functional
-    (mistty-run-command
-     (insert "echo world"))
+  ;; The prompt is functional
+  (mistty-run-command
+   (insert "echo world"))
 
-    (should
-     (equal
-      (concat "left...............................right\n"
-              "$ echo world")
-      (mistty-test-content :start mistty-sync-marker)))
-    ))
+  (should
+   (equal
+    (concat "left...............................right\n"
+            "$ echo world")
+    (mistty-test-content :start mistty-sync-marker)))
+  )
 
-(ert-deftest mistty-test-zsh-multiline-prompt-sp ()
-  (mistty-with-test-buffer (:shell zsh :init mistty-test-zsh-fancy-prompt)
+;; TODO: make it run on eterm
+(mistty-deftest mistty-test-zsh-multiline-prompt-sp
+    (:shell ((zsh mistty-test-zsh-fancy-prompt)) :type alacritty)
+  (mistty-send-text "echo -n hello")
+  (mistty-send-and-wait-for-prompt)
+
+  (should
+   (equal
+    (concat "left...............................right\n"
+            "$ echo -n hello\n"
+            "hello%\n"
+            "<>left...............................right\n"
+            "$")
+    (mistty-test-content :show mistty-sync-marker))))
+
+(mistty-deftest mistty-test-zsh-multiline-prompt-empty (:shell ((zsh mistty-test-zsh-fancy-prompt)) :type all)
+  (mistty-send-and-wait-for-prompt)
+
+  (should
+   (equal
+    (concat "left...............................right\n"
+            "$\n"
+            "<>left...............................right\n"
+            "$")
+    (mistty-test-content :show mistty-sync-marker))))
+
+;; TODO: make it run on eterm
+(mistty-deftest mistty-test-zsh-multiline-prompt-sp-no-eol-mark
+    (:shell ((zsh mistty-test-zsh-fancy-prompt)) :type alacritty)
+  (mistty-send-text "PROMPT_EOL_MARK=''")
+  (mistty-send-and-wait-for-prompt)
+
+  (let ((start (copy-marker (pos-bol 0))))
     (mistty-send-text "echo -n hello")
     (mistty-send-and-wait-for-prompt)
 
@@ -5813,257 +5869,222 @@ function prompt {
      (equal
       (concat "left...............................right\n"
               "$ echo -n hello\n"
-              "hello%\n"
+              "hello\n"
               "<>left...............................right\n"
               "$")
-      (mistty-test-content :show mistty-sync-marker)))))
+      (mistty-test-content :start start :show mistty-sync-marker)))))
 
-(ert-deftest mistty-test-zsh-multiline-prompt-empty ()
-  (mistty-with-test-buffer (:shell zsh :init mistty-test-zsh-fancy-prompt)
-    (mistty-send-and-wait-for-prompt)
+(mistty-deftest mistty-test-zsh-multiline-prompt-next-previous (:shell ((zsh mistty-test-zsh-fancy-prompt)) :type all)
+  (dolist (text '("one" "two" "three"))
+    (mistty-send-text (concat "echo " text))
+    (mistty-send-and-wait-for-prompt))
 
+  (should
+   (equal
+    (concat "left...............................right\n"
+            "$ echo one\n"
+            "one\n"
+            "left...............................right\n"
+            "$ echo two\n"
+            "two\n"
+            "left...............................right\n"
+            "$ echo three\n"
+            "three\n"
+            "left...............................right\n"
+            "$ <>")
+    (mistty-test-content :show (point))))
+
+  (mistty-previous-output 1)
+  (should
+   (equal
+    (concat "left...............................right\n"
+            "$ echo one\n"
+            "one\n"
+            "left...............................right\n"
+            "$ echo two\n"
+            "two\n"
+            "left...............................right\n"
+            "$ echo three\n"
+            "<>three\n"
+            "left...............................right\n"
+            "$")
+    (mistty-test-content :show (point))))
+
+  (mistty-previous-output 1)
+  (should
+   (equal
+    (concat "left...............................right\n"
+            "$ echo one\n"
+            "one\n"
+            "left...............................right\n"
+            "$ echo two\n"
+            "<>two\n"
+            "left...............................right\n"
+            "$ echo three\n"
+            "three\n"
+            "left...............................right\n"
+            "$")
+    (mistty-test-content :show (point))))
+
+  (mistty-previous-output 1)
+  (should
+   (equal
+    (concat "left...............................right\n"
+            "$ echo one\n"
+            "<>one\n"
+            "left...............................right\n"
+            "$ echo two\n"
+            "two\n"
+            "left...............................right\n"
+            "$ echo three\n"
+            "three\n"
+            "left...............................right\n"
+            "$")
+    (mistty-test-content :show (point))))
+
+  (should-error (mistty-previous-output 1))
+  (should
+   (equal
+    (concat "left...............................right\n"
+            "$ echo one\n"
+            "<>one\n"
+            "left...............................right\n"
+            "$ echo two\n"
+            "two\n"
+            "left...............................right\n"
+            "$ echo three\n"
+            "three\n"
+            "left...............................right\n"
+            "$")
+    (mistty-test-content :show (point))))
+
+  (mistty-next-output 1)
+  (should
+   (equal
+    (concat "left...............................right\n"
+            "$ echo one\n"
+            "one\n"
+            "left...............................right\n"
+            "$ echo two\n"
+            "<>two\n"
+            "left...............................right\n"
+            "$ echo three\n"
+            "three\n"
+            "left...............................right\n"
+            "$")
+    (mistty-test-content :show (point))))
+
+
+  (mistty-next-output 1)
+  (should
+   (equal
+    (concat "left...............................right\n"
+            "$ echo one\n"
+            "one\n"
+            "left...............................right\n"
+            "$ echo two\n"
+            "two\n"
+            "left...............................right\n"
+            "$ echo three\n"
+            "<>three\n"
+            "left...............................right\n"
+            "$")
+    (mistty-test-content :show (point))))
+
+  (should-error (mistty-next-output 1))
+  (should
+   (equal
+    (concat "left...............................right\n"
+            "$ echo one\n"
+            "one\n"
+            "left...............................right\n"
+            "$ echo two\n"
+            "two\n"
+            "left...............................right\n"
+            "$ echo three\n"
+            "<>three\n"
+            "left...............................right\n"
+            "$")
+    (mistty-test-content :show (point)))))
+
+(mistty-deftest mistty-test-zsh-multiline-prompt-extract-output (:shell ((zsh mistty-test-zsh-fancy-prompt)) :type all)
+  (dolist (text '("one" "two" "three" "four"))
+    (mistty-send-text (concat "echo " text))
+    (mistty-send-and-wait-for-prompt))
+
+  (let ((buf (mistty-create-buffer-with-output
+              (generate-new-buffer-name "extracted") 2)))
+    (unwind-protect
+        (should (equal "three\n"
+                       (with-current-buffer buf
+                         (buffer-string))))
+      (kill-buffer buf))))
+
+(mistty-deftest mistty-test-zsh-multiline-initial-prompt (:shell ((zsh mistty-test-zsh-fancy-prompt)) :type all)
+  (mistty-run-command
+   (insert "echo hello"))
+  (should
+   (equal
+    (concat "left...............................right\n"
+            "$ echo hello")
+    ;; The sync marker must be at the very beginning, even though
+    ;; there was no prompt_sp.
+    (mistty-test-content :start mistty-sync-marker))))
+
+(mistty-deftest mistty-test-zsh-reset-prompt
+    (:type all :shell ((zsh (concat
+                             "precmd() { \n"
+                             " print \"left...............................right\"\n"
+                             " }\n"
+                             "setopt PROMPT_SUBST\n"
+                             "c=1\n"
+                             "PROMPT='$c-\\$ '\n"
+                             "TRAPALRM() { c=$(($c+1)); zle reset-prompt; }\n"
+                             "TMOUT=1"))))
+  ;; Anything above 1 is good. Usually, it's 2, but we don't want to
+  ;; be too strict in case an update is missed.
+  (mistty-wait-for-output :regexp "[2-9]-")
+
+  (let* ((content (buffer-substring mistty-sync-marker (point-max)))
+         (input-id (get-text-property 0 'mistty-input-id content)))
+    ;; The sync marker must be at the beginning of the prompt, even
+    ;; though the prompt (but not the line before) was refreshed.
     (should
-     (equal
-      (concat "left...............................right\n"
-              "$\n"
-              "<>left...............................right\n"
-              "$")
-      (mistty-test-content :show mistty-sync-marker)))))
+     (string-match
+      (concat "left...............................right *\n"
+              "[2-9]-\\$ \n")
+      content))
 
-(ert-deftest mistty-test-zsh-multiline-prompt-sp-no-eol-mark ()
-  (mistty-with-test-buffer (:shell zsh :init mistty-test-zsh-fancy-prompt)
-    (mistty-send-text "PROMPT_EOL_MARK=''")
-    (mistty-send-and-wait-for-prompt)
+    (should (equal (point-min) (marker-position mistty-sync-marker)))
 
-    (let ((start (copy-marker (pos-bol 0))))
-      (mistty-send-text "echo -n hello")
-      (mistty-send-and-wait-for-prompt)
+    ;; Everything should have the same input id.
+    (should-not (text-property-not-all 0 (length content) 'mistty-input-id input-id content))))
 
-      (should
-       (equal
-        (concat "left...............................right\n"
-                "$ echo -n hello\n"
-                "hello\n"
-                "<>left...............................right\n"
-                "$")
-        (mistty-test-content :start start :show mistty-sync-marker))))))
+(mistty-deftest mistty-test-newline ( :type all)
+  (mistty-send-text "echo '")
+  (mistty-newline)
+  (mistty-send-text "foo")
+  (mistty-newline 2)
+  (mistty-send-text "bar'")
+  (should
+   (equal "\nfoo\n\nbar"
+          (mistty-send-and-capture-command-output))))
 
-(ert-deftest mistty-test-zsh-multiline-prompt-next-previous ()
-  (mistty-with-test-buffer (:shell zsh :init mistty-test-zsh-fancy-prompt)
-    (dolist (text '("one" "two" "three"))
-      (mistty-send-text (concat "echo " text))
-      (mistty-send-and-wait-for-prompt))
+(mistty-deftest mistty-test-newline-at-point ( :type all)
+  (mistty-run-command
+   (mistty-send-text "echo 'foo bar'"))
+  (mistty-run-command
+   (mistty-test-goto "bar"))
+  (mistty-run-command
+   (mistty-newline))
+  (should
+   (equal "foo\nbar"
+          (mistty-send-and-capture-command-output))))
 
-    (should
-     (equal
-      (concat "left...............................right\n"
-              "$ echo one\n"
-              "one\n"
-              "left...............................right\n"
-              "$ echo two\n"
-              "two\n"
-              "left...............................right\n"
-              "$ echo three\n"
-              "three\n"
-              "left...............................right\n"
-              "$ <>")
-      (mistty-test-content :show (point))))
-
-    (mistty-previous-output 1)
-    (should
-     (equal
-      (concat "left...............................right\n"
-              "$ echo one\n"
-              "one\n"
-              "left...............................right\n"
-              "$ echo two\n"
-              "two\n"
-              "left...............................right\n"
-              "$ echo three\n"
-              "<>three\n"
-              "left...............................right\n"
-              "$")
-      (mistty-test-content :show (point))))
-
-    (mistty-previous-output 1)
-    (should
-     (equal
-      (concat "left...............................right\n"
-              "$ echo one\n"
-              "one\n"
-              "left...............................right\n"
-              "$ echo two\n"
-              "<>two\n"
-              "left...............................right\n"
-              "$ echo three\n"
-              "three\n"
-              "left...............................right\n"
-              "$")
-      (mistty-test-content :show (point))))
-
-    (mistty-previous-output 1)
-    (should
-     (equal
-      (concat "left...............................right\n"
-              "$ echo one\n"
-              "<>one\n"
-              "left...............................right\n"
-              "$ echo two\n"
-              "two\n"
-              "left...............................right\n"
-              "$ echo three\n"
-              "three\n"
-              "left...............................right\n"
-              "$")
-      (mistty-test-content :show (point))))
-
-    (should-error (mistty-previous-output 1))
-    (should
-     (equal
-      (concat "left...............................right\n"
-              "$ echo one\n"
-              "<>one\n"
-              "left...............................right\n"
-              "$ echo two\n"
-              "two\n"
-              "left...............................right\n"
-              "$ echo three\n"
-              "three\n"
-              "left...............................right\n"
-              "$")
-      (mistty-test-content :show (point))))
-
-    (mistty-next-output 1)
-    (should
-     (equal
-      (concat "left...............................right\n"
-              "$ echo one\n"
-              "one\n"
-              "left...............................right\n"
-              "$ echo two\n"
-              "<>two\n"
-              "left...............................right\n"
-              "$ echo three\n"
-              "three\n"
-              "left...............................right\n"
-              "$")
-      (mistty-test-content :show (point))))
-
-
-    (mistty-next-output 1)
-    (should
-     (equal
-      (concat "left...............................right\n"
-              "$ echo one\n"
-              "one\n"
-              "left...............................right\n"
-              "$ echo two\n"
-              "two\n"
-              "left...............................right\n"
-              "$ echo three\n"
-              "<>three\n"
-              "left...............................right\n"
-              "$")
-      (mistty-test-content :show (point))))
-
-    (should-error (mistty-next-output 1))
-    (should
-     (equal
-      (concat "left...............................right\n"
-              "$ echo one\n"
-              "one\n"
-              "left...............................right\n"
-              "$ echo two\n"
-              "two\n"
-              "left...............................right\n"
-              "$ echo three\n"
-              "<>three\n"
-              "left...............................right\n"
-              "$")
-      (mistty-test-content :show (point))))))
-
-(ert-deftest mistty-test-zsh-multiline-prompt-extract-output ()
-  (mistty-with-test-buffer (:shell zsh :init mistty-test-zsh-fancy-prompt)
-    (dolist (text '("one" "two" "three" "four"))
-      (mistty-send-text (concat "echo " text))
-      (mistty-send-and-wait-for-prompt))
-
-    (let ((buf (mistty-create-buffer-with-output
-                (generate-new-buffer-name "extracted") 2)))
-      (unwind-protect
-          (should (equal "three\n"
-                         (with-current-buffer buf
-                           (buffer-string))))
-        (kill-buffer buf)))))
-
-(ert-deftest mistty-test-zsh-multiline-initial-prompt ()
-  (mistty-with-test-buffer (:shell zsh :init mistty-test-zsh-fancy-prompt)
-    (mistty-run-command
-     (insert "echo hello"))
-    (should
-     (equal
-      (concat "left...............................right\n"
-              "$ echo hello")
-      ;; The sync marker must be at the very beginning, even though
-      ;; there was no prompt_sp.
-      (mistty-test-content :start mistty-sync-marker)))))
-
-(ert-deftest mistty-test-zsh-reset-prompt ()
-  (mistty-with-test-buffer
-      (:shell zsh :init (concat
-                         "precmd() { \n"
-                         " print \"left...............................right\"\n"
-                         " }\n"
-                         "setopt PROMPT_SUBST\n"
-                         "c=1\n"
-                         "PROMPT='$c-\\$ '\n"
-                         "TRAPALRM() { c=$(($c+1)); zle reset-prompt; }\n"
-                         "TMOUT=1"))
-    ;; Anything above 1 is good. Usually, it's 2, but we don't want to
-    ;; be too strict in case an update is missed.
-    (mistty-wait-for-output :regexp "[2-9]-")
-
-    (let* ((content (buffer-substring mistty-sync-marker (point-max)))
-           (input-id (get-text-property 0 'mistty-input-id content)))
-      ;; The sync marker must be at the beginning of the prompt, even
-      ;; though the prompt (but not the line before) was refreshed.
-      (should
-       (string-match
-        (concat "left...............................right *\n"
-                "[2-9]-\\$ \n")
-        content))
-
-      (should (equal (point-min) (marker-position mistty-sync-marker)))
-
-      ;; Everything should have the same input id.
-      (should-not (text-property-not-all 0 (length content) 'mistty-input-id input-id content)))))
-
-(ert-deftest mistty-test-newline ()
-  (mistty-with-test-buffer ()
-    (mistty-send-text "echo '")
-    (mistty-newline)
-    (mistty-send-text "foo")
-    (mistty-newline 2)
-    (mistty-send-text "bar'")
-    (should
-     (equal "\nfoo\n\nbar"
-            (mistty-send-and-capture-command-output)))))
-
-(ert-deftest mistty-test-newline-at-point ()
-  (mistty-with-test-buffer ()
-    (mistty-run-command
-     (mistty-send-text "echo 'foo bar'"))
-    (mistty-run-command
-     (mistty-test-goto "bar"))
-    (mistty-run-command
-     (mistty-newline))
-    (should
-     (equal "foo\nbar"
-            (mistty-send-and-capture-command-output)))))
-
+;; TODO: make it run on eterm
 (mistty-deftest mistty-test-right-prompt-kill-multiple-lines
-    (:shell ((fish mistty-test-fish-right-prompt)
-             (zsh mistty-test-zsh-right-prompt)))
+    (:type alacritty :shell ((fish mistty-test-fish-right-prompt)
+                             (zsh mistty-test-zsh-right-prompt)))
   
     (mistty--send-string mistty-proc
                          (mistty--maybe-bracketed-str "echo foo\necho bar"))
@@ -6082,45 +6103,43 @@ function prompt {
     (should (string-match "^\\$ <> *< right\n *echo bar"
                           (mistty-test-content :show (point)))))
 
-(ert-deftest mistty-test-accept-process-output ()
-  (mistty-with-test-buffer ()
-    (mistty-send-text "yes")
-    (mistty-send-command)
+(mistty-deftest mistty-test-accept-process-output ( :type all)
+  (mistty-send-text "yes")
+  (mistty-send-command)
 
-    ;; Yes sends output continuously. As the process filter calls
-    ;; accept-process-output, yes could easily freeze Emacs if the
-    ;; time limit doesn't work, so this test would never return.
+  ;; Yes sends output continuously. As the process filter calls
+  ;; accept-process-output, yes could easily freeze Emacs if the
+  ;; time limit doesn't work, so this test would never return.
 
-    ;; Wait for some output, but without calling
-    ;; mistty-wait-for-output, as it waits for output to stop, and
-    ;; with yes, it never will.
-    (while (save-excursion
-             (goto-char (point-min))
-             (not (search-forward-regexp "^y" nil 'noerror)))
-      (accept-process-output nil 0.1 nil))
+  ;; Wait for some output, but without calling
+  ;; mistty-wait-for-output, as it waits for output to stop, and
+  ;; with yes, it never will.
+  (while (save-excursion
+           (goto-char (point-min))
+           (not (search-forward-regexp "^y" nil 'noerror)))
+    (accept-process-output nil 0.1 nil))
 
-    ;; Stop yes
-    (mistty-send-key 1 "\C-c")
+  ;; Stop yes
+  (mistty-send-key 1 "\C-c")
 
-    ;; Wait for the next prompt
-    (mistty-wait-for-output :start (point-min) :regexp "^\\$ *$")))
+  ;; Wait for the next prompt
+  (mistty-wait-for-output :start (point-min) :regexp "^\\$ *$"))
 
-(ert-deftest mistty-test-self-insert-command ()
-  (mistty-with-test-buffer ()
-    (cl-loop for key across "echo \"hello, world\""
-             do (mistty-run-command
-                 (self-insert-command 1 key)))
-    (should (equal "hello, world"
-                   (mistty-send-and-capture-command-output)))))
+(mistty-deftest mistty-test-self-insert-command ( :type all)
+  (cl-loop for key across "echo \"hello, world\""
+           do (mistty-run-command
+               (self-insert-command 1 key)))
+  (should (equal "hello, world"
+                 (mistty-send-and-capture-command-output))))
 
-(ert-deftest mistty-disable-jit-lock-mode-in-term-buf ()
+(ert-deftest mistty-disable-jit-lock-mode-in-term-buf/alacritty ()
   (let ((was-enabled global-goto-address-mode))
     (unwind-protect
         (progn
           ;; Turning on global-goto-address-mode force jit-lock-mode
           ;; on all buffers, even the hidden ones.
           (global-goto-address-mode)
-          (mistty-with-test-buffer ()
+          (mistty-with-test-buffer (:type alacritty)
             (let ((proc mistty-proc)
                   (workbuf mistty-work-buffer)
                   (termbuf mistty-term-buffer))
@@ -6143,139 +6162,172 @@ function prompt {
       (unless was-enabled
         (global-goto-address-mode -1)))))
 
-(turtles-ert-deftest mistty-test-scrolline-after-scrolling (:instance 'mistty)
-  (mistty-with-test-buffer (:term-size '(79 . 22))
-    (defun mistty--cursor-scrolline ()
-      "Return the scrolline position of the cursor."
+
+(ert-deftest mistty-disable-jit-lock-mode-in-term-buf/eterm ()
+  (let ((was-enabled global-goto-address-mode))
+    (unwind-protect
+        (progn
+          ;; Turning on global-goto-address-mode force jit-lock-mode
+          ;; on all buffers, even the hidden ones.
+          (global-goto-address-mode)
+          (mistty-with-test-buffer (:type eterm)
+            (let ((proc mistty-proc)
+                  (workbuf mistty-work-buffer)
+                  (termbuf mistty-term-buffer))
+              (with-current-buffer termbuf
+                (should-not jit-lock-mode))
+              (mistty-send-text "echo OK | less")
+              (mistty-send-command)
+              (mistty-wait-for-output
+               :proc proc
+               :test
+               (lambda ()
+                 (buffer-local-value 'mistty-fullscreen workbuf)))
+              ;; Note that jit-lock-mode should be enabled while
+              ;; fullscreen; this is different from what happens when
+              ;; the terminal type is set to alacritty.
+              (with-current-buffer termbuf
+                (should jit-lock-mode))
+              (mistty-send-and-wait-for-prompt
+               :send (lambda () (process-send-string proc "q"))
+               :proc proc)
+              (with-current-buffer termbuf
+                (should-not jit-lock-mode)))))
+      (unless was-enabled
+        (global-goto-address-mode -1)))))
+
+(mistty-deftest mistty-test-scrolline-after-scrolling
+    (:term-size '(79 . 22) :type all :turtles t)
+  (defun mistty--cursor-scrolline ()
+    "Return the scrolline position of the cursor."
+    (with-current-buffer mistty-term-buffer
+      (mistty--scrolline-at (point))))
+
+  (save-restriction
+    (let (one two)
+      (mistty--send-string
+       mistty-proc
+       (concat "n=1; r=n; while [[ $r != q ]]; do"
+               " for i in $(seq $n $((n+9))); do"
+               "  echo line $i;"
+               " done;"
+               "n=$((n+10));"
+               "read r;"
+               "done"))
+      (mistty-wait-for-output :str "read r;done")
+      (mistty--send-string mistty-proc "\n")
+
+      (mistty-wait-for-output :str "line 10")
+      (mistty-send-text "one")
+      (setq one (mistty--cursor-scrolline))
+      (mistty-log "one scrolline=%s" one)
+
+      ;; scrolline one is valid on both buffers
+      (should (equal "one" (mistty-test-line-at-scrolline one)))
+      (should (equal "one" (with-current-buffer mistty-term-buffer
+                             (mistty-test-line-at-scrolline one))))
+
+      (mistty--send-string mistty-proc "\n")
+      (mistty-wait-for-output :str "line 20")
+
+      (should (equal "one" (mistty-test-line-at-scrolline one)))
+      (should (equal "one" (with-current-buffer mistty-term-buffer
+                             (mistty-test-line-at-scrolline one))))
+
+      (mistty-send-text "two")
+      (setq two (mistty--cursor-scrolline))
+
+      (should (equal "two" (mistty-test-line-at-scrolline two)))
       (with-current-buffer mistty-term-buffer
-        (mistty--scrolline-at (point))))
+        (should (equal "two" (mistty-test-line-at-scrolline two))))
+      (mistty--send-string mistty-proc "\n")
+      (mistty-wait-for-output :str "line 30")
 
-    (save-restriction
-      (let (one two)
-        (mistty--send-string
-         mistty-proc
-         (concat "n=1; r=n; while [[ $r != q ]]; do"
-                 " for i in $(seq $n $((n+9))); do"
-                 "  echo line $i;"
-                 " done;"
-                 "n=$((n+10));"
-                 "read r;"
-                 "done"))
-        (mistty-wait-for-output :str "read r;done")
-        (mistty--send-string mistty-proc "\n")
+      ;; both are still valid, even though one is outside the screen,
+      ;; at this point; it's still below the sync mark
+      (let ((screen-start (with-current-buffer mistty-term-buffer
+                            (mistty--term-scrolline-at-screen-start))))
+        (should (< one screen-start))
+        (should (> two screen-start)))
 
-        (mistty-wait-for-output :str "line 10")
-        (mistty-send-text "one")
-        (setq one (mistty--cursor-scrolline))
-        (mistty-log "one scrolline=%s" one)
-
-        ;; scrolline one is valid on both buffers
-        (should (equal "one" (mistty-test-line-at-scrolline one)))
-        (should (equal "one" (with-current-buffer mistty-term-buffer
-                               (mistty-test-line-at-scrolline one))))
-
-        (mistty--send-string mistty-proc "\n")
-        (mistty-wait-for-output :str "line 20")
-
-        (should (equal "one" (mistty-test-line-at-scrolline one)))
-        (should (equal "one" (with-current-buffer mistty-term-buffer
-                               (mistty-test-line-at-scrolline one))))
-
-        (mistty-send-text "two")
-        (setq two (mistty--cursor-scrolline))
-
-        (should (equal "two" (mistty-test-line-at-scrolline two)))
-        (with-current-buffer mistty-term-buffer
-          (should (equal "two" (mistty-test-line-at-scrolline two))))
-        (mistty--send-string mistty-proc "\n")
-        (mistty-wait-for-output :str "line 30")
-
-        ;; both are still valid, even though one is outside the screen,
-        ;; at this point; it's still below the sync mark
-        (let ((screen-start (with-current-buffer mistty-term-buffer
-                              (mistty--term-scrolline-at-screen-start))))
-          (should (< one screen-start))
-          (should (> two screen-start)))
-
-        (should (equal "two" (mistty-test-line-at-scrolline two)))
-        (with-current-buffer mistty-term-buffer
-          (should (equal "two" (mistty-test-line-at-scrolline two))))
-
-        (mistty-send-and-wait-for-prompt
-         :send (lambda ()
-                 (mistty--send-string mistty-proc "q\n")))
-
-        ;; Both are now invalid, as they're below the sync mark
-        (should (> mistty-sync-marker (mistty--find-scrolline one)))
-        (should (> mistty-sync-marker (mistty--find-scrolline two)))))))
-
-(turtles-ert-deftest mistty-test-scrolline-after-scrolling-long-lines (:instance 'mistty)
-  (mistty-with-test-buffer (:term-size '(79 . 23))
-    (defun mistty--cursor-scrolline ()
-      "Return the scrolline position of the cursor."
+      (should (equal "two" (mistty-test-line-at-scrolline two)))
       (with-current-buffer mistty-term-buffer
-        (mistty--scrolline-at (point))))
-                           
-    (save-restriction
-      (let (one two)
-        ;; Each line counts double, as it is split by term.
-        (mistty--send-string
-         mistty-proc
-         (concat "n=1; r=n; while [[ $r != q ]]; do"
-                 " for i in $(seq $n $((n+4))); do"
-                 "  echo -n line $i:;"
-                 "  for j in $(seq 1 30); do echo -n ' foo'; done;"
-                 "  echo $i.;"
-                 " done;"
-                 "n=$((n+5));"
-                 "read r;"
-                 "done"))
-        (mistty-wait-for-output :str ";done")
-        (mistty--send-string mistty-proc "\n")
-        (mistty-wait-for-output :str "foo5.")
-        (mistty-send-text "one")
-        (setq one (mistty--cursor-scrolline))
+        (should (equal "two" (mistty-test-line-at-scrolline two))))
 
-        ;; scrolline one is valid on both buffers
-        (should (equal "one" (mistty-test-line-at-scrolline one)))
-        (with-current-buffer mistty-term-buffer
-          (should (equal "one" (mistty-test-line-at-scrolline one))))
+      (mistty-send-and-wait-for-prompt
+       :send (lambda ()
+               (mistty--send-string mistty-proc "q\n")))
 
-        (mistty--send-string mistty-proc "\n")
-        (mistty-wait-for-output :str "foo10.")
+      ;; Both are now invalid, as they're below the sync mark
+      (should (> mistty-sync-marker (mistty--find-scrolline one)))
+      (should (> mistty-sync-marker (mistty--find-scrolline two))))))
 
-        ;; after scrolling, scrollines are still valid on both buffers
-        (should (equal "one" (mistty-test-line-at-scrolline one)))
-        (with-current-buffer mistty-term-buffer
-          (should (equal "one" (mistty-test-line-at-scrolline one))))
+(mistty-deftest mistty-test-scrolline-after-scrolling-long-lines
+    (:term-size '(79 . 23) :type all :turtles t)
+  (defun mistty--cursor-scrolline ()
+    "Return the scrolline position of the cursor."
+    (with-current-buffer mistty-term-buffer
+      (mistty--scrolline-at (point))))
+  
+  (save-restriction
+    (let (one two)
+      ;; Each line counts double, as it is split by term.
+      (mistty--send-string
+       mistty-proc
+       (concat "n=1; r=n; while [[ $r != q ]]; do"
+               " for i in $(seq $n $((n+4))); do"
+               "  echo -n line $i:;"
+               "  for j in $(seq 1 30); do echo -n ' foo'; done;"
+               "  echo $i.;"
+               " done;"
+               "n=$((n+5));"
+               "read r;"
+               "done"))
+      (mistty-wait-for-output :str ";done")
+      (mistty--send-string mistty-proc "\n")
+      (mistty-wait-for-output :str "foo5.")
+      (mistty-send-text "one")
+      (setq one (mistty--cursor-scrolline))
 
-        (mistty--send-string mistty-proc "\n")
-        (mistty-wait-for-output :str "foo15.")
+      ;; scrolline one is valid on both buffers
+      (should (equal "one" (mistty-test-line-at-scrolline one)))
+      (with-current-buffer mistty-term-buffer
+        (should (equal "one" (mistty-test-line-at-scrolline one))))
 
-        (should (equal "one" (mistty-test-line-at-scrolline one)))
-        (with-current-buffer mistty-term-buffer
-          (should (equal "one" (mistty-test-line-at-scrolline one))))
-        (mistty-send-and-wait-for-prompt
-         :send (lambda ()
-           (mistty--send-string mistty-proc "q\n")))))))
+      (mistty--send-string mistty-proc "\n")
+      (mistty-wait-for-output :str "foo10.")
 
-(ert-deftest mistty-prompt-cell ()
-  (mistty-with-test-buffer ()
-    (should (eq mistty--prompt-cell
-                (buffer-local-value
-                 'mistty--prompt-cell mistty-term-buffer)))
-    (let ((prompt (mistty--make-prompt 'test 0 1))
-          (other-prompt (mistty--make-prompt 'other 0 1)))
-      (setf (mistty--prompt) prompt)
+      ;; after scrolling, scrollines are still valid on both buffers
+      (should (equal "one" (mistty-test-line-at-scrolline one)))
+      (with-current-buffer mistty-term-buffer
+        (should (equal "one" (mistty-test-line-at-scrolline one))))
+
+      (mistty--send-string mistty-proc "\n")
+      (mistty-wait-for-output :str "foo15.")
+
+      (should (equal "one" (mistty-test-line-at-scrolline one)))
+      (with-current-buffer mistty-term-buffer
+        (should (equal "one" (mistty-test-line-at-scrolline one))))
+      (mistty-send-and-wait-for-prompt
+       :send (lambda ()
+               (mistty--send-string mistty-proc "q\n"))))))
+
+(mistty-deftest mistty-prompt-cell ( :type all)
+  (should (eq mistty--prompt-cell
+              (buffer-local-value
+               'mistty--prompt-cell mistty-term-buffer)))
+  (let ((prompt (mistty--make-prompt 'test 0 1))
+        (other-prompt (mistty--make-prompt 'other 0 1)))
+    (setf (mistty--prompt) prompt)
+    (should (eq prompt (mistty--prompt)))
+    (with-current-buffer mistty-term-buffer
       (should (eq prompt (mistty--prompt)))
-      (with-current-buffer mistty-term-buffer
-        (should (eq prompt (mistty--prompt)))
-        (setf (mistty--prompt) other-prompt))
-      (should (eq other-prompt (mistty--prompt)))
-      (setf (mistty--prompt) nil)
+      (setf (mistty--prompt) other-prompt))
+    (should (eq other-prompt (mistty--prompt)))
+    (setf (mistty--prompt) nil)
 
-      (with-current-buffer mistty-term-buffer
-        (should (null (mistty--prompt)))))))
+    (with-current-buffer mistty-term-buffer
+      (should (null (mistty--prompt))))))
 
 (defconst mistty-test-zsh-osc133 "
 function osc133_precmd() {
@@ -6300,47 +6352,46 @@ precmd_functions+=(prompt_header)
 
 ")
 
-(ert-deftest mistty-osc133-zsh-multiline-prompt ()
+(mistty-deftest mistty-osc133-zsh-multiline-prompt
+    (:type all :shell ((zsh (concat mistty-test-zsh-osc133
+                                    mistty-test-zsh-osc133-multiline-prompt))))
   ;; Normally, multiline prompt detection under zsh rely on prompt-sp
   ;; and prompt-cr. This isn't necessary with OSC133.
-  (mistty-with-test-buffer (:shell zsh :init (concat
-                                              mistty-test-zsh-osc133
-                                              mistty-test-zsh-osc133-multiline-prompt))
 
-    (mistty-send-text "echo foo")
-    (mistty-send-and-wait-for-prompt)
+  (mistty-send-text "echo foo")
+  (mistty-send-and-wait-for-prompt)
 
-    (mistty-run-command
-     (insert "echo bar"))
-    (mistty-send-and-wait-for-prompt)
+  (mistty-run-command
+   (insert "echo bar"))
+  (mistty-send-and-wait-for-prompt)
 
-    ;; The prompt (and the sync marker) include the prompt header
-    (should (equal "<--->\n$ <>" (mistty-test-content
-                                  :start mistty-sync-marker
-                                  :show (mistty-cursor))))
+  ;; The prompt (and the sync marker) include the prompt header
+  (should (equal "<--->\n$ <>" (mistty-test-content
+                                :start mistty-sync-marker
+                                :show (mistty-cursor))))
 
-    (mistty-send-text "baa")
+  (mistty-send-text "baa")
 
-    ;; Prompts were detected correctly, including the prompt header
-    (should (equal
-             (concat
-              "<--->\n"
-              "$ <>echo foo\n"
-              "foo\n"
-              "<--->\n"
-              "$ <1>echo bar\n"
-              "bar\n"
-              "<--->\n"
-              "$ <2>baa")
-             (mistty-test-content
-              :show (mistty-test-all-inputs))))))
+  ;; Prompts were detected correctly, including the prompt header
+  (should (equal
+           (concat
+            "<--->\n"
+            "$ <>echo foo\n"
+            "foo\n"
+            "<--->\n"
+            "$ <1>echo bar\n"
+            "bar\n"
+            "<--->\n"
+            "$ <2>baa")
+           (mistty-test-content
+            :show (mistty-test-all-inputs)))))
 
-(ert-deftest mistty-osc133-zsh-multiline-prompt-no-bracketed-paste ()
+(mistty-deftest mistty-osc133-zsh-multiline-prompt-no-bracketed-paste
+    (:type all :shell ((zsh (concat
+                             mistty-test-zsh-osc133
+                             mistty-test-zsh-osc133-multiline-prompt
+                             "unset zle_bracketed_paste\n"))))
   ;; Even bracketed-paste isn't necessary with osc133.
-  (mistty-with-test-buffer (:shell zsh :init (concat
-                                              mistty-test-zsh-osc133
-                                              mistty-test-zsh-osc133-multiline-prompt
-                                              "unset zle_bracketed_paste\n"))
 
     (mistty-run-command
      (insert "echo foo"))
@@ -6363,306 +6414,303 @@ precmd_functions+=(prompt_header)
               "<--->\n"
               "$ <1>echo bar")
              (mistty-test-content
-              :show (mistty-test-all-inputs))))))
+              :show (mistty-test-all-inputs)))))
 
-(ert-deftest mistty-osc133-zsh-right-prompt-no-bracketed-paste ()
-  (mistty-with-test-buffer (:shell zsh :init (concat
-                                              mistty-test-zsh-osc133
-                                              mistty-test-zsh-right-prompt
-                                              "\nunset zle_bracketed_paste\n"))
+(mistty-deftest mistty-osc133-zsh-right-prompt-no-bracketed-paste
+    (:type all :shell ((zsh (concat
+                             mistty-test-zsh-osc133
+                             mistty-test-zsh-right-prompt
+                             "\nunset zle_bracketed_paste\n"))))
+  (mistty-run-command
+   (insert "echo foo"))
 
-    (mistty-run-command
-     (insert "echo foo"))
+  (mistty-send-and-wait-for-prompt)
 
-    (mistty-send-and-wait-for-prompt)
+  (mistty-run-command
+   (insert "echo bar"))
 
-    (mistty-run-command
-     (insert "echo bar"))
+  (should (equal
+           (concat
+            "$ <>echo foo                                                             < right\n"
+            "foo\n"
+            "$ <1>echo bar                                                             < right")
+           (mistty-test-content
+            :show (mistty-test-all-inputs)))))
 
-    (should (equal
-             (concat
-              "$ <>echo foo                                                             < right\n"
-              "foo\n"
-              "$ <1>echo bar                                                             < right")
-             (mistty-test-content
-              :show (mistty-test-all-inputs))))))
+(mistty-deftest mistty-osc133-prompt-set-properties (:shell ((bash "PS1='$ \\033]133;B\\007'")) :type all)
+  (mistty-send-text "echo foobar")
+  ;; With OSC133 B, MisTTY sets text properties on the prompt that
+  ;; allow (beginning-of-line) to stop before the beginning of the
+  ;; user input area. This only works for the main (left) prompt.
+  (beginning-of-line)
+  (should (equal "[$ ]<>echo foobar"
+                 (mistty-test-content
+                  :show (point)
+                  :show-property '(field prompt))))
+  (should (equal "echo foobar"
+                 (buffer-substring-no-properties
+                  (line-beginning-position)
+                  (line-end-position)))))
 
-(ert-deftest mistty-osc133-prompt-set-properties ()
-  (mistty-with-test-buffer (:init "PS1='$ \\033]133;B\\007'")
-    (mistty-send-text "echo foobar")
-    ;; With OSC133 B, MisTTY sets text properties on the prompt that
-    ;; allow (beginning-of-line) to stop before the beginning of the
-    ;; user input area. This only works for the main (left) prompt.
-    (beginning-of-line)
-    (should (equal "[$ ]<>echo foobar"
-                   (mistty-test-content
-                    :show (point)
-                    :show-property '(field prompt))))
-    (should (equal "echo foobar"
-                   (buffer-substring-no-properties
-                    (line-beginning-position)
-                    (line-end-position))))))
+;; TODO: make it run on eterm
+(mistty-deftest mistty-osc133-right-left-prompt-field
+    (:type alacritty :shell ((fish (concat
+                                    "function fish_prompt; printf '$ \e]133;B\007'; end\n"
+                                    mistty-test-fish-right-prompt))))
+  ;; Fields are set on both prompts so line-beginning/end cover only
+  ;; the command.
+  (mistty-send-text "echo foobar")
+  (should (equal "echo foobar "
+                 (buffer-substring-no-properties
+                  (line-beginning-position)
+                  (line-end-position))))
+  (mistty-send-and-wait-for-prompt)
 
-(ert-deftest mistty-osc133-right-left-prompt-field ()
-  (mistty-with-test-buffer (:shell fish :init (concat
-                                               "function fish_prompt; printf '$ \e]133;B\007'; end\n"
-                                               mistty-test-fish-right-prompt))
-    ;; Fields are set on both prompts so line-beginning/end cover only
-    ;; the command.
-    (mistty-send-text "echo foobar")
-    (should (equal "echo foobar "
-                   (buffer-substring-no-properties
-                    (line-beginning-position)
-                    (line-end-position))))
-    (mistty-send-and-wait-for-prompt)
-
-    ;; The same thing happen when text is in the scrollback area
-    (goto-char (point-min))
-    (search-forward "echo foobar")
-    (should (equal "echo foobar "
-                   (buffer-substring-no-properties
-                    (line-beginning-position)
-                    (line-end-position))))))
+  ;; The same thing happen when text is in the scrollback area
+  (goto-char (point-min))
+  (search-forward "echo foobar")
+  (should (equal "echo foobar "
+                 (buffer-substring-no-properties
+                  (line-beginning-position)
+                  (line-end-position)))))
 
 (defconst mistty-test-zsh-osc133-b
   "function osc133_prompt { PS1='prompt \033]133;B\007'; };")
 
-(ert-deftest mistty-osc133-command-for-output ()
-  (mistty-with-test-buffer (:shell zsh :init (concat
-                                              mistty-test-zsh-osc133
-                                              mistty-test-zsh-osc133-b))
-    (mistty-send-text "osc133_prompt")
-    (setq mistty-test-prompt-re "^prompt ")
-    (mistty-send-and-wait-for-prompt)
+;; TODO: make it run on eterm
+(mistty-deftest mistty-osc133-command-for-output
+    (:type alacritty :shell ((zsh (concat
+                                   mistty-test-zsh-osc133
+                                   mistty-test-zsh-osc133-b))))
+  (mistty-send-text "osc133_prompt")
+  (setq mistty-test-prompt-re "^prompt ")
+  (mistty-send-and-wait-for-prompt)
 
-    ;; The prompt really doesn't look like a prompt, but that doesn't
-    ;; matter since it's marked with OSC133.
-    (mistty-send-text "echo one")
-    (mistty-send-and-wait-for-prompt)
+  ;; The prompt really doesn't look like a prompt, but that doesn't
+  ;; matter since it's marked with OSC133.
+  (mistty-send-text "echo one")
+  (mistty-send-and-wait-for-prompt)
 
-    (mistty-send-text "echo two")
-    (mistty-send-and-wait-for-prompt)
+  (mistty-send-text "echo two")
+  (mistty-send-and-wait-for-prompt)
 
-    (mistty-send-text "for i in a b c; do")
-    (mistty-newline)
-    (mistty-send-text "echo $i")
-    (mistty-newline)
-    (mistty-send-text "done")
-    (mistty-send-and-wait-for-prompt)
+  (mistty-send-text "for i in a b c; do")
+  (mistty-newline)
+  (mistty-send-text "echo $i")
+  (mistty-newline)
+  (mistty-send-text "done")
+  (mistty-send-and-wait-for-prompt)
 
-    (should (equal "for i in a b c; do; echo $i; done"
-                   (mistty--command-for-output
-                    (mistty--prompt-ranges-for-current-or-previous-output 1))))
-    (should (equal "echo two" (mistty--command-for-output
-                               (mistty--prompt-ranges-for-current-or-previous-output 2))))
-    (should (equal "echo one" (mistty--command-for-output
-                               (mistty--prompt-ranges-for-current-or-previous-output 3))))))
+  (should (equal "for i in a b c; do; echo $i; done"
+                 (mistty--command-for-output
+                  (mistty--prompt-ranges-for-current-or-previous-output 1))))
+  (should (equal "echo two" (mistty--command-for-output
+                             (mistty--prompt-ranges-for-current-or-previous-output 2))))
+  (should (equal "echo one" (mistty--command-for-output
+                             (mistty--prompt-ranges-for-current-or-previous-output 3)))))
 
-(ert-deftest mistty-osc133-fish-right-prompt-field ()
+;; TODO: make it run on eterm
+(mistty-deftest mistty-osc133-fish-right-prompt-field
+    (:type alacritty :shell ((fish (concat
+                                    "function fish_prompt; printf '$ \e]133;B\007'; end\n"
+                                    mistty-test-fish-right-prompt))))
   (skip-unless (string-match "version 4"
                              (shell-command-to-string (format "%s --version" mistty-test-fish-exe))))
-  (mistty-with-test-buffer (:shell fish :init (concat
-                                               "function fish_prompt; printf '$ \e]133;B\007'; end\n"
-                                               mistty-test-fish-right-prompt))
-    (mistty-send-text "echo foo bar")
-    (backward-word)
-    (should (equal "echo foo <>bar"
-                   (mistty-test-content :show (point)
-                                        :start (line-beginning-position)
-                                        :end (line-end-position))))))
+  (mistty-send-text "echo foo bar")
+  (backward-word)
+  (should (equal "echo foo <>bar"
+                 (mistty-test-content :show (point)
+                                      :start (line-beginning-position)
+                                      :end (line-end-position)))))
 
-(ert-deftest mistty-prev-next-prompts-as-defuns ()
-  (mistty-with-test-buffer ()
-    (dolist (text '("one" "two" "three" "four" "five"))
-      (mistty-send-text (format "echo %s" text))
-      (mistty-send-and-wait-for-prompt))
+(mistty-deftest mistty-prev-next-prompts-as-defuns ( :type all)
+  (dolist (text '("one" "two" "three" "four" "five"))
+    (mistty-send-text (format "echo %s" text))
+    (mistty-send-and-wait-for-prompt))
+  (mistty-send-text "current")
+  (should (equal (concat "$ echo one\n"
+                         "one\n"
+                         "$ echo two\n"
+                         "two\n"
+                         "$ echo three\n"
+                         "three\n"
+                         "$ echo four\n"
+                         "four\n"
+                         "$ echo five\n"
+                         "five\n"
+                         "$ current<>")
+                 (mistty-test-content :show (point))))
+
+  (ert-simulate-command '(beginning-of-defun 1))
+  (should (equal (concat "$ echo one\n"
+                         "one\n"
+                         "$ echo two\n"
+                         "two\n"
+                         "$ echo three\n"
+                         "three\n"
+                         "$ echo four\n"
+                         "four\n"
+                         "$ echo five\n"
+                         "five\n"
+                         "<>$ current")
+                 (mistty-test-content :show (point))))
+
+  (ert-simulate-command '(beginning-of-defun 1))
+  (should (equal (concat "$ echo one\n"
+                         "one\n"
+                         "$ echo two\n"
+                         "two\n"
+                         "$ echo three\n"
+                         "three\n"
+                         "$ echo four\n"
+                         "four\n"
+                         "<>$ echo five\n"
+                         "five\n"
+                         "$ current")
+                 (mistty-test-content :show (point))))
+
+  (ert-simulate-command '(beginning-of-defun 1))
+  (should (equal (concat "$ echo one\n"
+                         "one\n"
+                         "$ echo two\n"
+                         "two\n"
+                         "$ echo three\n"
+                         "three\n"
+                         "<>$ echo four\n"
+                         "four\n"
+                         "$ echo five\n"
+                         "five\n"
+                         "$ current")
+                 (mistty-test-content :show (point))))
+
+  (ert-simulate-command '(beginning-of-defun 1))
+  (should (equal (concat "$ echo one\n"
+                         "one\n"
+                         "$ echo two\n"
+                         "two\n"
+                         "<>$ echo three\n"
+                         "three\n"
+                         "$ echo four\n"
+                         "four\n"
+                         "$ echo five\n"
+                         "five\n"
+                         "$ current")
+                 (mistty-test-content :show (point))))
+
+  (ert-simulate-command '(end-of-defun 1))
+  (should (equal (concat "$ echo one\n"
+                         "one\n"
+                         "$ echo two\n"
+                         "two\n"
+                         "$ echo three\n"
+                         "three\n"
+                         "<>$ echo four\n"
+                         "four\n"
+                         "$ echo five\n"
+                         "five\n"
+                         "$ current")
+                 (mistty-test-content :show (point))))
+
+  (ert-simulate-command '(end-of-defun 1))
+  (should (equal (concat "$ echo one\n"
+                         "one\n"
+                         "$ echo two\n"
+                         "two\n"
+                         "$ echo three\n"
+                         "three\n"
+                         "$ echo four\n"
+                         "four\n"
+                         "<>$ echo five\n"
+                         "five\n"
+                         "$ current")
+                 (mistty-test-content :show (point))))
+
+  (ert-simulate-command '(end-of-defun 1))
+  (should (equal (concat "$ echo one\n"
+                         "one\n"
+                         "$ echo two\n"
+                         "two\n"
+                         "$ echo three\n"
+                         "three\n"
+                         "$ echo four\n"
+                         "four\n"
+                         "$ echo five\n"
+                         "five\n"
+                         "<>$ current")
+                 (mistty-test-content :show (point))))
+
+  (ert-simulate-command '(beginning-of-defun 4))
+  (should (equal (concat "$ echo one\n"
+                         "one\n"
+                         "<>$ echo two\n"
+                         "two\n"
+                         "$ echo three\n"
+                         "three\n"
+                         "$ echo four\n"
+                         "four\n"
+                         "$ echo five\n"
+                         "five\n"
+                         "$ current")
+                 (mistty-test-content :show (point))))
+
+  (ert-simulate-command '(beginning-of-defun -1))
+  (should (equal (concat "$ echo one\n"
+                         "one\n"
+                         "$ echo two\n"
+                         "two\n"
+                         "$ echo three\n"
+                         "three\n"
+                         "<>$ echo four\n"
+                         "four\n"
+                         "$ echo five\n"
+                         "five\n"
+                         "$ current")
+                 (mistty-test-content :show (point)))))
+
+(mistty-deftest mistty-mark-prompt-as-defun ( :type all)
+  (dolist (text '("one" "two" "three"))
+    (mistty-send-text (format "echo %s" text))
+    (mistty-send-and-wait-for-prompt))
+  (mistty-send-text "current")
+
+  (goto-char (point-min))
+  (mistty-test-goto "echo two")
+
+  (ert-simulate-command '(mark-defun 1))
+  (should (equal (concat "$ echo one\n"
+                         "one\n"
+                         "<>$ echo two\n"
+                         "two\n<1>"
+                         "$ echo three\n"
+                         "three\n"
+                         "$ current")
+                 (mistty-test-content :show (list (point) (mark))))))
+
+(mistty-deftest mistty-narrow-to-prompt-as-defun ( :type all)
+  (dolist (text '("one" "two" "three"))
+    (mistty-send-text (format "echo %s" text))
+    (mistty-send-and-wait-for-prompt))
+  (mistty-send-text "current")
+
+  (goto-char (point-min))
+  (mistty-test-goto "echo two")
+
+  (narrow-to-defun)
+
+  (ert-simulate-command '(mark-defun 1))
+  (should (equal "$ echo two\ntwo"
+                 (mistty-test-content))))
+
+(mistty-deftest mistty-imenu-create-index ( :type all)
+  (let ((prompt-pos (make-vector 4 nil)))
+    (cl-loop for index from 0
+             for text across ["one" "two" "three"]
+             do (progn
+                  (aset prompt-pos index (point))
+                  (mistty-send-text (format "echo %s" text))
+                  (mistty-send-and-wait-for-prompt)))
+    (aset prompt-pos 3 (point))
     (mistty-send-text "current")
-    (should (equal (concat "$ echo one\n"
-                           "one\n"
-                           "$ echo two\n"
-                           "two\n"
-                           "$ echo three\n"
-                           "three\n"
-                           "$ echo four\n"
-                           "four\n"
-                           "$ echo five\n"
-                           "five\n"
-                           "$ current<>")
-                   (mistty-test-content :show (point))))
-
-    (ert-simulate-command '(beginning-of-defun 1))
-    (should (equal (concat "$ echo one\n"
-                           "one\n"
-                           "$ echo two\n"
-                           "two\n"
-                           "$ echo three\n"
-                           "three\n"
-                           "$ echo four\n"
-                           "four\n"
-                           "$ echo five\n"
-                           "five\n"
-                           "<>$ current")
-                   (mistty-test-content :show (point))))
-
-    (ert-simulate-command '(beginning-of-defun 1))
-    (should (equal (concat "$ echo one\n"
-                           "one\n"
-                           "$ echo two\n"
-                           "two\n"
-                           "$ echo three\n"
-                           "three\n"
-                           "$ echo four\n"
-                           "four\n"
-                           "<>$ echo five\n"
-                           "five\n"
-                           "$ current")
-                   (mistty-test-content :show (point))))
-
-    (ert-simulate-command '(beginning-of-defun 1))
-    (should (equal (concat "$ echo one\n"
-                           "one\n"
-                           "$ echo two\n"
-                           "two\n"
-                           "$ echo three\n"
-                           "three\n"
-                           "<>$ echo four\n"
-                           "four\n"
-                           "$ echo five\n"
-                           "five\n"
-                           "$ current")
-                   (mistty-test-content :show (point))))
-
-    (ert-simulate-command '(beginning-of-defun 1))
-    (should (equal (concat "$ echo one\n"
-                           "one\n"
-                           "$ echo two\n"
-                           "two\n"
-                           "<>$ echo three\n"
-                           "three\n"
-                           "$ echo four\n"
-                           "four\n"
-                           "$ echo five\n"
-                           "five\n"
-                           "$ current")
-                   (mistty-test-content :show (point))))
-
-    (ert-simulate-command '(end-of-defun 1))
-    (should (equal (concat "$ echo one\n"
-                           "one\n"
-                           "$ echo two\n"
-                           "two\n"
-                           "$ echo three\n"
-                           "three\n"
-                           "<>$ echo four\n"
-                           "four\n"
-                           "$ echo five\n"
-                           "five\n"
-                           "$ current")
-                   (mistty-test-content :show (point))))
-
-    (ert-simulate-command '(end-of-defun 1))
-    (should (equal (concat "$ echo one\n"
-                           "one\n"
-                           "$ echo two\n"
-                           "two\n"
-                           "$ echo three\n"
-                           "three\n"
-                           "$ echo four\n"
-                           "four\n"
-                           "<>$ echo five\n"
-                           "five\n"
-                           "$ current")
-                   (mistty-test-content :show (point))))
-
-    (ert-simulate-command '(end-of-defun 1))
-    (should (equal (concat "$ echo one\n"
-                           "one\n"
-                           "$ echo two\n"
-                           "two\n"
-                           "$ echo three\n"
-                           "three\n"
-                           "$ echo four\n"
-                           "four\n"
-                           "$ echo five\n"
-                           "five\n"
-                           "<>$ current")
-                   (mistty-test-content :show (point))))
-
-    (ert-simulate-command '(beginning-of-defun 4))
-    (should (equal (concat "$ echo one\n"
-                           "one\n"
-                           "<>$ echo two\n"
-                           "two\n"
-                           "$ echo three\n"
-                           "three\n"
-                           "$ echo four\n"
-                           "four\n"
-                           "$ echo five\n"
-                           "five\n"
-                           "$ current")
-                   (mistty-test-content :show (point))))
-
-    (ert-simulate-command '(beginning-of-defun -1))
-    (should (equal (concat "$ echo one\n"
-                           "one\n"
-                           "$ echo two\n"
-                           "two\n"
-                           "$ echo three\n"
-                           "three\n"
-                           "<>$ echo four\n"
-                           "four\n"
-                           "$ echo five\n"
-                           "five\n"
-                           "$ current")
-                   (mistty-test-content :show (point))))))
-
-(ert-deftest mistty-mark-prompt-as-defun ()
-  (mistty-with-test-buffer ()
-    (dolist (text '("one" "two" "three"))
-      (mistty-send-text (format "echo %s" text))
-      (mistty-send-and-wait-for-prompt))
-    (mistty-send-text "current")
-
-    (goto-char (point-min))
-    (mistty-test-goto "echo two")
-
-    (ert-simulate-command '(mark-defun 1))
-    (should (equal (concat "$ echo one\n"
-                           "one\n"
-                           "<>$ echo two\n"
-                           "two\n<1>"
-                           "$ echo three\n"
-                           "three\n"
-                           "$ current")
-                   (mistty-test-content :show (list (point) (mark)))))))
-
-(ert-deftest mistty-narrow-to-prompt-as-defun ()
-  (mistty-with-test-buffer ()
-    (dolist (text '("one" "two" "three"))
-      (mistty-send-text (format "echo %s" text))
-      (mistty-send-and-wait-for-prompt))
-    (mistty-send-text "current")
-
-    (goto-char (point-min))
-    (mistty-test-goto "echo two")
-
-    (narrow-to-defun)
-
-    (ert-simulate-command '(mark-defun 1))
-    (should (equal "$ echo two\ntwo"
-                   (mistty-test-content)))))
-
-(ert-deftest mistty-imenu-create-index ()
-  (mistty-with-test-buffer ()
-    (let ((prompt-pos (make-vector 4 nil)))
-      (cl-loop for index from 0
-               for text across ["one" "two" "three"]
-               do (progn
-                    (aset prompt-pos index (point))
-                    (mistty-send-text (format "echo %s" text))
-                    (mistty-send-and-wait-for-prompt)))
-      (aset prompt-pos 3 (point))
-      (mistty-send-text "current")
 
     (let ((imenu-use-markers nil))
       (should (equal `(("Outputs"
@@ -6674,19 +6722,18 @@ precmd_functions+=(prompt_header)
                         ("echo three" . ,(aref prompt-pos 2))
                         ("echo two" . ,(aref prompt-pos 1))
                         ("echo one" . ,(aref prompt-pos 0))))
-                     (mistty-imenu-create-index)))))))
+                     (mistty-imenu-create-index))))))
 
-(ert-deftest mistty-imenu-create-index-use-markers ()
-  (mistty-with-test-buffer ()
-    (let ((prompt-pos (make-vector 4 nil)))
-      (cl-loop for index from 0
-               for text across ["one" "two" "three"]
-               do (progn
-                    (aset prompt-pos index (point))
-                    (mistty-send-text (format "echo %s" text))
-                    (mistty-send-and-wait-for-prompt)))
-      (aset prompt-pos 3 (point))
-      (mistty-send-text "current")
+(mistty-deftest mistty-imenu-create-index-use-markers ( :type all)
+  (let ((prompt-pos (make-vector 4 nil)))
+    (cl-loop for index from 0
+             for text across ["one" "two" "three"]
+             do (progn
+                  (aset prompt-pos index (point))
+                  (mistty-send-text (format "echo %s" text))
+                  (mistty-send-and-wait-for-prompt)))
+    (aset prompt-pos 3 (point))
+    (mistty-send-text "current")
 
     (let* ((imenu-use-markers t)
            (index (mistty-imenu-create-index)))
@@ -6711,185 +6758,188 @@ precmd_functions+=(prompt_header)
                         ("echo three" . ,(aref prompt-pos 2))
                         ("echo two" . ,(aref prompt-pos 1))
                         ("echo one" . ,(aref prompt-pos 0))))
-                        index))))))
+                     index)))))
 
-(ert-deftest mistty-imenu-create-index-no-output ()
-  (mistty-with-test-buffer ()
+(mistty-deftest mistty-imenu-create-index-no-output ( :type all)
+  (mistty-send-text "echo one")
+  (mistty-send-and-wait-for-prompt)
+  (mistty-send-text "echo -n")
+  (mistty-send-and-wait-for-prompt)
+
+  (let ((imenu-use-markers nil)
+        (index (mistty-imenu-create-index)))
+    (should (equal '("CURRENT" "echo -n" "echo one")
+                   (mapcar #'car
+                           (alist-get "Commands" index nil nil #'string=))))
+
+    ;; Neither CURRENT nor echo -n has any outputs.
+    (should (equal '("echo one")
+                   (mapcar #'car
+                           (alist-get "Outputs" index nil nil #'string=))))))
+
+(mistty-deftest mistty-imenu-create-index-multiline ( :type all)
+  (mistty-send-text "for i in a b c; do")
+  (mistty-newline)
+  (mistty-send-text " echo $i")
+  (mistty-newline)
+  (mistty-send-text "done")
+  (mistty-send-and-wait-for-prompt)
+
+  (let ((imenu-use-markers nil)
+        (index (mistty-imenu-create-index)))
+    (should (equal '("CURRENT" "for i in a b c; do; echo $i; done")
+                   (mapcar #'car
+                           (alist-get "Commands" index nil nil #'string=))))))
+
+(mistty-deftest mistty-user-input-start ( :type all)
+  (let ((prompt (lambda ()
+                  (mistty--prompt-ranges-around
+                   (point)
+                   (mistty--active-or-potential-prompt-ranges)))))
     (mistty-send-text "echo one")
     (mistty-send-and-wait-for-prompt)
-    (mistty-send-text "echo -n")
+    (mistty-send-and-wait-for-prompt)
+    (mistty-send-text "echo two")
     (mistty-send-and-wait-for-prompt)
 
-    (let ((imenu-use-markers nil)
-          (index (mistty-imenu-create-index)))
-      (should (equal '("CURRENT" "echo -n" "echo one")
-                     (mapcar #'car
-                             (alist-get "Commands" index nil nil #'string=))))
+    (should
+     (equal
+      "$ <>"
+      (mistty-test-content
+       :start (pos-bol)
+       :end (pos-eol)
+       :show (mistty--user-input-start (funcall prompt)))))
 
-      ;; Neither CURRENT nor echo -n has any outputs.
-      (should (equal '("echo one")
-                     (mapcar #'car
-                             (alist-get "Outputs" index nil nil #'string=)))))))
+    (mistty-test-goto "echo two")
+    (should
+     (equal
+      "$ <>echo two"
+      (mistty-test-content
+       :start (pos-bol)
+       :end (pos-eol)
+       :show (mistty--user-input-start (funcall prompt)))))
 
-(ert-deftest mistty-imenu-create-index-multiline ()
-  (mistty-with-test-buffer ()
-    (mistty-send-text "for i in a b c; do")
-    (mistty-newline)
-    (mistty-send-text " echo $i")
-    (mistty-newline)
-    (mistty-send-text "done")
-    (mistty-send-and-wait-for-prompt)
+    (forward-line -1)
+    (should
+     (equal
+      "$ <>"
+      (mistty-test-content
+       :start (pos-bol)
+       :end (pos-eol)
+       :show (mistty--user-input-start (funcall prompt)))))
 
-    (let ((imenu-use-markers nil)
-          (index (mistty-imenu-create-index)))
-      (should (equal '("CURRENT" "for i in a b c; do; echo $i; done")
-                     (mapcar #'car
-                             (alist-get "Commands" index nil nil #'string=)))))))
+    (mistty-test-goto "echo one")
+    (should
+     (equal
+      "$ <>echo one"
+      (mistty-test-content
+       :start (pos-bol)
+       :end (pos-eol)
+       :show (mistty--user-input-start (funcall prompt)))))))
 
-(ert-deftest mistty-user-input-start ()
-  (mistty-with-test-buffer ()
-    (let ((prompt (lambda ()
-                    (mistty--prompt-ranges-around
-                     (point)
-                     (mistty--active-or-potential-prompt-ranges)))))
-      (mistty-send-text "echo one")
-      (mistty-send-and-wait-for-prompt)
-      (mistty-send-and-wait-for-prompt)
-      (mistty-send-text "echo two")
-      (mistty-send-and-wait-for-prompt)
-
-      (should
-       (equal
-        "$ <>"
-        (mistty-test-content
-         :start (pos-bol)
-         :end (pos-eol)
-         :show (mistty--user-input-start (funcall prompt)))))
-
-      (mistty-test-goto "echo two")
-      (should
-       (equal
-        "$ <>echo two"
-        (mistty-test-content
-         :start (pos-bol)
-         :end (pos-eol)
-         :show (mistty--user-input-start (funcall prompt)))))
-
-      (forward-line -1)
-      (should
-       (equal
-        "$ <>"
-        (mistty-test-content
-         :start (pos-bol)
-         :end (pos-eol)
-         :show (mistty--user-input-start (funcall prompt)))))
-
-      (mistty-test-goto "echo one")
-      (should
-       (equal
-        "$ <>echo one"
-        (mistty-test-content
-         :start (pos-bol)
-         :end (pos-eol)
-         :show (mistty--user-input-start (funcall prompt))))))))
-
-(ert-deftest mistty-test-default-terminal-size ()
-  (let ((mistty-default-terminal-size '(160 . 50)))
+(ert-deftest mistty-test-default-terminal-size/alacritty ()
+  (let ((mistty-default-terminal-size '(160 . 50))
+        (mistty-terminal-type 'alacritty))
     (ert-with-test-buffer ()
       (mistty-mode)
       (mistty-exec mistty-test-bash-exe)
       (should (equal 160 (buffer-local-value 'mistty-alacritty-columns mistty-term-buffer)))
       (should (equal 50 (buffer-local-value 'mistty-alacritty-lines mistty-term-buffer))))))
 
-(ert-deftest mistty-test-exec-called-multiple-times ()
-  (mistty-with-test-buffer ()
-    (let ((first-proc mistty-proc)
-          (first-term-buffer mistty-term-buffer))
-      (mistty-send-text "i=1")
-      (mistty-send-and-wait-for-prompt)
+(ert-deftest mistty-test-default-terminal-size/eterm ()
+  (let ((mistty-default-terminal-size '(160 . 50))
+        (mistty-terminal-type 'eterm))
+    (ert-with-test-buffer ()
+      (mistty-mode)
+      (mistty-exec mistty-test-bash-exe)
+      (should (equal 160 (buffer-local-value 'term-width mistty-term-buffer)))
+      (should (equal 50 (buffer-local-value 'term-height mistty-term-buffer))))))
+
+(mistty-deftest mistty-test-exec-called-multiple-times ( :type all)
+  (let ((first-proc mistty-proc)
+        (first-term-buffer mistty-term-buffer))
+    (mistty-send-text "i=1")
+    (mistty-send-and-wait-for-prompt)
+    (mistty-send-text "echo i:$i")
+    (should (equal "i:1" (mistty-send-and-capture-command-output)))
+
+    ;; Calls mistty-exec a second time. This should stop the first
+    ;; process.
+    (ert-with-temp-directory tmpdir
+      (mistty-test-setup-bash tmpdir nil nil)
       (mistty-send-text "echo i:$i")
-      (should (equal "i:1" (mistty-send-and-capture-command-output)))
+      (should (equal "i:" (mistty-send-and-capture-command-output)))
 
-      ;; Calls mistty-exec a second time. This should stop the first
-      ;; process.
-      (ert-with-temp-directory tmpdir
-        (mistty-test-setup-bash tmpdir nil nil)
-        (mistty-send-text "echo i:$i")
-        (should (equal "i:" (mistty-send-and-capture-command-output)))
+      (should-not (equal first-proc mistty-proc))
+      (should-not (equal first-term-buffer mistty-term-buffer))
 
-        (should-not (equal first-proc mistty-proc))
-        (should-not (equal first-term-buffer mistty-term-buffer))
+      (should-not (process-live-p first-proc))
+      (should-not (buffer-live-p first-term-buffer)))))
 
-        (should-not (process-live-p first-proc))
-        (should-not (buffer-live-p first-term-buffer))))))
-
-(ert-deftest mistty-set-stty-erase-C-h ()
+(mistty-deftest mistty-set-stty-erase-C-h ( :type all)
   (let ((mistty-del "\C-h"))
-    (mistty-with-test-buffer ()
-      (mistty-send-text "stty -a")
-      (let ((stty (mistty-send-and-capture-command-output)))
-        (should (string-match "erase = ^H" stty))))))
+    (mistty-send-text "stty -a")
+    (let ((stty (mistty-send-and-capture-command-output)))
+      (should (string-match "erase = ^H" stty)))))
 
-(ert-deftest mistty-set-stty-erase-DEL ()
+(mistty-deftest mistty-set-stty-erase-DEL ( :type all)
   (let ((mistty-del "\d"))
-    (mistty-with-test-buffer ()
-      (mistty-send-text "stty -a")
-      (let ((stty (mistty-send-and-capture-command-output)))
-        (should (string-match "erase = ^?" stty))))))
+    (mistty-send-text "stty -a")
+    
+    (let ((stty (mistty-send-and-capture-command-output)))
+      (should (string-match "erase = ^?" stty)))))
 
-(ert-deftest mistty-test-zsh-from-fish ()
+(mistty-deftest mistty-test-zsh-from-fish (:shell fish :type all)
   (ert-with-temp-directory zdotdir
     (with-temp-file (concat zdotdir ".zshrc")
       (insert "setopt no_prompt_cr no_prompt_sp\n")
       (insert "PROMPT='%~\n$ '\n"))
-    (mistty-with-test-buffer (:shell fish)
-      (mistty-send-text "echo foo")
-      (mistty-send-and-wait-for-prompt)
-      (mistty-send-text "echo bar")
-      (mistty-send-and-wait-for-prompt)
-      ;; By default, fish a prompt_sp separator. In this test, zsh
-      ;; doesn't send any prompt_sp separator. Fish's prompt_sp should
-      ;; not confuse prompt detection into thinking zsh prompt is a
-      ;; multiline prompt.
-      (mistty--send-string
-       mistty-proc (format "ZDOTDIR=%s %s -i" zdotdir mistty-test-zsh-exe))
-      (mistty-send-and-wait-for-prompt)
-      (should (mistty-on-prompt-p (point))))))
-
-(ert-deftest mistty-test-forbid-edit-fire-and-forget ()
-  (let ((mistty-forbid-edit-regexps '(".*\nbck-i-search:")))
-    (mistty-with-test-buffer (:shell zsh)
-      (mistty--send-string mistty-proc "\C-r")
-      (mistty-wait-for-output
-       :test (lambda () mistty--forbid-edit))
-      (should mistty--forbid-edit)
-
-      ;; Sending <ESC> has no effect in this situation. There should
-      ;; not be a timeout, however; Since we're in forbid-edit mode
-      ;; send-key sends everything fire-and-forget.
-      (mistty-send-key 1 (kbd "\e"))
-      (mistty-wait-for-output
-       :test (lambda ()
-               (mistty--queue-empty-p mistty--queue)))
-      (should (equal "$ <>\nbck-i-search: _"
-                     (mistty-test-content :show (point)))))))
-
-(turtles-ert-deftest mistty-test-osc-10-11 (:instance 'mistty)
-  (mistty-with-test-buffer (:selected t)
-    (set-face-foreground 'default "#ffff00")
-    (set-face-background 'default "#0000ff")
-
-    (mistty--send-string mistty-proc "read -rs -d \\\\ -p $'\\e]10;?\\e\\\\'  fg; ")
-    (mistty--send-string mistty-proc "read -rs -d \\\\ -p $'\\e]11;?\\e\\\\'  bg; ")
+    (mistty-send-text "echo foo")
     (mistty-send-and-wait-for-prompt)
+    (mistty-send-text "echo bar")
+    (mistty-send-and-wait-for-prompt)
+    ;; By default, fish a prompt_sp separator. In this test, zsh
+    ;; doesn't send any prompt_sp separator. Fish's prompt_sp should
+    ;; not confuse prompt detection into thinking zsh prompt is a
+    ;; multiline prompt.
+    (mistty--send-string
+     mistty-proc (format "ZDOTDIR=%s %s -i" zdotdir mistty-test-zsh-exe))
+    (mistty-send-and-wait-for-prompt)
+    (should (mistty-on-prompt-p (point)))))
 
-    (mistty-send-text "echo $fg | strings")
-    (should (equal "]10;rgb:ffff/ffff/0000"
-                   (mistty-send-and-capture-command-output)))
+(mistty-deftest mistty-test-forbid-edit-fire-and-forget (:shell zsh :type all)
+  (let ((mistty-forbid-edit-regexps '(".*\nbck-i-search:")))
+    (mistty--send-string mistty-proc "\C-r")
+    (mistty-wait-for-output
+     :test (lambda () mistty--forbid-edit))
+    (should mistty--forbid-edit)
 
-    (mistty-send-text "echo $bg | strings")
-    (should (equal "]11;rgb:0000/0000/ffff"
-                   (mistty-send-and-capture-command-output)))))
+    ;; Sending <ESC> has no effect in this situation. There should
+    ;; not be a timeout, however; Since we're in forbid-edit mode
+    ;; send-key sends everything fire-and-forget.
+    (mistty-send-key 1 (kbd "\e"))
+    (mistty-wait-for-output
+     :test (lambda ()
+             (mistty--queue-empty-p mistty--queue)))
+    (should (equal "$ <>\nbck-i-search: _"
+                   (mistty-test-content :show (point))))))
+
+(mistty-deftest mistty-test-osc-10-11
+    (:selected t :type all :turtles t)
+  (set-face-foreground 'default "#ffff00")
+  (set-face-background 'default "#0000ff")
+
+  (mistty--send-string mistty-proc "read -rs -d \\\\ -p $'\\e]10;?\\e\\\\'  fg; ")
+  (mistty--send-string mistty-proc "read -rs -d \\\\ -p $'\\e]11;?\\e\\\\'  bg; ")
+  (mistty-send-and-wait-for-prompt)
+
+  (mistty-send-text "echo $fg | strings")
+  (should (equal "]10;rgb:ffff/ffff/0000"
+                 (mistty-send-and-capture-command-output)))
+
+  (mistty-send-text "echo $bg | strings")
+  (should (equal "]11;rgb:0000/0000/ffff"
+                 (mistty-send-and-capture-command-output))))
 
 (ert-deftest mistty-test-mark-scrollines ()
   (ert-with-test-buffer ()
@@ -6963,21 +7013,21 @@ precmd_functions+=(prompt_header)
                      "[\n]")
              (mistty-test-content :trim nil :show-property '(mistty-scrolline 14))))))
 
-(ert-deftest mistty-truncate-term-buffer ()
-  (mistty-with-test-buffer (:term-size '(125 . 25))
-    (mistty-send-text "for i in $(seq 0 55); do echo $(head -c 100 </dev/zero| tr '\\0' '-'); done")
-    (mistty-send-and-wait-for-prompt)
-    ;; there are about 30 lines above screen top on the work buffer
+(mistty-deftest mistty-truncate-term-buffer
+    (:term-size '(125 . 25) :type all)
+  (mistty-send-text "for i in $(seq 0 55); do echo $(head -c 100 </dev/zero| tr '\\0' '-'); done")
+  (mistty-send-and-wait-for-prompt)
+  ;; there are about 30 lines above screen top on the work buffer
+  (should
+   (>= (mistty--count-lines
+        (point-min)
+        (mistty--find-scrolline
+         (mistty--term-screen-top-scrolline mistty--term)))
+       30))
+  ;; but the term buffer kept only a few
+  (with-current-buffer mistty-term-buffer
     (should
-     (>= (mistty--count-lines
+     (<= (mistty--count-lines
           (point-min)
-          (mistty--find-scrolline
-           (mistty--term-screen-top-scrolline mistty--term)))
-         30))
-    ;; but the term buffer kept only a few
-    (with-current-buffer mistty-term-buffer
-      (should
-       (<= (mistty--count-lines
-            (point-min)
-            (mistty--term-screen-top-pos mistty--term))
-           5)))))
+          (mistty--term-screen-top-pos mistty--term))
+         10))))
