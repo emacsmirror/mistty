@@ -119,7 +119,9 @@ This is a wrapper around `ert-deftest' and `mistty-with-test-buffer'
 that will generate one identical test per shell."
   (declare (indent 2))
   `(progn
-     ,@(let* ((shell (or shell '(bash)))
+     ,@(let* ((shell (cond ((null shell) '(bash))
+                           ((listp shell) shell)
+                           (t (list shell))))
               (multishell (length> shell 1))
               (type (cond ((null type) '(nil))
                           ((eq type 'all) '(alacritty eterm))
