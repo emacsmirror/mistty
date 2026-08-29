@@ -3369,7 +3369,7 @@
       ;; like fish would do, but:
       ;; - we don't know what the right indentation is
       ;;   (it depends on the prompt, which can be dynamic)
-      ;; - when using mistty-mod, there's no space to go to,
+      ;; - when using mistty-alacritty-vt, there's no space to go to,
       ;;   not without re-rendering
       (should (string-match
                (concat "\\$ for i in (seq 10)\n"

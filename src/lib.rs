@@ -19,13 +19,13 @@ emacs::plugin_is_GPL_compatible!();
 emacs::use_symbols! {args_out_of_range}
 
 #[emacs::module(
-    name = "mistty-mod",
-    defun_prefix = "mistty-mod",
+    name = "mistty-alacritty-vt",
+    defun_prefix = "mistty-alacritty-vt",
     separator = "-",
     mod_in_name = false
 )]
 fn init(env: &Env) -> Result<Value<'_>> {
-    env.provide("mistty-mod")
+    env.provide("mistty-alacritty-vt")
 }
 
 /// Create a virtual terminal wit the given dimensions WIDTH x HEIGHT.

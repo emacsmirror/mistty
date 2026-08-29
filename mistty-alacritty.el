@@ -20,7 +20,7 @@
 ;; alacritty-based terminal, with none of the extra features and
 ;; overhead of MisTTY. The result is similar to term.el in raw mode.
 
-(require 'mistty-mod)
+(require 'mistty-alacritty-vt)
 (require 'mistty-util)
 (require 'mistty-kbd)
 (require 'mistty-log)
@@ -48,7 +48,7 @@ on the system and automatically falls back to xterm-256color."
   :type 'string)
 
 (defvar-local mistty-alacritty--vterm nil
-  "Virtual terminal tied to the buffer, from mistty-mod.")
+  "Virtual terminal tied to the buffer, from mistty-alacritty-vt.")
 
 (defvar-local mistty-alacritty--cursor nil
   "Marker that tracks the cursor position, set by the last rendering
@@ -113,8 +113,8 @@ process."
     (setq mistty-alacritty-columns width)
     (setq mistty-alacritty-lines height)
     (mistty-log "MAKE VTERM %s lines, %s colums" height width)
-    (setq mistty-alacritty--vterm (mistty-mod-make-vterm width height))
-    (mistty-mod-enable-scrollback mistty-alacritty--vterm)
+    (setq mistty-alacritty--vterm (mistty-alacritty-vt-make-vterm width height))
+    (mistty-alacritty-vt-enable-scrollback mistty-alacritty--vterm)
     (let ((proc (apply #'start-file-process name (current-buffer)
                        ;; On Android, /bin doesn't exist, and the default shell is
                        ;; found as /system/bin/sh.
@@ -139,7 +139,7 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
       ;; coding-system-for-read. Force it.
       (set-process-coding-system proc 'binary (cdr (process-coding-system proc)))
 
-      (mistty-mod-render mistty-alacritty--vterm (point-min) (point-max) mistty-alacritty--cursor)
+      (mistty-alacritty-vt-render mistty-alacritty--vterm (point-min) (point-max) mistty-alacritty--cursor)
       (goto-char mistty-alacritty--cursor)
       (set-marker (process-mark proc) mistty-alacritty--cursor)
       (set-process-sentinel proc #'mistty-alacritty--sentinel)
@@ -182,19 +182,19 @@ given the set of windows."
       (when-let* ((vterm mistty-alacritty--vterm)
                   (proc (get-buffer-process (current-buffer))))
         (mistty-log "RESIZE: %s lines %s columns" height width)
-        (mistty-mod-resize vterm width height)
+        (mistty-alacritty-vt-resize vterm width height)
         (setq mistty-alacritty-columns width)
         (setq mistty-alacritty-lines height)
         (set-process-window-size proc height width))))
 
 (defun mistty-alacritty--alt-screen-p ()
-  (mistty-mod-alt-screen-p mistty-alacritty--vterm))
+  (mistty-alacritty-vt-alt-screen-p mistty-alacritty--vterm))
 
 (defun mistty-alacritty--cursor-linecol ()
-  (mistty-mod-cursor mistty-alacritty--vterm))
+  (mistty-alacritty-vt-cursor mistty-alacritty--vterm))
 
 (defun mistty-alacritty--cursor-column ()
-  (cdr (mistty-mod-cursor mistty-alacritty--vterm)))
+  (cdr (mistty-alacritty-vt-cursor mistty-alacritty--vterm)))
 
 (defun mistty-alacritty--cursor-chars ()
   "Return char index of the cursor within its line.
@@ -205,7 +205,7 @@ Do not confuse it with `mistty-alacritty--cursor-column'"
                           (pos-bol))))
 
 (defun mistty-alacritty--cursor-line ()
-  (car (mistty-mod-cursor mistty-alacritty--vterm)))
+  (car (mistty-alacritty-vt-cursor mistty-alacritty--vterm)))
 
 (defun mistty-alacritty--process-filter (proc str)
   (mistty-log "RECV %S" str)
@@ -219,7 +219,7 @@ Do not confuse it with `mistty-alacritty--cursor-column'"
 The current buffer must have a virtual terminal associated."
   (when-let* ((vterm mistty-alacritty--vterm)
               (proc (get-buffer-process (current-buffer))))
-    (dolist (ev (mistty-mod-process-bytes vterm (vconcat str)))
+    (dolist (ev (mistty-alacritty-vt-process-bytes vterm (vconcat str)))
       (pcase ev
         (`(pty-write ,data)
          (mistty-log "REPLY %S" data)
@@ -232,9 +232,9 @@ The current buffer must have a virtual terminal associated."
   (when-let* ((vterm mistty-alacritty--vterm))
     (save-excursion
       (goto-char mistty-alacritty--home)
-      (cl-incf mistty--scrolline-home-num (mistty-mod-write-scrollback vterm))
+      (cl-incf mistty--scrolline-home-num (mistty-alacritty-vt-write-scrollback vterm))
       (set-marker mistty-alacritty--home (point))
-      (mistty-mod-render-damaged vterm (point) (point-max) mistty-alacritty--cursor)
+      (mistty-alacritty-vt-render-damaged vterm (point) (point-max) mistty-alacritty--cursor)
       (mistty-log "RENDER @%s" mistty--scrolline-home-num)
       (when-let ((proc (get-buffer-process (current-buffer))))
         (when (process-live-p proc)
@@ -293,7 +293,7 @@ This is controlled by the custom variable `mistty-term-name'"
   "Mark spaces from POS to the end of the line as clear."
   (when-let* ((vterm mistty-alacritty--vterm))
     (when (> pos mistty-alacritty--home)
-      (mistty-mod-clear-to-eol vterm
+      (mistty-alacritty-vt-clear-to-eol vterm
                                (mistty--count-lines mistty-alacritty--home pos)
                                (- pos (mistty--bol pos))))))
 
@@ -304,7 +304,7 @@ POS should be the position where the CR is called in the prompt-sp
 sequence."
   (when-let* ((vterm mistty-alacritty--vterm))
     (when (> pos mistty-alacritty--home)
-      (mistty-mod-cleanup-prompt-sp
+      (mistty-alacritty-vt-cleanup-prompt-sp
        vterm
        (mistty--count-lines mistty-alacritty--home pos)))))
 

@@ -28,11 +28,11 @@
   :message        source-and-target
   :type           many-to-one
   :source-files   ("Cargo.toml" "src/**/*.rs")
-  :targets        "mistty-mod.so" ;; (concat "mistty-mod" module-file-suffix)
+  :targets        "mistty-alacritty-vt.so" ;; (concat "mistty-alacritty-vt" module-file-suffix)
   :collect        ":compile"
   :define-cleaner (mistty-cleaner-module "Delete generated module" :default t)
   (eldev-call-process "cargo" '("build") :forward-output t :die-on-error t)
-  (eldev-call-process "cp" (list "target/debug/libmistty_mod.so" target)
+  (eldev-call-process "cp" (list "target/debug/libmistty_alacritty_vt.so" target)
                        :forward-output t :die-on-error t))
 
 ;;; Test dependencies
