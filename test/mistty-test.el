@@ -6032,15 +6032,14 @@ function prompt {
     (mistty-test-content :start mistty-sync-marker))))
 
 (mistty-deftest mistty-test-zsh-reset-prompt
-    (:type all :shell ((zsh (concat
-                             "precmd() { \n"
+    (:type all :shell ((zsh "precmd() { \n"
                              " print \"left...............................right\"\n"
                              " }\n"
                              "setopt PROMPT_SUBST\n"
                              "c=1\n"
                              "PROMPT='$c-\\$ '\n"
                              "TRAPALRM() { c=$(($c+1)); zle reset-prompt; }\n"
-                             "TMOUT=1"))))
+                             "TMOUT=1")))
   ;; Anything above 1 is good. Usually, it's 2, but we don't want to
   ;; be too strict in case an update is missed.
   (mistty-wait-for-output :regexp "[2-9]-")
@@ -6353,8 +6352,8 @@ precmd_functions+=(prompt_header)
 ")
 
 (mistty-deftest mistty-osc133-zsh-multiline-prompt
-    (:type all :shell ((zsh (concat mistty-test-zsh-osc133
-                                    mistty-test-zsh-osc133-multiline-prompt))))
+    (:type all :shell ((zsh mistty-test-zsh-osc133
+                            mistty-test-zsh-osc133-multiline-prompt)))
   ;; Normally, multiline prompt detection under zsh rely on prompt-sp
   ;; and prompt-cr. This isn't necessary with OSC133.
 
@@ -6387,10 +6386,9 @@ precmd_functions+=(prompt_header)
             :show (mistty-test-all-inputs)))))
 
 (mistty-deftest mistty-osc133-zsh-multiline-prompt-no-bracketed-paste
-    (:type all :shell ((zsh (concat
-                             mistty-test-zsh-osc133
+    (:type all :shell ((zsh mistty-test-zsh-osc133
                              mistty-test-zsh-osc133-multiline-prompt
-                             "unset zle_bracketed_paste\n"))))
+                             "unset zle_bracketed_paste\n")))
   ;; Even bracketed-paste isn't necessary with osc133.
 
     (mistty-run-command
@@ -6417,10 +6415,9 @@ precmd_functions+=(prompt_header)
               :show (mistty-test-all-inputs)))))
 
 (mistty-deftest mistty-osc133-zsh-right-prompt-no-bracketed-paste
-    (:type all :shell ((zsh (concat
-                             mistty-test-zsh-osc133
+    (:type all :shell ((zsh mistty-test-zsh-osc133
                              mistty-test-zsh-right-prompt
-                             "\nunset zle_bracketed_paste\n"))))
+                             "\nunset zle_bracketed_paste\n")))
   (mistty-run-command
    (insert "echo foo"))
 
@@ -6454,9 +6451,8 @@ precmd_functions+=(prompt_header)
 
 ;; TODO: make it run on eterm
 (mistty-deftest mistty-osc133-right-left-prompt-field
-    (:type alacritty :shell ((fish (concat
-                                    "function fish_prompt; printf '$ \e]133;B\007'; end\n"
-                                    mistty-test-fish-right-prompt))))
+    (:type alacritty :shell ((fish "function fish_prompt; printf '$ \e]133;B\007'; end\n"
+                                    mistty-test-fish-right-prompt)))
   ;; Fields are set on both prompts so line-beginning/end cover only
   ;; the command.
   (mistty-send-text "echo foobar")
@@ -6479,9 +6475,8 @@ precmd_functions+=(prompt_header)
 
 ;; TODO: make it run on eterm
 (mistty-deftest mistty-osc133-command-for-output
-    (:type alacritty :shell ((zsh (concat
-                                   mistty-test-zsh-osc133
-                                   mistty-test-zsh-osc133-b))))
+    (:type alacritty :shell ((zsh mistty-test-zsh-osc133
+                                   mistty-test-zsh-osc133-b)))
   (mistty-send-text "osc133_prompt")
   (setq mistty-test-prompt-re "^prompt ")
   (mistty-send-and-wait-for-prompt)
@@ -6511,9 +6506,8 @@ precmd_functions+=(prompt_header)
 
 ;; TODO: make it run on eterm
 (mistty-deftest mistty-osc133-fish-right-prompt-field
-    (:type alacritty :shell ((fish (concat
-                                    "function fish_prompt; printf '$ \e]133;B\007'; end\n"
-                                    mistty-test-fish-right-prompt))))
+    (:type alacritty :shell ((fish "function fish_prompt; printf '$ \e]133;B\007'; end\n"
+                                   mistty-test-fish-right-prompt)))
   (skip-unless (string-match "version 4"
                              (shell-command-to-string (format "%s --version" mistty-test-fish-exe))))
   (mistty-send-text "echo foo bar")

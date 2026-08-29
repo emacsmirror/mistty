@@ -107,9 +107,9 @@ symbol.
 For example: :shell (bash zsh fish)
 
 To initialize the shell, replace the symbol with a list containing the
-symbol and then the init sequence.
+symbol and then one or more init sequences to be concatenated together.
 
-For example: :shell ((zsh init-zsh) (fish init-fish))
+For example: :shell ((zsh init-zsh) (fish init-fish-1 init-fish-2))
 
 To select multiple terminal types, pass a list to the :type argument.
 
@@ -135,13 +135,16 @@ that will generate one identical test per shell."
             (let* ((shell (car arg))
                    (type (cadr arg))
                    (shell-name (if (symbolp shell) shell (car shell)))
-                   (shell-init (if (symbolp shell) nil (cadr shell))))
+                   (shell-init (if (symbolp shell) nil (cdr shell))))
               `(,(if turtles 'turtles-ert-deftest 'ert-deftest)
                 ,(mistty--testing-test-name
                   name (when multishell shell-name) (when multitype type))
                 ,(if turtles '(:instance 'mistty) ())
                  (mistty-with-test-buffer
-                     (:shell ,shell-name :type ,type :init ,shell-init
+                     (:shell ,shell-name :type ,type
+                             :init ,(if (length> shell-init 1)
+                                        (cons 'concat shell-init)
+                                      (car shell-init))
                              :selected ,selected :term-size ,term-size)
                    ,@body))))
           (mistty--combine shell type)))))
