@@ -30,19 +30,8 @@
 (require 'mistty-log)
 (require 'mistty-queue)
 
-
-(ert-deftest mistty-test-simple-command ()
+(mistty-deftest mistty-test-simple-command (:shell (bash zsh fish))
   (mistty-with-test-buffer ()
-    (mistty-send-text "echo hello")
-    (should (equal "hello" (mistty-send-and-capture-command-output)))))
-
-(ert-deftest mistty-test-simple-command-zsh ()
-  (mistty-with-test-buffer (:shell zsh)
-    (mistty-send-text "echo hello")
-    (should (equal "hello" (mistty-send-and-capture-command-output)))))
-
-(ert-deftest mistty-test-simple-command-fish ()
-  (mistty-with-test-buffer (:shell fish)
     (mistty-send-text "echo hello")
     (should (equal "hello" (mistty-send-and-capture-command-output)))))
 
@@ -728,7 +717,7 @@
     (mistty-simulate-scrollback-buffer
      (should-error (call-interactively 'mistty-goto-cursor)))))
 
-(ert-deftest mistty-test-next-input ()
+(mistty-deftest mistty-test-next-input (:shell (bash zsh fish))
   (mistty-with-test-buffer ()
     (mistty-run-command
      (insert "echo one"))
@@ -879,80 +868,6 @@
                     "$ <>echo two\n"
                     "two\n"
                     "$ echo three\n"
-                    "three\n"
-                    "$ echo current")
-            (mistty-test-content :show (point))))))
-
-(ert-deftest mistty-test-next-input-zsh ()
-  (mistty-with-test-buffer (:shell zsh)
-    (mistty-run-command
-     (insert "echo one"))
-    (mistty-send-and-wait-for-prompt)
-    (mistty-run-command
-     (insert "echo two"))
-    (mistty-send-and-wait-for-prompt)
-    (mistty-run-command
-     (insert "echo three"))
-    (mistty-send-and-wait-for-prompt)
-    (mistty-run-command
-     (insert "echo current"))
-
-    (goto-char (point-min))
-    (mistty-next-input 1)
-    (should
-     (equal (concat "$ echo one\n"
-                    "one\n"
-                    "$ <>echo two\n"
-                    "two\n"
-                    "$ echo three\n"
-                    "three\n"
-                    "$ echo current")
-            (mistty-test-content :show (point))))
-
-    (mistty-next-input 1)
-    (should
-     (equal (concat "$ echo one\n"
-                    "one\n"
-                    "$ echo two\n"
-                    "two\n"
-                    "$ <>echo three\n"
-                    "three\n"
-                    "$ echo current")
-            (mistty-test-content :show (point))))))
-
-(ert-deftest mistty-test-next-input-fish ()
-  (mistty-with-test-buffer (:shell fish)
-    (mistty-run-command
-     (insert "echo one"))
-    (mistty-send-and-wait-for-prompt)
-    (mistty-run-command
-     (insert "echo two"))
-    (mistty-send-and-wait-for-prompt)
-    (mistty-run-command
-     (insert "echo three"))
-    (mistty-send-and-wait-for-prompt)
-    (mistty-run-command
-     (insert "echo current"))
-
-    (goto-char (point-min))
-    (mistty-next-input 1)
-    (should
-     (equal (concat "$ echo one\n"
-                    "one\n"
-                    "$ <>echo two\n"
-                    "two\n"
-                    "$ echo three\n"
-                    "three\n"
-                    "$ echo current")
-            (mistty-test-content :show (point))))
-
-    (mistty-next-input 1)
-    (should
-     (equal (concat "$ echo one\n"
-                    "one\n"
-                    "$ echo two\n"
-                    "two\n"
-                    "$ <>echo three\n"
                     "three\n"
                     "$ echo current")
             (mistty-test-content :show (point))))))
@@ -1425,19 +1340,7 @@
               (forward-line 1))))))))
 
 ;; https://github.com/szermatt/mistty/issues/33
-(ert-deftest mistty-test-previous-output-zsh ()
-  (mistty-with-test-buffer (:shell zsh)
-    (mistty-test-previous-output)))
-
-(ert-deftest mistty-test-previous-output-bash ()
-  (mistty-with-test-buffer (:shell bash)
-    (mistty-test-previous-output)))
-
-(ert-deftest mistty-test-previous-output-fish ()
-  (mistty-with-test-buffer (:shell fish)
-    (mistty-test-previous-output)))
-
-(defun mistty-test-previous-output ()
+(mistty-deftest mistty-test-previous-output-zsh (:shell (bash zsh fish))
   (ert-with-temp-file tempfile
     (with-temp-file tempfile
       (dotimes (n 200)
@@ -2760,19 +2663,7 @@
                    "<>world\"")
            (mistty-test-content :show (mistty-cursor)))))
 
-(ert-deftest mistty-test-zsh-multiline-movements-after-kill-line ()
-  (mistty-with-test-buffer (:shell zsh)
-    (mistty-test-multiline-movements-after-kill-line)))
-
-(ert-deftest mistty-test-bash-multiline-movements-after-kill-line ()
-  (mistty-with-test-buffer (:shell bash)
-    (mistty-test-multiline-movements-after-kill-line)))
-
-(ert-deftest mistty-test-fish-multiline-movements-after-kill-line ()
-  (mistty-with-test-buffer (:shell fish)
-    (mistty-test-multiline-movements-after-kill-line)))
-
-(defun mistty-test-multiline-movements-after-kill-line ()
+(mistty-deftest mistty-test-multiline-movements-after-kill-line (:shell (bash zsh fish))
   (should mistty-bracketed-paste)
 
   ;; The following triggers zsh trailing whitespace issue on all
@@ -2798,19 +2689,7 @@
 
   (mistty-test-multiline-movements))
 
-(ert-deftest mistty-test-zsh-multiline-movements-after-insert-newline ()
-  (mistty-with-test-buffer (:shell zsh)
-    (mistty-test-multiline-movements-after-insert-newline)))
-
-(ert-deftest mistty-test-bash-multiline-movements-after-insert-newline ()
-  (mistty-with-test-buffer (:shell bash)
-    (mistty-test-multiline-movements-after-insert-newline)))
-
-(ert-deftest mistty-test-fish-multiline-movements-after-insert-newline ()
-  (mistty-with-test-buffer (:shell fish)
-    (mistty-test-multiline-movements-after-insert-newline)))
-
-(defun mistty-test-multiline-movements-after-insert-newline ()
+(mistty-deftest mistty-test-multiline-movements-after-insert-newline (:shell (bash zsh fish))
   (mistty-send-text "echo \"hello, world, andthe rest")
 
   (mistty-run-command
@@ -2899,19 +2778,7 @@
                    "rest.\"")
            (mistty-test-content :trim-left t :show (mistty-cursor)))))
 
-(ert-deftest mistty-test-zsh-reconcile-multiline-delete-with-trailing-ws ()
-  (mistty-with-test-buffer (:shell zsh)
-    (mistty-test-reconcile-multiple-delete-with-trailing-ws)))
-
-(ert-deftest mistty-test-bash-reconcile-multiline-delete-with-trailing-ws ()
-  (mistty-with-test-buffer (:shell bash)
-    (mistty-test-reconcile-multiple-delete-with-trailing-ws)))
-
-(ert-deftest mistty-test-fish-reconcile-multiline-delete-with-trailing-ws ()
-  (mistty-with-test-buffer (:shell fish)
-    (mistty-test-reconcile-multiple-delete-with-trailing-ws)))
-
-(defun mistty-test-reconcile-multiple-delete-with-trailing-ws ()
+(mistty-deftest mistty-test-reconcile-multiline-delete-with-trailing-ws (:shell (bash zsh fish))
   (mistty--send-string
    mistty-proc
    (format "for i in 1 2 3 4 5 6 deleted%s; do%secho -n line deleted%secho $i deleted%sdone"
@@ -3666,38 +3533,7 @@
     (mistty-send-text "echo bar")
     (should (equal "bar" (mistty-send-and-capture-command-output)))))
 
-(ert-deftest mistty-test-bash-kill-line-delete-real-trailing ()
-  (mistty-with-test-buffer (:shell bash)
-    (mistty-test-kill-line-delete-real-trailing)))
-
-(ert-deftest mistty-test-fish-kill-line-delete-real-trailing ()
-  (mistty-with-test-buffer (:shell fish)
-    (mistty-test-kill-line-delete-real-trailing)))
-
-(ert-deftest mistty-test-zsh-kill-line-delete-real-trailing ()
-  (mistty-with-test-buffer (:shell zsh)
-    (mistty-test-kill-line-delete-real-trailing)))
-
-(ert-deftest mistty-test-kill-line-after-ws ()
-  (mistty-with-test-buffer (:shell zsh)
-    (mistty-send-text "hello, world")
-    (mistty--send-string mistty-proc "     \C-aecho ")
-    (mistty-wait-for-output :str "echo")
-
-    (mistty-run-command
-     (mistty-test-goto-after "world")
-     ;; Leave 2 spaces, to make sure MisTTY doesn't delete spaces it
-     ;; shouldn't.
-     (goto-char (+ (point) 2))
-     (kill-line))
-
-    (mistty-send-text "foo")
-
-    (should (equal "$ echo hello, world  foo<>"
-                   (mistty-test-content :show (mistty-cursor))))))
-
-
-(defun mistty-test-kill-line-delete-real-trailing ()
+(mistty-deftest mistty-test-kill-line-delete-real-trailing (:shell (bash fish zsh))
   (mistty-send-text "echo hello, world")
 
   (mistty-run-command
@@ -3718,6 +3554,27 @@
   (mistty--send-string mistty-proc "echo '\C-eend'")
   (mistty-wait-for-output :str "end'")
   (should (equal "end" (mistty-send-and-capture-command-output))))
+
+(ert-deftest mistty-test-kill-line-after-ws ()
+  (mistty-with-test-buffer (:shell zsh)
+    (mistty-send-text "hello, world")
+    (mistty--send-string mistty-proc "     \C-aecho ")
+    (mistty-wait-for-output :str "echo")
+
+    (mistty-run-command
+     (mistty-test-goto-after "world")
+     ;; Leave 2 spaces, to make sure MisTTY doesn't delete spaces it
+     ;; shouldn't.
+     (goto-char (+ (point) 2))
+     (kill-line))
+
+    (mistty-send-text "foo")
+
+    (should (equal "$ echo hello, world  foo<>"
+                   (mistty-test-content :show (mistty-cursor))))))
+
+
+
 
 (ert-deftest mistty-test-vertical-distance ()
   (ert-with-test-buffer ()
@@ -6231,15 +6088,10 @@ function prompt {
      (equal "foo\nbar"
             (mistty-send-and-capture-command-output)))))
 
-(ert-deftest mistty-test-fish-right-prompt-kill-multiple-lines ()
-  (mistty-with-test-buffer (:shell fish :init mistty-test-fish-right-prompt)
-    (mistty-test-right-prompt-kill-multiple-lines)))
-
-(ert-deftest mistty-test-zsh-right-prompt-kill-multiple-lines ()
-  (mistty-with-test-buffer (:shell zsh :init mistty-test-zsh-right-prompt)
-    (mistty-test-right-prompt-kill-multiple-lines)))
-
-(defun mistty-test-right-prompt-kill-multiple-lines ()
+(mistty-deftest mistty-test-right-prompt-kill-multiple-lines
+    (:shell ((fish mistty-test-fish-right-prompt)
+             (zsh mistty-test-zsh-right-prompt)))
+  
     (mistty--send-string mistty-proc
                          (mistty--maybe-bracketed-str "echo foo\necho bar"))
 

@@ -97,6 +97,38 @@ Defaults to (point-min).")
 This is handled by `mistty-test-report-issue' and must contain
 the symbol of the expected issues, in order.")
 
+(cl-defmacro mistty-deftest (name (&key shell selected term-size) &body body)
+  "Declare multi-shell tests with a mistty shell buffer.
+
+To select multiple shells, pass a list to the :key argument containing
+the symbol of the shell (bash, fish, zsh, ipython) instead of a single
+symbol.
+
+For example: :shell (bash zsh fish)
+
+To initialize the shell, replace the symbol with a list containing the
+symbol and then the init sequence.
+
+For example: :shell ((zsh init-zsh) (fish init-fish))
+
+This is a wrapper around `ert-deftest' and `mistty-with-test-buffer'
+that will generate one identical test per shell."
+  (declare (indent 2))
+  `(progn
+     ,@(let* ((shell (or shell '(bash)))
+              (multishell (length> shell 1)))
+         (mapcar
+          (lambda (shell)
+            (let ((shell-name (if (listp shell) (car shell) shell))
+                  (shell-init (if (listp shell) (cadr shell) nil)))
+              `(ert-deftest ,(if multishell
+                                 (intern
+                                  (concat (symbol-name name) "/" (symbol-name shell-name)))
+                               name) ()
+                 (mistty-with-test-buffer (:shell ,shell-name :init ,shell-init)
+                   ,@body))))
+          shell))))
+
 (cl-defmacro mistty-with-test-buffer
     ((&key (shell 'bash) selected init term-size cd) &body body)
   "Run BODY in a MisTTY buffer.
