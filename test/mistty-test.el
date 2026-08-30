@@ -5724,9 +5724,8 @@ function prompt {
      (should (mistty-live-buffer-p (get-buffer "*mistty*<3>"))))))
 
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-zsh-no-nl-before-prompt
-    (:shell zsh :selected t :type alacritty)
+    (:shell zsh :selected t :type all)
   (mistty-send-text "echo ok")
   (should (equal "ok" (mistty-send-and-capture-command-output)))
   (mistty-send-text "echo -n ok")
@@ -5736,9 +5735,8 @@ function prompt {
            "$ echo ok\nok\n$ echo -n ok\nok%\n$"
            (mistty-test-content))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-fish-no-nl-before-prompt-1
-    (:shell fish :selected t :type alacritty)
+    (:shell fish :selected t :type all)
   (mistty-send-text "echo ok")
   (should (equal "ok" (mistty-send-and-capture-command-output)))
   (mistty-send-text "echo -n ok")
@@ -5746,9 +5744,8 @@ function prompt {
 
   (should (equal "$ echo ok\nok\n$ echo -n ok\nok⏎\n$" (mistty-test-content))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-bash-no-nl-before-prompt
-    (:shell bash :selected t :type alacritty)
+    (:shell bash :selected t :type all)
   (mistty-send-text "echo ok")
   (should (equal "ok" (mistty-send-and-capture-command-output)))
   (mistty-send-text "echo -n ok")
@@ -5791,9 +5788,8 @@ function prompt {
     (mistty-test-content :start mistty-sync-marker)))
   )
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-zsh-multiline-prompt-sp
-    (:shell ((zsh mistty-test-zsh-fancy-prompt)) :type alacritty)
+    (:shell ((zsh mistty-test-zsh-fancy-prompt)) :type all)
   (mistty-send-text "echo -n hello")
   (mistty-send-and-wait-for-prompt)
 
@@ -5817,9 +5813,8 @@ function prompt {
             "$")
     (mistty-test-content :show mistty-sync-marker))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-zsh-multiline-prompt-sp-no-eol-mark
-    (:shell ((zsh mistty-test-zsh-fancy-prompt)) :type alacritty)
+    (:shell ((zsh mistty-test-zsh-fancy-prompt)) :type all)
   (mistty-send-text "PROMPT_EOL_MARK=''")
   (mistty-send-and-wait-for-prompt)
 
