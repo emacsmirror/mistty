@@ -9,229 +9,270 @@
 (require 'yasnippet)
 (require 'tempel nil 'noerror)
 
-(ert-deftest mistty-test-detect-foreign-overlay-cua-rectangle ()
-  (let ((mistty-detect-foreign-overlays t)
-        (orig-cua-mode cua-mode))
+(ert-deftest mistty-test-detect-foreign-overlay-cua-rectangle/alacritty ()
+  (let ((orig-cua-mode cua-mode)
+        (mistty-terminal-type 'alacritty))
     (unwind-protect
-        (mistty-with-test-buffer (:selected t :shell fish)
-          ;; CUA rectangle mark mode is an example of an interactive command
-          ;; that uses overlays. It has the advantage of being built-in.
-          ;; Other examples would be template engines, such as yasnippet and
-          ;; templ.
-          (cua-mode 'on)
-          (mistty-send-text "for i in a b c\necho $i\nend")
-          (mistty-test-goto "in")
-          (execute-kbd-macro (kbd "C-<return> <down> <right> <right> b o o SPC"))
-          (mistty-wait-for-output :test (lambda ()
-                                          (equal '(mistty-overlays) mistty--inhibit)))
-          (should (mistty-long-running-command-p))
-
-          (should (equal (concat "$ for i in boo a b c\n"
-                                 "      echo<> boo $i\n"
-                                 "  end")
-                         (mistty-test-content :show (point))))
-          (execute-kbd-macro (kbd "C-<return>"))
-          (mistty-wait-for-output :str "boo a b c" :start (point-min))
-          (mistty-wait-for-output :test (lambda ()
-                                          (not mistty--inhibit)))
-          (should-not (mistty-long-running-command-p))
-          (should (equal (concat "$ for i in boo a b c\n"
-                                 "      echo<> boo $i\n"
-                                 "  end")
-                         (mistty-test-content :show (point)))))
-      ;; unwind
+        (mistty-with-test-buffer (:selected t :shell fish :type alacritty)
+          (mistty-test-detect-foreign-overlay-cua-rectangle))
       (cua-mode (if orig-cua-mode nil -1)))))
 
-(ert-deftest mistty-compat-test-hippie-expand ()
-  (mistty-with-test-buffer ()
-    (mistty-send-text "echo hello, hullo, hallo, hi")
-    (mistty-send-and-wait-for-prompt)
+(ert-deftest mistty-test-detect-foreign-overlay-cua-rectangle/eterm ()
+  (let ((orig-cua-mode cua-mode)
+        (mistty-terminal-type 'eterm))
+    (unwind-protect
+        (mistty-with-test-buffer (:selected t :shell fish :type eterm)
+          (mistty-test-detect-foreign-overlay-cua-rectangle))
+      (cua-mode (if orig-cua-mode nil -1)))))
 
-    (let ((hippie-expand-try-functions-list '(try-expand-dabbrev))
-          (start (point)))
+(defun mistty-test-detect-foreign-overlay-cua-rectangle ()
+  (let ((mistty-detect-foreign-overlays t))
+    ;; CUA rectangle mark mode is an example of an interactive command
+    ;; that uses overlays. It has the advantage of being built-in.
+    ;; Other examples would be template engines, such as yasnippet and
+    ;; templ.
+    (cua-mode 'on)
+    (mistty-send-text "for i in a b c\necho $i\nend")
+    (mistty-test-goto "in")
+    (execute-kbd-macro (kbd "C-<return> <down> <right> <right> b o o SPC"))
+    (mistty-wait-for-output :test (lambda ()
+                                    (equal '(mistty-overlays) mistty--inhibit)))
+    (should (mistty-long-running-command-p))
 
-      (mistty-send-text "echo h")
-      (should (equal "echo h<>"
-                     (mistty-test-content :start start :show (point))))
+    (should (equal (concat "$ for i in boo a b c\n"
+                           "      echo<> boo $i\n"
+                           "  end")
+                   (mistty-test-content :show (point))))
+    (execute-kbd-macro (kbd "C-<return>"))
+    (mistty-wait-for-output :str "boo a b c" :start (point-min))
+    (mistty-wait-for-output :test (lambda ()
+                                    (not mistty--inhibit)))
+    (should-not (mistty-long-running-command-p))
+    (should (equal (concat "$ for i in boo a b c\n"
+                           "      echo<> boo $i\n"
+                           "  end")
+                   (mistty-test-content :show (point))))))
 
-      (mistty-run-command
-       (setq this-command 'hippie-expand)
-       (call-interactively 'hippie-expand))
-      (should (equal "echo hi<>"
-                     (mistty-test-content :start start :show (point))))
+(mistty-deftest mistty-compat-test-hippie-expand (:type all)
+  (mistty-send-text "echo hello, hullo, hallo, hi")
+  (mistty-send-and-wait-for-prompt)
 
-      (mistty-run-command
-       (setq this-command 'hippie-expand)
-       (setq last-command 'hippie-expand)
-       (call-interactively 'hippie-expand))
-      (should (equal "echo hallo<>"
-                     (mistty-test-content :start start :show (point)))))))
+  (let ((hippie-expand-try-functions-list '(try-expand-dabbrev))
+        (start (point)))
 
-(ert-deftest mistty-compat-test-yas-expand ()
+    (mistty-send-text "echo h")
+    (should (equal "echo h<>"
+                   (mistty-test-content :start start :show (point))))
+
+    (mistty-run-command
+     (setq this-command 'hippie-expand)
+     (call-interactively 'hippie-expand))
+    (should (equal "echo hi<>"
+                   (mistty-test-content :start start :show (point))))
+
+    (mistty-run-command
+     (setq this-command 'hippie-expand)
+     (setq last-command 'hippie-expand)
+     (call-interactively 'hippie-expand))
+    (should (equal "echo hallo<>"
+                   (mistty-test-content :start start :show (point))))))
+
+(mistty-deftest mistty-compat-test-yas-expand (:selected t :type all)
   (yas-define-snippets
    'mistty-mode
    ;; (KEY TEMPLATE NAME ...)
    '(("bif" "if ${1}; then ${0}; fi" "bif")))
-  (mistty-with-test-buffer (:selected t)
-    (yas-minor-mode-on)
-    (keymap-local-set "C-c y" #'yas-expand)
-    (mistty-send-text "bif")
-    (execute-kbd-macro (kbd "C-c y t r u e TAB e c h o SPC o k TAB"))
-    (mistty-wait-for-output :test (lambda () (not mistty--inhibit)))
-    (mistty-wait-for-output :str "echo ok")
-    (should-not mistty--inhibit)
-    (should (equal "$ if true; then echo ok; fi<>"
-                   (mistty-test-content :show (point))))
-    (should (equal "ok" (mistty-send-and-capture-command-output)))))
+  (yas-minor-mode-on)
+  (keymap-local-set "C-c y" #'yas-expand)
+  (mistty-send-text "bif")
+  (execute-kbd-macro (kbd "C-c y t r u e TAB e c h o SPC o k TAB"))
+  (mistty-wait-for-output :test (lambda () (not mistty--inhibit)))
+  (mistty-wait-for-output :str "echo ok")
+  (should-not mistty--inhibit)
+  (should (equal "$ if true; then echo ok; fi<>"
+                 (mistty-test-content :show (point))))
+  (should (equal "ok" (mistty-send-and-capture-command-output))))
 
-(ert-deftest mistty-compat-yas-expand-multiline ()
+(mistty-deftest mistty-compat-yas-expand-multiline
+    (:selected t: :type all)
   (yas-define-snippets
    'mistty-mode
    ;; (KEY TEMPLATE NAME ...)
    '(("bif" "if ${1}\nthen ${0}\nfi" "bif")))
-  (mistty-with-test-buffer (:selected t)
-    (yas-minor-mode-on)
-    (keymap-local-set "C-c y" #'yas-expand)
-    (mistty-send-text "bif")
-    (execute-kbd-macro (kbd "C-c y t r u e TAB e c h o SPC o k TAB"))
-    (mistty-wait-for-output :test (lambda () (not mistty--inhibit)))
-    (mistty-wait-for-output :str "echo ok")
-    (should-not mistty--inhibit)
-    (should (equal "$ if true\nthen echo ok\nfi<>"
-                   (mistty-test-content :show (point))))
-    (should (equal "ok" (mistty-send-and-capture-command-output)))))
+  (yas-minor-mode-on)
+  (keymap-local-set "C-c y" #'yas-expand)
+  (mistty-send-text "bif")
+  (execute-kbd-macro (kbd "C-c y t r u e TAB e c h o SPC o k TAB"))
+  (mistty-wait-for-output :test (lambda () (not mistty--inhibit)))
+  (mistty-wait-for-output :str "echo ok")
+  (should-not mistty--inhibit)
+  (should (equal "$ if true\nthen echo ok\nfi<>"
+                 (mistty-test-content :show (point))))
+  (should (equal "ok" (mistty-send-and-capture-command-output))))
 
-(ert-deftest mistty-compat-yas-expand-multiline-fish ()
+(mistty-deftest mistty-compat-yas-expand-multiline-fish
+    (:shell fish :selected t :type all)
   (yas-define-snippets
    'mistty-mode
    ;; (KEY TEMPLATE NAME ...)
    '(("fif" "if ${1}\n${0}\nend" "fif")))
-  (mistty-with-test-buffer (:shell fish :selected t)
-    (yas-minor-mode-on)
-    (keymap-local-set "C-c y" #'yas-expand)
-    (mistty-send-text "fif")
-    (execute-kbd-macro (kbd "C-c y t r u e TAB e c h o SPC o k TAB"))
-    (mistty-wait-for-output :test (lambda () (not mistty--inhibit)))
-    (mistty-wait-for-output :test (lambda () (mistty--queue-empty-p mistty--queue)))
-    (should (equal (concat "$ if true\n"
-                           "      echo ok\n"
-                           "  end<>")
-                   (mistty-test-content :show (point))))
-    (mistty-send-and-wait-for-prompt)
-    (should (equal (concat "$ if true\n"
-                           "      echo ok\n"
-                           "  end\n"
-                           "ok\n"
-                           "$ <>")
-                   (mistty-test-content :show (point))))))
+  (yas-minor-mode-on)
+  (keymap-local-set "C-c y" #'yas-expand)
+  (mistty-send-text "fif")
+  (execute-kbd-macro (kbd "C-c y t r u e TAB e c h o SPC o k TAB"))
+  (mistty-wait-for-output :test (lambda () (not mistty--inhibit)))
+  (mistty-wait-for-output :test (lambda () (mistty--queue-empty-p mistty--queue)))
+  (should (equal (concat "$ if true\n"
+                         "      echo ok\n"
+                         "  end<>")
+                 (mistty-test-content :show (point))))
+  (mistty-send-and-wait-for-prompt)
+  (should (equal (concat "$ if true\n"
+                         "      echo ok\n"
+                         "  end\n"
+                         "ok\n"
+                         "$ <>")
+                 (mistty-test-content :show (point)))))
 
-(ert-deftest mistty-compat-yas-expand-multiline-fish-insert ()
+(mistty-deftest mistty-compat-yas-expand-multiline-fish-insert
+    (:shell fish :selected t :type all)
   (yas-define-snippets
    'mistty-mode
    ;; (KEY TEMPLATE NAME ...)
    '(("fif" "if ${1}\n${0}\nend" "fif")))
-  (mistty-with-test-buffer (:shell fish :selected t)
-    (yas-minor-mode-on)
-    (keymap-local-set "C-c y" #'yas-expand)
-    (mistty-send-text "fif")
-    (execute-kbd-macro (kbd "C-c y"))
-    (mistty-run-command
-     (insert "true"))
-    (execute-kbd-macro (kbd "TAB"))
-    (mistty-run-command
-     (insert "echo ok"))
-    (execute-kbd-macro (kbd "TAB"))
-    (mistty-wait-for-output :test (lambda () (not mistty--inhibit)))
-    (mistty-wait-for-output :test (lambda () (mistty--queue-empty-p mistty--queue)))
-    (should (equal (concat "$ if true\n"
-                           "      echo ok\n"
-                           "  end<>")
-                   (mistty-test-content :show (point))))
-    (mistty-send-and-wait-for-prompt)
-    (should (equal (concat "$ if true\n"
-                           "      echo ok\n"
-                           "  end\n"
-                           "ok\n"
-                           "$ <>")
-                   (mistty-test-content :show (point))))))
+  (yas-minor-mode-on)
+  (keymap-local-set "C-c y" #'yas-expand)
+  (mistty-send-text "fif")
+  (execute-kbd-macro (kbd "C-c y"))
+  (mistty-run-command
+   (insert "true"))
+  (execute-kbd-macro (kbd "TAB"))
+  (mistty-run-command
+   (insert "echo ok"))
+  (execute-kbd-macro (kbd "TAB"))
+  (mistty-wait-for-output :test (lambda () (not mistty--inhibit)))
+  (mistty-wait-for-output :test (lambda () (mistty--queue-empty-p mistty--queue)))
+  (should (equal (concat "$ if true\n"
+                         "      echo ok\n"
+                         "  end<>")
+                 (mistty-test-content :show (point))))
+  (mistty-send-and-wait-for-prompt)
+  (should (equal (concat "$ if true\n"
+                         "      echo ok\n"
+                         "  end\n"
+                         "ok\n"
+                         "$ <>")
+                 (mistty-test-content :show (point)))))
 
-(ert-deftest mistty-compat-test-wrap-capf ()
+(ert-deftest mistty-compat-test-wrap-capf/alacritty ()
   (let ((completion-at-point-functions (list #'mistty-compat-test-capf))
         (completion-in-region-function #'mistty-compat-test-completion-in-region)
         (mistty-wrap-capf-functions t))
-  (mistty-with-test-buffer (:shell fish)
-    (let (start)
-      (mistty-send-text "echo hello")
-      (mistty-send-and-wait-for-prompt)
+    (mistty-with-test-buffer (:shell fish :type alacritty)
+      (mistty-compat-test-wrap-capf))))
 
-      (setq start (pos-bol))
 
-      ;; hello should be suggested
-      (let ((start (point)))
-        (mistty-send-text "echo h")
-        (mistty-wait-for-output :str "echo hello" :start start))
-      (should (equal "$ echo h<>ello"
-                     (mistty-test-content
-                      :start start :show (point))))
-      (mistty-run-command
-       (completion-at-point))
-
-      ;; hallo doesn't start with hello, but it does start with h.
-      (should (equal "$ echo hallo<>"
-                     (mistty-test-content
-                      :start start :show (point))))))))
-
-(ert-deftest mistty-compat-test-wrap-capf-in-scrollback-region ()
+(ert-deftest mistty-compat-test-wrap-capf/eterm ()
   (let ((completion-at-point-functions (list #'mistty-compat-test-capf))
         (completion-in-region-function #'mistty-compat-test-completion-in-region)
         (mistty-wrap-capf-functions t))
-  (mistty-with-test-buffer (:shell fish)
-    (mistty-send-text "echo hel")
+    (mistty-with-test-buffer (:shell fish :type eterm)
+      (mistty-compat-test-wrap-capf))))
+
+(defun mistty-compat-test-wrap-capf ()
+  (let (start)
+    (mistty-send-text "echo hello")
     (mistty-send-and-wait-for-prompt)
 
-    (mistty-test-goto-after "echo h")
-    (should (equal
-             (concat "$ echo h<>el\n"
-                     "hel\n"
-                     "$")
-             (mistty-test-content
-              :show (point))))
+    (setq start (pos-bol))
+
+    ;; hello should be suggested
+    (let ((start (point)))
+      (mistty-send-text "echo h")
+      (mistty-wait-for-output :str "echo hello" :start start))
+    (should (equal "$ echo h<>ello"
+                   (mistty-test-content
+                    :start start :show (point))))
     (mistty-run-command
      (completion-at-point))
 
-    ;; completion-at-point should have seen "hel" not just h "h"
-    (should (equal
-             (concat "$ echo hello<>\n"
-                     "hel\n"
-                     "$")
-             (mistty-test-content
-              :show (point)))))))
+    ;; hallo doesn't start with hello, but it does start with h.
+    (should (equal "$ echo hallo<>"
+                   (mistty-test-content
+                    :start start :show (point))))))
 
-(ert-deftest mistty-compat-test-wrap-capf-disabled ()
+(ert-deftest mistty-compat-test-wrap-capf-in-scrollback-region/alarcitty ()
+  (let ((completion-at-point-functions (list #'mistty-compat-test-capf))
+        (completion-in-region-function #'mistty-compat-test-completion-in-region)
+        (mistty-wrap-capf-functions t))
+    (mistty-with-test-buffer (:shell fish :type alacritty)
+      (mistty-compat-test-wrap-capf-in-scrollback-region))))
+
+(ert-deftest mistty-compat-test-wrap-capf-in-scrollback-region/eterm ()
+  (let ((completion-at-point-functions (list #'mistty-compat-test-capf))
+        (completion-in-region-function #'mistty-compat-test-completion-in-region)
+        (mistty-wrap-capf-functions t))
+    (mistty-with-test-buffer (:shell fish :type eterm)
+      (mistty-compat-test-wrap-capf-in-scrollback-region))))
+
+(defun mistty-compat-test-wrap-capf-in-scrollback-region ()
+  (mistty-send-text "echo hel")
+  (mistty-send-and-wait-for-prompt)
+
+  (mistty-test-goto-after "echo h")
+  (should (equal
+           (concat "$ echo h<>el\n"
+                   "hel\n"
+                   "$")
+           (mistty-test-content
+            :show (point))))
+  (mistty-run-command
+   (completion-at-point))
+
+  ;; completion-at-point should have seen "hel" not just h "h"
+  (should (equal
+           (concat "$ echo hello<>\n"
+                   "hel\n"
+                   "$")
+           (mistty-test-content
+            :show (point)))))
+
+(ert-deftest mistty-compat-test-wrap-capf-disabled/alacritty ()
   (let ((completion-at-point-functions (list #'mistty-compat-test-capf))
         (completion-in-region-function #'mistty-compat-test-completion-in-region)
         (mistty-wrap-capf-functions nil))
-  (mistty-with-test-buffer (:shell bash)
-    (let (start)
-      (mistty-send-text "echo hello")
-      (mistty-send-and-wait-for-prompt)
+  (mistty-with-test-buffer (:shell bash :type alacritty)
+    (mistty-compat-test-wrap-capf-disabled))))
 
-      (setq start (pos-bol))
 
-      (mistty-send-text "echo ho")
-      (mistty-run-command
-       (goto-char (1- (point))))
-      (should (equal "$ echo h<>o"
-                     (mistty-test-content
-                      :start start :show (point))))
+(ert-deftest mistty-compat-test-wrap-capf-disabled/eterm ()
+  (let ((completion-at-point-functions (list #'mistty-compat-test-capf))
+        (completion-in-region-function #'mistty-compat-test-completion-in-region)
+        (mistty-wrap-capf-functions nil))
+  (mistty-with-test-buffer (:shell bash :type eterm)
+    (mistty-compat-test-wrap-capf-disabled))))
 
-      (mistty-run-command
-       (completion-at-point))
+(defun mistty-compat-test-wrap-capf-disabled ()
+  (let (start)
+    (mistty-send-text "echo hello")
+    (mistty-send-and-wait-for-prompt)
 
-      ;; completion-at-point should have seen "ho" not just "h"
-      (should (equal "$ echo ho!ho!ho!<>"
-                     (mistty-test-content
-                      :start start :show (point))))))))
+    (setq start (pos-bol))
+
+    (mistty-send-text "echo ho")
+    (mistty-run-command
+     (goto-char (1- (point))))
+    (should (equal "$ echo h<>o"
+                   (mistty-test-content
+                    :start start :show (point))))
+
+    (mistty-run-command
+     (completion-at-point))
+
+    ;; completion-at-point should have seen "ho" not just "h"
+    (should (equal "$ echo ho!ho!ho!<>"
+                   (mistty-test-content
+                    :start start :show (point))))))
 
 (defun mistty-compat-test-capf ()
   "Test function for `completion-at-point-functions'."
@@ -265,35 +306,55 @@ that starts with the text currently between START and END."
       (tempel-insert 'test)
       (should (equal "THIS IS A TEST" (mistty-test-content))))))
 
-(ert-deftest mistty-compat-test-tempel-detect-overlays ()
+(ert-deftest mistty-compat-test-tempel-detect-overlays/alacritty ()
   (skip-unless (featurep 'tempel))
-  (mistty-with-test-buffer (:selected t)
-    (let* ((mistty-test-tempel-templates '((test "for " p " in " p "; do " p "; done")))
-           (tempel-template-sources (list (lambda () mistty-test-tempel-templates))))
-      (keymap-local-set "C-c n" #'tempel-next)
-      (keymap-local-set "C-c d" #'tempel-done)
-      (mistty-run-command
-       (tempel-insert 'test))
-      (mistty-wait-for-output :test (lambda () mistty--inhibit))
-      (execute-kbd-macro (kbd "i C-c n a SPC b SPC c C-c n e c h o SPC $ i C-c d"))
-      (mistty-wait-for-output :test (lambda () (not mistty--inhibit)))
-      (mistty-wait-for-output :str "for i in a b c; do echo $i; done"))))
+  (mistty-with-test-buffer (:selected t :type alacritty)
+    (mistty-compat-test-tempel-detect-overlays)))
 
-(turtles-ert-deftest mistty-compat-goto-address-mode (:instance 'mistty)
+(ert-deftest mistty-compat-test-tempel-detect-overlays/eterm ()
+  (skip-unless (featurep 'tempel))
+  (mistty-with-test-buffer (:selected t :type eterm)
+    (mistty-compat-test-tempel-detect-overlays)))
+
+(defun mistty-compat-test-tempel-detect-overlays ()
+  (let* ((mistty-test-tempel-templates '((test "for " p " in " p "; do " p "; done")))
+         (tempel-template-sources (list (lambda () mistty-test-tempel-templates))))
+    (keymap-local-set "C-c n" #'tempel-next)
+    (keymap-local-set "C-c d" #'tempel-done)
+    (mistty-run-command
+     (tempel-insert 'test))
+    (mistty-wait-for-output :test (lambda () mistty--inhibit))
+    (execute-kbd-macro (kbd "i C-c n a SPC b SPC c C-c n e c h o SPC $ i C-c d"))
+    (mistty-wait-for-output :test (lambda () (not mistty--inhibit)))
+    (mistty-wait-for-output :str "for i in a b c; do echo $i; done")))
+
+(turtles-ert-deftest mistty-compat-goto-address-mode/alacritty (:instance 'mistty)
   (unwind-protect
       (progn
         (global-goto-address-mode)
-        (mistty-with-test-buffer (:selected t)
-          (mistty-send-text "echo http://www.example.com/")
-          (redisplay t) ;; force fontification
-          (mistty-send-and-wait-for-prompt)
-          (redisplay t)
-          (goto-char (point-min))
-          (search-forward "http://www.example.com")
-          (should (mistty-test-has-goto-address-overlay-at (match-beginning 0)))
-          (search-forward "http://www.example.com")
-          (should (mistty-test-has-goto-address-overlay-at (match-beginning 0)))))
+        (mistty-with-test-buffer (:selected t :type alacritty)
+          (mistty-compat-goto-address-mode)))
     (global-goto-address-mode -1)))
+
+
+(turtles-ert-deftest mistty-compat-goto-address-mode/eterm (:instance 'mistty)
+  (unwind-protect
+      (progn
+        (global-goto-address-mode)
+        (mistty-with-test-buffer (:selected t :type eterm)
+          (mistty-compat-goto-address-mode)))
+    (global-goto-address-mode -1)))
+
+(defun mistty-compat-goto-address-mode ()
+  (mistty-send-text "echo http://www.example.com/")
+  (redisplay t) ;; force fontification
+  (mistty-send-and-wait-for-prompt)
+  (redisplay t)
+  (goto-char (point-min))
+  (search-forward "http://www.example.com")
+  (should (mistty-test-has-goto-address-overlay-at (match-beginning 0)))
+  (search-forward "http://www.example.com")
+  (should (mistty-test-has-goto-address-overlay-at (match-beginning 0))))
 
 (defun mistty-test-has-goto-address-overlay-at (pos)
   "Check whether POS has goto-address overlays."
