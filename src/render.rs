@@ -248,24 +248,7 @@ pub fn render(
     term_end: Value,
     cursor_marker: Value,
 ) -> Result<()> {
-    let mut cursor_pos = None;
-    env.call(goto_char, (term_start,))?;
-    env.call(delete_region, (term_start, term_end))?;
-    render_lines(
-        env,
-        term,
-        Line(0),
-        term.bottommost_line() + 1,
-        Some(&mut cursor_pos),
-    )?;
-
-    if let Some(cursor_pos) = cursor_pos {
-        env.call(set_marker, (cursor_marker, cursor_pos))?;
-    }
-
-    term.inner_mut().reset_damage();
-
-    Ok(())
+    render_inner(env, term, term_start, term_end, cursor_marker, None)
 }
 
 /// Re-render modified parts of the terminal, Emacs-side.
@@ -292,19 +275,39 @@ pub fn render_damaged(
     term_end: Value,
     cursor_marker: Value,
 ) -> Result<()> {
-    let mut cursor_pos = None;
-
-    if let TermDamage::Partial(iter) = term.inner_mut().damage() {
+    let damage = if let TermDamage::Partial(iter) = term.inner_mut().damage() {
         // TODO: check term_end to make sure not to escape the bounds
         // of term_start - term_end even when the buffer content isn't
         // as expected.
 
-        let mut all_damage: Vec<Line> = iter.map(|d| Line(d.line as i32)).collect();
-        all_damage.sort_unstable();
-        all_damage.dedup();
+        let mut lines: Vec<Line> = iter.map(|d| Line(d.line as i32)).collect();
+        lines.sort_unstable();
+        lines.dedup();
         // damage is sorted by line, one damage per line.
 
-        for line in all_damage {
+        Some(lines)
+    } else {
+        None
+    };
+
+    render_inner(env, term, term_start, term_end, cursor_marker, damage)
+}
+
+fn render_inner(
+    env: &Env,
+    term: &mut VTerm,
+    term_start: Value,
+    term_end: Value,
+    cursor_marker: Value,
+    damage: Option<Vec<Line>>,
+) -> Result<()> {
+    let mut cursor_pos = None;
+
+    if let Some(damaged_lines) = damage {
+        // TODO: check term_end to make sure not to escape the bounds
+        // of term_start - term_end even when the buffer content isn't
+        // as expected.
+        for line in damaged_lines {
             env.call(goto_char, (term_start,))?;
             let line_pos = BufferPos::bol(env, line)?;
             env.call(goto_char, (line_pos,))?;
