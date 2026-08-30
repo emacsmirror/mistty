@@ -6428,10 +6428,9 @@ precmd_functions+=(prompt_header)
 (defconst mistty-test-zsh-osc133-b
   "function osc133_prompt { PS1='prompt \033]133;B\007'; };")
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-osc133-command-for-output
-    (:type alacritty :shell ((zsh mistty-test-zsh-osc133
-                                   mistty-test-zsh-osc133-b)))
+    (:type all :shell ((zsh mistty-test-zsh-osc133 
+                            mistty-test-zsh-osc133-b)))
   (mistty-send-text "osc133_prompt")
   (setq mistty-test-prompt-re "^prompt ")
   (mistty-send-and-wait-for-prompt)

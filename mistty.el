@@ -3189,11 +3189,13 @@ Return nil if no command could be extracted."
 
       ;; Trim
       (goto-char (point-min))
-      (while (search-forward-regexp "^[[:blank:]\n\r]+" nil 'noerror)
+      (while (search-forward-regexp "^[[:blank:]]+" nil 'noerror)
         (replace-match ""))
       (goto-char (point-min))
-      (while (search-forward-regexp "[[:blank:]\n\r]+$" nil 'noerror)
+      (while (search-forward-regexp "[[:blank:]\r]+$" nil 'noerror)
         (replace-match ""))
+      (while (eq ?\n (char-before (point-max)))
+        (delete-region (1- (point-max)) (point-max)))
 
       ;; Get rid of newlines.
       (goto-char (point-min))

@@ -402,22 +402,13 @@ This sets properties from the mistty-clear properties,
 detecting regions looking at a complete line."
   (save-excursion
     (let ((inhibit-read-only t)
-          (inhibit-modification-hooks t)
-          (region-end (point-max)))
+          (inhibit-modification-hooks t))
       (goto-char region-start)
       (goto-char (pos-bol))
       (setq region-start (point))
       (remove-text-properties
-       region-start region-end
+       region-start (point-max)
        '(mistty-skip nil yank-handler nil mistty-updated nil))
-      (goto-char (point-max))
-      (while (and (> (point) region-start)
-                  (or (= (pos-bol) (pos-eol))
-                      (not (text-property-not-all (pos-bol) (pos-eol) 'mistty-clear t))))
-        (setq region-end (pos-eol 0))
-        (forward-line -1))
-      (when (< region-end (point-max))
-        (put-text-property region-end (point-max) 'mistty-skip 'empty-lines-at-eob))
       (goto-char region-start)
       (while
           (progn
@@ -431,7 +422,7 @@ detecting regions looking at a complete line."
 
             ;; process next line?
             (forward-line 1)
-            (< (point) region-end))))))
+            (< (point) (point-max)))))))
 
 (defun mistty--detect-right-prompt (bol eol window-width)
   "Detect right prompt and return its left position or nil.
