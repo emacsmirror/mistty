@@ -16,6 +16,7 @@
 
 (require 'ert)
 (require 'ert-x)
+(require 'term)
 (require 'tramp)
 (eval-when-compile
 (require 'cl-lib))
@@ -37,7 +38,10 @@
          (home (file-name-directory "/")))
     (mistty-with-test-buffer (:cd (concat tramp-prefix home) :type eterm)
       (mistty-tramp-test-shell-start
-       tramp-prefix "30.2,term:0.96,tramp:2.7.3.30.2"))))
+       tramp-prefix
+       (format
+        "%s,term:%s,tramp:%s"
+        emacs-version term-protocol-version tramp-version)))))
 
 (defun mistty-tramp-test-shell-start (tramp-prefix inside-emacs)
   (should (equal (concat tramp-prefix "/")
