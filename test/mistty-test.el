@@ -4472,13 +4472,12 @@
       (let ((kill-buffer-query-functions nil))
         (kill-buffer buf)))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-window-size
-    (:selected t :term-size 'window :type alacritty :turtles t)
+    (:selected t :term-size 'window :type all :turtles t)
   ;; initial window, half height
   (should (equal (cons 79 10)
                  (with-current-buffer mistty-term-buffer
-                   (cons mistty-alacritty-columns mistty-alacritty-lines))))
+                   (cons (mistty--term-columns mistty--term) (mistty--term-lines mistty--term)))))
   (mistty-send-text "echo $(tput cols)x$(tput lines)")
   (should (equal "79x10" (mistty-send-and-capture-command-output)))
 
@@ -4488,15 +4487,14 @@
   ;; full height
   (should (equal (cons 79 22)
                  (with-current-buffer mistty-term-buffer
-                   (cons mistty-alacritty-columns mistty-alacritty-lines))))
+                   (cons (mistty--term-columns mistty--term) (mistty--term-lines mistty--term)))))
 
   ;; make sure the process was told about the change
   (mistty-send-text "echo $(tput cols)x$(tput lines)")
   (should (equal "79x22" (mistty-send-and-capture-command-output))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-window-size-resize-other-window
-    (:selected t :term-size 'window :type alacritty :turtles t)
+    (:selected t :term-size 'window :type all :turtles t)
   (let ((work-buffer mistty-work-buffer)
         (work-window (selected-window)))
     ;; initial window, half height
@@ -4514,9 +4512,8 @@
       (mistty-send-text "echo $(tput cols)x$(tput lines)")
       (should (equal "79x12" (mistty-send-and-capture-command-output))))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-window-width
-    (:selected t :term-size 'window :type alacritty :turtles t)
+    (:selected t :term-size 'window :type all :turtles t)
   (delete-other-windows)
   (should (redisplay t)) ;; recompute size
 
@@ -4542,18 +4539,19 @@
       (search-backward "C")
       (setq end (match-end 0))
 
+      ;; The final spaces may or may not be there. They're absent with
+      ;; alacritty but present with eterm.
       (should
-       (equal
+       (string-match
         (concat
-         "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"
-         "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\n"
-         "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\\\n"
+         "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\\(  \\)?\n"
+         "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB ?\n"
+         "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\\\\\n"
          "C")
-        (buffer-substring start end))))))
+        (buffer-substring-no-properties start end))))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-set-terminal-size
-    (:selected t :term-size 'window :type alacritty :turtles t)
+    (:selected t :term-size 'window :type all :turtles t)
   (mistty-set-terminal-size 40 10)
   (mistty-send-text "echo $(tput cols)x$(tput lines)")
   (should (equal "40x10" (mistty-send-and-capture-command-output)))
@@ -4580,9 +4578,8 @@
   (mistty-send-text "echo $(tput cols)x$(tput lines)")
   (should (equal "79x10" (mistty-send-and-capture-command-output))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-set-terminal-size-and-fullscreen
-    (:selected t :term-size 'window :type alacritty :turtles t)
+    (:selected t :term-size 'window :type all :turtles t)
   (let ((proc mistty-proc)
         (work-buffer mistty-work-buffer)
         (term-buffer mistty-term-buffer))
@@ -4601,13 +4598,13 @@
        (buffer-local-value 'mistty-fullscreen work-buffer)))
 
     ;; In fullscreen mode, terminal size should come from the window
-    (should (equal 79 (buffer-local-value 'mistty-alacritty-columns term-buffer)))
-    (should (equal 22 (buffer-local-value 'mistty-alacritty-lines term-buffer)))
+    (should (equal 79 (mistty--term-columns mistty--term)))
+    (should (equal 22 (mistty--term-lines mistty--term)))
 
     (split-window-vertically)
     (should (redisplay t))
-    (should (equal 79 (buffer-local-value 'mistty-alacritty-columns term-buffer)))
-    (should (equal 10 (buffer-local-value 'mistty-alacritty-lines term-buffer)))
+    (should (equal 79 (mistty--term-columns mistty--term)))
+    (should (equal 10 (mistty--term-lines mistty--term)))
 
     ;; Leave fullscreen
     (mistty--send-string proc "\n")
@@ -4634,9 +4631,8 @@
   (should-error (mistty-exec "/usr/bin/false" :width 2 :height 20))
   (should-error (mistty-exec "/usr/bin/false" :width 80 :height 2)))
 
-;; TODO: make it run on eterm
-(mistty-deftest mistty-terminal-type-accepts-min-terminal-size
-    (:selected t :term-size 'window :type alacritty :turtles t)
+(mistty-deftest mistty-terminal-accepts-min-terminal-size
+    (:selected t :term-size 'window :type all :turtles t)
   (let ((mistty--inhibit-fake-nl-cleanup nil))
     (should (equal 8 mistty-min-terminal-width))
     (should (equal 4 mistty-min-terminal-height))
@@ -5034,9 +5030,8 @@
     (should (equal (color-values (background-color-at-point))
                    (color-values (face-background 'default))))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-scroll-window-up
-    (:shell fish :selected t :type alacritty :turtles t)
+    (:shell fish :selected t :type all :turtles t)
   (let ((win (selected-window))
         (testbuf (current-buffer))
         (lastline (lambda (&optional buf)
@@ -6801,8 +6796,8 @@ precmd_functions+=(prompt_header)
     (ert-with-test-buffer ()
       (mistty-mode)
       (mistty-exec mistty-test-bash-exe)
-      (should (equal 160 (buffer-local-value 'mistty-alacritty-columns mistty-term-buffer)))
-      (should (equal 50 (buffer-local-value 'mistty-alacritty-lines mistty-term-buffer))))))
+      (should (equal 160 (buffer-local-value '(mistty--term-columns mistty--term) mistty-term-buffer)))
+      (should (equal 50 (buffer-local-value '(mistty--term-lines mistty--term) mistty-term-buffer))))))
 
 (ert-deftest mistty-test-default-terminal-size/eterm ()
   (let ((mistty-default-terminal-size '(160 . 50))

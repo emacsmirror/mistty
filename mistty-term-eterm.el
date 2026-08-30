@@ -192,6 +192,7 @@ to call `mistty--term-postprocess'.")
   #'mistty--emulate-terminal)
 
 (cl-defmethod mistty--term-resize ((term mistty--term-eterm) width height)
+  (set-process-window-size (mistty--term-eterm-proc term) height width)
   (with-current-buffer (mistty--term-eterm-buf term)
     (term-reset-size height width)))
 
