@@ -139,7 +139,8 @@ if [ $1 = .. ]; then shift; fi; exec \"$@\""
       ;; coding-system-for-read. Force it.
       (set-process-coding-system proc 'binary (cdr (process-coding-system proc)))
 
-      (mistty-alacritty-vt-render mistty-alacritty--vterm (point-min) (point-max) mistty-alacritty--cursor)
+      (goto-char (point-min))
+      (mistty-alacritty-vt-render mistty-alacritty--vterm mistty-alacritty--cursor)
       (goto-char mistty-alacritty--cursor)
       (set-marker (process-mark proc) mistty-alacritty--cursor)
       (set-process-sentinel proc #'mistty-alacritty--sentinel)
@@ -234,7 +235,7 @@ The current buffer must have a virtual terminal associated."
       (goto-char mistty-alacritty--home)
       (cl-incf mistty--scrolline-home-num (mistty-alacritty-vt-write-scrollback vterm))
       (set-marker mistty-alacritty--home (point))
-      (mistty-alacritty-vt-render-damaged vterm (point) (point-max) mistty-alacritty--cursor)
+      (mistty-alacritty-vt-render-damaged vterm mistty-alacritty--cursor)
       (mistty-log "RENDER @%s" mistty--scrolline-home-num)
       (when-let ((proc (get-buffer-process (current-buffer))))
         (when (process-live-p proc)

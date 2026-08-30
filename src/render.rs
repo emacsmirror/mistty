@@ -1,6 +1,7 @@
 use crate::types::BufferPos;
 use crate::vterm::VTerm;
 use alacritty_terminal::{
+    Grid,
     grid::{Dimensions, Row},
     index::{Column, Line},
     term::{
@@ -10,7 +11,7 @@ use alacritty_terminal::{
     vte::ansi::{Color, NamedColor, Rgb},
 };
 use emacs::{Env, Result, Value, defun};
-use std::{collections::HashMap, str::FromStr};
+use std::{cmp::max, collections::HashMap, str::FromStr};
 
 emacs::use_functions! {
     add_face_text_property
@@ -232,34 +233,41 @@ fn last_written_cell(row: &Row<Cell>) -> Option<Column> {
     None
 }
 
+/// Return the line containing the last cell that isn't clear.
+fn last_written_line(grid: &Grid<Cell>) -> Option<Line> {
+    for line in (0..=grid.bottommost_line().0).rev() {
+        let line = Line(line);
+        if !last_written_cell(&grid[line]).is_none() {
+            return Some(line);
+        }
+    }
+
+    None
+}
+
 /// Render the state of the terminal in a way Emacs understands.
 ///
-/// Rendering is done in the current buffer in the range START to END.
+/// Rendering is done in the current buffer in the range from point to
+/// end of buffer (or earlier if narrowing is enabled).
 ///
 /// `cursor_marker` is set to the cursor position.
 ///
 /// The point is not conserved. Wrap this call inside a
 /// `save_excursion`.
 #[defun]
-pub fn render(
-    env: &Env,
-    term: &mut VTerm,
-    term_start: Value,
-    term_end: Value,
-    cursor_marker: Value,
-) -> Result<()> {
-    render_inner(env, term, term_start, term_end, cursor_marker, None)
+pub fn render(env: &Env, term: &mut VTerm, cursor_marker: Value) -> Result<()> {
+    render_inner(env, term, cursor_marker, None)
 }
 
 /// Re-render modified parts of the terminal, Emacs-side.
 ///
 /// This call optimizes rendering by only updating the portions of the
 /// terminal that have changed since last call to `render` or
-/// `render_damage. For this to work, the range START to END must
-/// contain the unmodified result of the previous call.
+/// `render_damage. For this to work, the range from point to end of
+/// buffer must contain the unmodified result of the previous call.
 ///
-/// Rendering is done in the current buffer in the range START to END.
-/// The point is left at the cursor position.
+/// Rendering is done in the current buffer in the range START to end
+/// of buffer (or earlier if narrowing is enabled).
 ///
 /// `cursor_marker` is set to the cursor position if that position has
 /// changed since last call. If the cursor hasn't moved since last
@@ -268,18 +276,8 @@ pub fn render(
 /// The point is not conserved. Wrap this call inside
 /// `save_excursion`.
 #[defun]
-pub fn render_damaged(
-    env: &Env,
-    term: &mut VTerm,
-    term_start: Value,
-    term_end: Value,
-    cursor_marker: Value,
-) -> Result<()> {
+pub fn render_damaged(env: &Env, term: &mut VTerm, cursor_marker: Value) -> Result<()> {
     let damage = if let TermDamage::Partial(iter) = term.inner_mut().damage() {
-        // TODO: check term_end to make sure not to escape the bounds
-        // of term_start - term_end even when the buffer content isn't
-        // as expected.
-
         let mut lines: Vec<Line> = iter.map(|d| Line(d.line as i32)).collect();
         lines.sort_unstable();
         lines.dedup();
@@ -290,41 +288,56 @@ pub fn render_damaged(
         None
     };
 
-    render_inner(env, term, term_start, term_end, cursor_marker, damage)
+    render_inner(env, term, cursor_marker, damage)
 }
 
 fn render_inner(
     env: &Env,
     term: &mut VTerm,
-    term_start: Value,
-    term_end: Value,
     cursor_marker: Value,
     damage: Option<Vec<Line>>,
 ) -> Result<()> {
     let mut cursor_pos = None;
 
+    let cursor_line = term.inner().grid().cursor.point.line;
+    let last_written = last_written_line(term.inner().grid()).unwrap_or(Line(0));
+    let last_line = max(last_written, cursor_line);
     if let Some(damaged_lines) = damage {
-        // TODO: check term_end to make sure not to escape the bounds
-        // of term_start - term_end even when the buffer content isn't
-        // as expected.
-        for line in damaged_lines {
-            env.call(goto_char, (term_start,))?;
-            let line_pos = BufferPos::bol(env, line)?;
+        let mut line_at_point = Line(0);
+        for line in damaged_lines
+            .into_iter()
+            .filter(|l| *l <= last_written)
+            .chain(
+                // if needed, render missing blank lines from
+                // last_written to the cursor position
+                (last_written.0 + 1..=last_line.0)
+                    .into_iter()
+                    .map(|l| Line(l)),
+            )
+        {
+            let line_pos = BufferPos::bol(env, line - line_at_point)?;
             env.call(goto_char, (line_pos,))?;
             let next_line_pos = BufferPos::bol(env, Line(1))?;
             env.call(delete_region, (line_pos, next_line_pos))?;
             render_lines(env, term, line, line + 1, Some(&mut cursor_pos))?;
+            line_at_point = line + 1;
+        }
+
+        if last_line < term.bottommost_line() {
+            env.call(
+                delete_region,
+                (
+                    BufferPos::bol(env, last_line + 1 - line_at_point)?,
+                    BufferPos::point_max(env)?,
+                ),
+            )?;
         }
     } else {
-        env.call(goto_char, (term_start,))?;
-        env.call(delete_region, (term_start, term_end))?;
-        render_lines(
-            env,
-            term,
-            Line(0),
-            term.bottommost_line() + 1,
-            Some(&mut cursor_pos),
+        env.call(
+            delete_region,
+            (BufferPos::point(env)?, BufferPos::point_max(env)?),
         )?;
+        render_lines(env, term, Line(0), last_line + 1, Some(&mut cursor_pos))?;
     }
 
     if let Some(cursor_pos) = cursor_pos {

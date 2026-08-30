@@ -8,6 +8,8 @@ use std::{
 
 emacs::use_functions! {
     point_func => "point"
+    point_max_func => "point-max"
+    point_min_func => "point-min"
     pos_bol_func => "pos-bol"
 }
 
@@ -26,6 +28,16 @@ impl BufferPos {
     /// Return the position of the point in the current buffer.
     pub fn point(env: &Env) -> Result<Self> {
         Ok(BufferPos(env.call(point_func, [])?.into_rust()?))
+    }
+
+    /// Return the lowest valid position of the point.
+    pub fn point_min(env: &Env) -> Result<Self> {
+        Ok(BufferPos(env.call(point_min_func, [])?.into_rust()?))
+    }
+
+    /// Return the highest valid position of the point.
+    pub fn point_max(env: &Env) -> Result<Self> {
+        Ok(BufferPos(env.call(point_max_func, [])?.into_rust()?))
     }
 
     /// Return the beginning-of-line position of the give line.
