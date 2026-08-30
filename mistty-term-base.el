@@ -137,6 +137,9 @@ sequence.")
 This should call `mistty--term-postprocess', which sets \=='mistty-skip
 properties on the changed regions.")
 
+(cl-defgeneric mistty--term-changed (term beg end)
+  "Mark the region between BEG AND end as requiring post-processing.")
+
 (provide 'mistty-term-base)
 
 ;;; mistty-term-base.el ends here

@@ -244,7 +244,22 @@ to call `mistty--term-postprocess'.")
           ctx (if goto-home "\e[H\e[2J" "\e[2J"))
          (mistty--accum-ctx-flush ctx)
          (when after-clear-screen
-           (funcall after-clear-screen)))))))
+           (funcall after-clear-screen))))))
+
+  (mistty--accum-add-around-process-filter
+   accum
+   (lambda (func)
+     (cl-letf ((inhibit-modification-hooks nil) ;; run mistty--after-change-on-term
+               ((symbol-function 'term-delete-chars)
+                (lambda (count)
+                  (let ((save-point (point)))
+                    (move-to-column (+ (term-current-column) count) t)
+                    (delete-region save-point (point)))))
+               ((symbol-function 'move-to-column)
+                (let ((orig (symbol-function 'move-to-column)))
+                  (lambda (&rest args)
+                    (apply #'mistty--around-move-to-column orig args)))))
+       (funcall func)))))
 
 (cl-defmethod mistty--term-setup-accum-for-fullscreen ((_term mistty--term-eterm) accum
                                                        &key leave-fullscreen)
@@ -281,6 +296,9 @@ to call `mistty--term-postprocess'.")
   ;; nothing to do; it's enough to clear the text properties.
   )
 
+(cl-defmethod mistty--term-changed ((_term mistty--term-eterm) beg end)
+  (mistty--changed beg end))
+
 (cl-defmethod mistty--term-postprocess-changed ((term mistty--term-eterm))
   (with-current-buffer (mistty--term-eterm-buf term)
     (when (and mistty--term-changed (< mistty--term-changed (point-min)))
@@ -290,7 +308,7 @@ to call `mistty--term-postprocess'.")
     (when-let* ((change-start
                  (when mistty--term-changed
                    (text-property-any
-                    mistty--term-changed (point-max) 'mistty-changed t))))
+                    mistty--term-changed (point-max) 'mistty-updated t))))
       (mistty--term-postprocess change-start term-width)
       (remove-text-properties
        change-start (point-max) '(mistty-updated t))
@@ -363,10 +381,10 @@ BEG and END define the region that was modified."
   (let ((beg (mistty--bol beg))
         (end (mistty--eol end)))
     (when (> end beg)
-      (put-text-property beg end 'mistty-changed t))))
+      (put-text-property beg end 'mistty-updated t))))
 
 (defun mistty--around-move-to-column (orig-fun &rest args)
-  "Add property \\='mistty-maybe-skip t to spaces added when just moving.
+  "Add property \\='mistty-clear t to spaces added when just moving.
 
 ORIG-FUN is the original `move-to-column' function and ARGS are its
 arguments."
@@ -374,7 +392,7 @@ arguments."
     (apply orig-fun args)
     (when (> (point) initial-end)
       (put-text-property
-       initial-end (point) 'mistty-maybe-skip t))))
+       initial-end (point) 'mistty-clear t))))
 
 
 (defun mistty--emulate-terminal (proc str)

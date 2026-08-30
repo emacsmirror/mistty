@@ -158,6 +158,9 @@
 (cl-defmethod mistty--term-cleanup-prompt-sp ((_term mistty--term-alacritty) pos)
   (mistty-alacritty--cleanup-prompt-sp pos))
 
+(cl-defmethod mistty--term-changed ((_term mistty--term-alacritty) beg end)
+  (add-text-properties beg end '(mistty-updated t)))
+
 (cl-defmethod mistty--term-postprocess-changed ((term mistty--term-alacritty))
   (with-current-buffer (mistty--term-alacritty-buf term)
     (when-let* ((change-start

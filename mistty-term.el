@@ -240,6 +240,7 @@ Detected prompts can be found in `mistty-prompt'."
        (let* ((prompt (mistty--prompt))
               (inhibit-read-only t)
               (inhibit-modification-hooks t)
+              (start-pos (pos-bol))
               (scrolline (mistty--scrolline-at-point)))
          (when (or (null prompt)
                    (memq (mistty--prompt-source prompt) '(regexp prompt_sp))
@@ -252,16 +253,17 @@ Detected prompts can be found in `mistty-prompt'."
                   (mistty--prompt-contains prompt scrolline)
                   (< (mistty--prompt-start prompt) scrolline))
              (when-let* ((start-scrolline (mistty--prompt-start prompt))
-                         (start-pos (mistty--find-scrolline start-scrolline)))
+                         (pos (mistty--find-scrolline start-scrolline)))
+               (setq start-pos pos)
                (mistty-log "Reusing prompt_sp start %s@%s" start-scrolline start-pos)
-               (setq scrolline start-scrolline)
-               (when (> (pos-eol) start-pos)
-                 (add-text-properties start-pos (pos-eol) '(mistty-updated t))))))
+               (setq scrolline start-scrolline))))
            (setq prompt (mistty--make-prompt 'bracketed-paste scrolline))
            (mistty-log "Detected %s prompt #%s [%s-]"
                        (mistty--prompt-source prompt)
                        (mistty--prompt-input-id prompt)
                        (mistty--prompt-start prompt))
+           (when (> (pos-eol) start-pos)
+             (mistty--term-changed term start-pos (pos-eol)))
            (setf (mistty--prompt) prompt))
          (unless (eq 'osc133 (mistty--prompt-source prompt))
            (setf (mistty--prompt-source prompt) 'bracketed-paste)
@@ -434,11 +436,9 @@ detecting regions looking at a complete line."
 
 BOL and EOL define the region to look in. WINDOW-WIDTH must be the width
 of the terminal, usually `mistty-alacritty-columns'."
-
-  (let ((pos (1- eol))
-        in-prompt)
-  (when (and (< (abs (- window-width (mistty--column-count))) 3)
-             (setq in-prompt (text-property-not-all (max bol (- eol 3)) eol 'mistty-clear t)))
+  (let ((pos (1- eol)) in-prompt)
+    (when (and (< (abs (- window-width (mistty--column-count))) 3)
+               (setq in-prompt (text-property-not-all (max bol (- eol 3)) eol 'mistty-clear t)))
       (when-let* ((rightmost-nonclear (previous-single-property-change in-prompt 'mistty-clear nil bol)))
         (when (and (eq (char-before rightmost-nonclear) ?\ )
                    (> rightmost-nonclear bol))
@@ -450,7 +450,7 @@ of the terminal, usually `mistty-alacritty-columns'."
           (cl-incf pos)
           (add-text-properties
            pos eol '(mistty-skip right-prompt
-                     yank-handler (nil "" nil nil)))
+                                 yank-handler (nil "" nil nil)))
 
           pos)))))
 

@@ -1350,8 +1350,7 @@
   (execute-kbd-macro (kbd "RET"))
   (mistty-wait-for-output :regexp "^second"))
 
-;; TODO: make it run on eterm
-(mistty-deftest mistty-test-skipped-spaces (:shell fish :type (alacritty))
+(mistty-deftest mistty-test-skipped-spaces (:shell fish :type all)
   (mistty-send-text "for i in (seq 10)\necho line $i\nend")
 
   (should (equal (concat "$ for i in (seq 10)\n"
@@ -2522,8 +2521,7 @@
   (should (equal "$ for idx in (seq 10)\n      echo :::line $idx\n  end"
                  (mistty-test-content))))
 
-;; TODO: make it run on eterm
-(mistty-deftest mistty-test-bash-multiline (:type alacritty)
+(mistty-deftest mistty-test-bash-multiline (:type all)
   (should mistty-bracketed-paste)
 
   (mistty-run-command
@@ -2557,9 +2555,8 @@
                    "<>world\"")
            (mistty-test-content :show (mistty-cursor)))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-multiline-movements-after-kill-line
-    (:shell (bash zsh fish) :type alacritty)
+    (:shell (bash zsh fish) :type all)
   (should mistty-bracketed-paste)
 
   ;; The following triggers zsh trailing whitespace issue on all
@@ -2585,9 +2582,8 @@
 
   (mistty-test-multiline-movements))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-multiline-movements-after-insert-newline
-    (:shell (bash zsh fish) :type alacritty)
+    (:shell (bash zsh fish) :type all)
   (mistty-send-text "echo \"hello, world, andthe rest")
 
   (mistty-run-command
@@ -2676,9 +2672,8 @@
                    "rest.\"")
            (mistty-test-content :trim-left t :show (mistty-cursor)))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-reconcile-multiline-delete-with-trailing-ws
-    (:shell (bash zsh fish) :type alacritty)
+    (:shell (bash zsh fish) :type all)
   (mistty--send-string
    mistty-proc
    (format "for i in 1 2 3 4 5 6 deleted%s; do%secho -n line deleted%secho $i deleted%sdone"
@@ -2731,8 +2726,7 @@
                     (goto-char (point-min))
                     (mistty-test-pos "hello"))))))
 
-;; TODO: make it run on eterm
-(mistty-deftest mistty-test-ignore-new-trailing-spaces-during-replay (:type alacritty)
+(mistty-deftest mistty-test-ignore-new-trailing-spaces-during-replay (:type all)
   (mistty--send-string mistty-proc "echo foo")
   (mistty--send-string mistty-proc "\e[200~\n\e[201~")
   (mistty--send-string mistty-proc "echo hello world")
@@ -2758,9 +2752,8 @@
                          "echo BAR:<>bar")
                  (mistty-test-content :show (point)))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-ignore-new-trailing-spaces-during-replay-fish
-    (:shell fish :type alacritty)
+    (:shell fish :type all)
   (mistty--send-string mistty-proc "for i in (seq 10)\necho boo line $i\nend")
   (mistty-wait-for-output :str "end")
 
@@ -2787,9 +2780,8 @@
                          "      end#done<>")
                  (mistty-test-content :show (point)))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-cursor-skip-hook-go-right
-    (:shell fish :selected t :type alacritty)
+    (:shell fish :selected t :type all)
   (mistty-send-text "for i in a b c\necho line $i\nend")
 
   ;; go right from "for" to "end"
@@ -2824,8 +2816,7 @@
                    (mistty-test-content
                     :show (window-point))))))
 
-;; TODO: make it run on eterm
-(mistty-deftest mistty-test-cursor-skip-hook-go-left (:shell fish :selected t :type alacritty)
+(mistty-deftest mistty-test-cursor-skip-hook-go-left (:shell fish :selected t :type all)
   (mistty-send-text "for i in a b c\necho line $i\nend")
 
   ;; go left from "end" to "for"
@@ -2867,9 +2858,8 @@
                    (mistty-test-content
                     :show (window-point))))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-cursor-skip-hook-go-down
-    (:shell fish :selected t :type alacritty)
+    (:shell fish :selected t :type all)
   (mistty-send-text "for i in a b c\necho line $i\nend")
 
   ;; go down from "for" to "end"
@@ -2905,8 +2895,7 @@
                    (mistty-test-content
                     :show (window-point))))))
 
-;; TODO: make it run on eterm
-(mistty-deftest mistty-test-cursor-skip-hook-go-up (:shell fish :selected t :type alacritty)
+(mistty-deftest mistty-test-cursor-skip-hook-go-up (:shell fish :selected t :type all)
   (mistty-send-text "for i in a b c\necho line $i\nend")
 
   ;; go up from "end" to "for"
@@ -2965,10 +2954,8 @@
 
 ;; This test is an integration tests. The details of the moves are
 ;; tested by cursor-skip-hook tests.
-
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-cursor-skip
-    (:shell fish :selected t :turtles t :type alacritty)
+    (:shell fish :selected t :turtles t :type all)
   (delete-other-windows)
   (let ((mistty-skip-empty-spaces t)
         (win (selected-window)))
@@ -3107,9 +3094,8 @@
   (mistty-send-text "echo hello")
   (should (equal "hello" (mistty-send-and-capture-command-output))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-fish-right-prompt-skip-empty-spaces
-    (:selected t :shell ((fish mistty-test-fish-right-prompt)) :type alacritty)
+    (:selected t :shell ((fish mistty-test-fish-right-prompt)) :type all)
   (let ((mistty-skip-empty-spaces t)
         (win (selected-window)))
     (mistty--cursor-skip win)
@@ -3120,9 +3106,8 @@
     (should (string-match "^\\$ <> +< right$"
                           (mistty-test-content :show (point))))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-fish-right-prompt-insert-newlines
-    (:shell ((fish mistty-test-fish-right-prompt)) :type alacritty)
+    (:shell ((fish mistty-test-fish-right-prompt)) :type all)
   ;; This test makes sure that there's no timeout here, as right
   ;; prompts used to cause issues when detecting text with newlines
   ;; that was just replayed.
@@ -3134,9 +3119,8 @@
                                 " *end$")
                         (mistty-test-content))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-fish-right-prompt-reconcile
-    (:shell ((fish mistty-test-fish-right-prompt)) :type alacritty)
+    (:shell ((fish mistty-test-fish-right-prompt)) :type all)
   (mistty-run-command
    (insert "echo hello\necho world"))
 
@@ -3144,9 +3128,8 @@
   (should (string-match "^\\$ echo hello +< right\n  echo world<>"
                         (mistty-test-content :show (point)))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-fish-right-prompt-mark-mistty-skip
-    (:shell ((fish mistty-test-fish-right-prompt)) :type alacritty)
+    (:shell ((fish mistty-test-fish-right-prompt)) :type all)
   (mistty--send-string mistty-proc "echo ")
   (mistty-wait-for-output :str "echo")
   (should (string-match "^\\$ echo <> +< right$"
@@ -3156,9 +3139,8 @@
   (should (string-match "^\\$ echo  +< right\\[\n+\\]$"
                         (mistty-test-content :show-property '(mistty-skip empty-lines-at-eob)))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-fish-right-prompt-command-for-output
-    (:shell ((fish mistty-test-fish-right-prompt)) :type alacritty)
+    (:shell ((fish mistty-test-fish-right-prompt)) :type all)
   (dolist (text '("one" "two" "three" "four"))
     (mistty-send-text (concat "echo " text))
     (mistty-send-and-wait-for-prompt))
@@ -3180,9 +3162,8 @@
   (mistty-send-text "echo hello")
   (should (equal "hello" (mistty-send-and-capture-command-output))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-zsh-right-prompt-skip-empty-spaces
-    (:selected t :shell ((zsh mistty-test-zsh-right-prompt)) :type alacritty)
+    (:selected t :shell ((zsh mistty-test-zsh-right-prompt)) :type all)
   (mistty-send-text "echo hello")
   (let ((mistty-skip-empty-spaces t)
         (win (selected-window)))
@@ -3194,9 +3175,8 @@
     (should (string-match "^\\$ echo hello<> +< right$"
                           (mistty-test-content :show (point))))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-zsh-right-prompt-skip-empty-spaces-empty-prompt
-    (:selected t :shell ((zsh mistty-test-zsh-right-prompt)) :type alacritty)
+    (:selected t :shell ((zsh mistty-test-zsh-right-prompt)) :type all)
   (let ((mistty-skip-empty-spaces t)
         (win (selected-window)))
     (mistty--cursor-skip win)
@@ -3208,9 +3188,8 @@
     (should (string-match "^\\$ <> +< right$"
                           (mistty-test-content :show (point))))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-zsh-right-prompt-insert-newlines
-    (:shell ((zsh mistty-test-zsh-right-prompt)) :type alacritty)
+    (:shell ((zsh mistty-test-zsh-right-prompt)) :type all)
   ;; This test makes sure that there's no timeout here, as right
   ;; prompts used to cause issues when detecting text with newlines
   ;; that was just replayed.
@@ -3222,9 +3201,8 @@
                                 " *done$")
                         (mistty-test-content))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-zsh-right-prompt-reconcile
-    (:shell ((zsh mistty-test-zsh-right-prompt)) :type alacritty)
+    (:shell ((zsh mistty-test-zsh-right-prompt)) :type all)
   (mistty-run-command
    (insert "echo hello\necho world"))
 
@@ -3232,9 +3210,8 @@
   (should (string-match "^\\$ echo hello +< right\n *echo world<>"
                         (mistty-test-content :show (point)))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-zsh-right-prompt-mark-mistty-skip
-    (:shell ((zsh mistty-test-zsh-right-prompt)) :type alacritty)
+    (:shell ((zsh mistty-test-zsh-right-prompt)) :type all)
   (mistty--send-string mistty-proc "echo ")
   (mistty-wait-for-output :str "echo")
   (should (string-match "^\\$ echo <> +< right$"
@@ -3244,9 +3221,8 @@
   (should (string-match "^\\$ echo  +< right ?\\[\n+\\]$"
                         (mistty-test-content :show-property '(mistty-skip empty-lines-at-eob)))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-zsh-right-prompt-command-for-output
-    (:shell ((zsh mistty-test-zsh-right-prompt)) :type alacritty)
+    (:shell ((zsh mistty-test-zsh-right-prompt)) :type all)
   (dolist (text '("one" "two" "three" "four"))
     (mistty-send-text (concat "echo " text))
     (mistty-send-and-wait-for-prompt))
@@ -3260,9 +3236,8 @@
   (should (equal "echo one" (mistty--command-for-output
                              (mistty--prompt-ranges-for-current-or-previous-output 4)))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-zsh-right-prompt-kill-line-and-yank
-    (:shell ((zsh mistty-test-zsh-right-prompt)) :type alacritty)
+    (:shell ((zsh mistty-test-zsh-right-prompt)) :type all)
   (mistty-send-text "echo hello")
   (mistty-run-command
    (mistty-beginning-of-line))
@@ -3272,9 +3247,8 @@
     (yank)
     (should (equal "echo hello" (buffer-string)))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-fish-multiline-dont-skip-empty-lines-forward
-    (:shell fish :selected t :type alacritty)
+    (:shell fish :selected t :type all)
   (mistty-send-text "for i in (seq 10)\n\necho first\n\n\nend")
   (let ((mistty-skip-empty-spaces t)
         (win (selected-window)))
@@ -3334,9 +3308,8 @@
                      "  <>end")
              (mistty-test-content :show (point))))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-fish-multiline-dont-skip-empty-lines-backward
-    (:shell fish :selected t :type alacritty)
+    (:shell fish :selected t :type all)
   (mistty-send-text "for i in (seq 10)\necho first\n\n\nend")
   (let ((mistty-skip-empty-spaces t)
         (win (selected-window)))
@@ -3373,18 +3346,16 @@
                      "  end")
              (mistty-test-content :show (point))))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-fish-right-prompt-yank
-    (:shell ((fish mistty-test-fish-right-prompt)) :type alacritty)
+    (:shell ((fish mistty-test-fish-right-prompt)) :type all)
   (mistty-send-text "echo hello")
   (copy-region-as-kill (mistty--bol (point)) (mistty--eol (point)))
   (with-temp-buffer
     (yank)
     (should (equal "$ echo hello" (mistty-test-content)))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-fish-right-prompt-kill-line-and-yank
-    (:shell ((fish mistty-test-fish-right-prompt)) :type alacritty)
+    (:shell ((fish mistty-test-fish-right-prompt)) :type all)
   (mistty-send-text "echo hello")
   (mistty-run-command
    (mistty-beginning-of-line))
@@ -3419,9 +3390,8 @@
           (should (string-match "\\$ <>" (mistty-test-content :show (point)))))
       (advice-remove 'mistty--refresh after-refresh))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-fish-right-prompt-delete-whole-line
-    (:shell ((fish mistty-test-fish-right-prompt)) :type alacritty)
+    (:shell ((fish mistty-test-fish-right-prompt)) :type all)
   (mistty-send-text "echo hello")
   (mistty-run-command
    (mistty-beginning-of-line))
@@ -3556,9 +3526,8 @@
       (should (equal 0 (mistty--distance (+ 3 (mistty-test-pos "fou"))
                                          (+ 4 (mistty-test-pos "fou"))))))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-distance-skipped-spaces
-    (:shell fish :selected t :type alacritty)
+    (:shell fish :selected t :type all)
   (mistty-send-text "for i in a b c\necho line $i\nend")
 
   (should (equal 1 (mistty--distance (mistty-test-pos-after "a b c")
@@ -3582,9 +3551,8 @@
   (should (equal 28 (mistty--distance (mistty-test-pos "for")
                                       (mistty-test-pos "end")))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-distance-empty-lines
-    (:shell fish :selected t :type alacritty)
+    (:shell fish :selected t :type all)
   (mistty-send-text "for i in a b c\n\n\nend")
 
   (should (equal 3 (mistty--distance (mistty-test-pos-after "a b c")
@@ -3593,9 +3561,8 @@
   (should (equal -3 (mistty--distance (mistty-test-pos "end")
                                       (mistty-test-pos-after "a b c")))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-distance-empty-lines-unreachable-beg-or-end
-    (:shell fish :selected t :type alacritty)
+    (:shell fish :selected t :type all)
   (mistty-send-text "for i in a b c\n\necho hello\n\nend")
 
   (let ((mistty-skip-empty-spaces t)
@@ -6080,9 +6047,8 @@ function prompt {
    (equal "foo\nbar"
           (mistty-send-and-capture-command-output))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-test-right-prompt-kill-multiple-lines
-    (:type alacritty :shell ((fish mistty-test-fish-right-prompt)
+    (:type all :shell ((fish mistty-test-fish-right-prompt)
                              (zsh mistty-test-zsh-right-prompt)))
   
     (mistty--send-string mistty-proc
@@ -6449,9 +6415,8 @@ precmd_functions+=(prompt_header)
                   (line-beginning-position)
                   (line-end-position)))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-osc133-right-left-prompt-field
-    (:type alacritty :shell ((fish "function fish_prompt; printf '$ \e]133;B\007'; end\n"
+    (:type all :shell ((fish "function fish_prompt; printf '$ \e]133;B\007'; end\n"
                                     mistty-test-fish-right-prompt)))
   ;; Fields are set on both prompts so line-beginning/end cover only
   ;; the command.
@@ -6504,10 +6469,9 @@ precmd_functions+=(prompt_header)
   (should (equal "echo one" (mistty--command-for-output
                              (mistty--prompt-ranges-for-current-or-previous-output 3)))))
 
-;; TODO: make it run on eterm
 (mistty-deftest mistty-osc133-fish-right-prompt-field
-    (:type alacritty :shell ((fish "function fish_prompt; printf '$ \e]133;B\007'; end\n"
-                                   mistty-test-fish-right-prompt)))
+    (:type all :shell ((fish "function fish_prompt; printf '$ \e]133;B\007'; end\n"
+                             mistty-test-fish-right-prompt)))
   (skip-unless (string-match "version 4"
                              (shell-command-to-string (format "%s --version" mistty-test-fish-exe))))
   (mistty-send-text "echo foo bar")
