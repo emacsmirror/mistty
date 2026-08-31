@@ -416,8 +416,7 @@ detecting regions looking at a complete line."
                   (eol (pos-eol)))
               (when (> eol bol)
                 (unless (mistty--detect-right-prompt bol eol window-width)
-                  (let ((end (or (mistty--detect-continue-prompt bol)
-                                 (mistty--detect-indent bol eol))))
+                  (let ((end (mistty--detect-indent bol eol)))
                     (mistty--detect-trailing-spaces end eol)))))
 
             ;; process next line?

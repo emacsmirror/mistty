@@ -166,26 +166,6 @@
     (should (string-match "^\\[ + < right \\]$"
                           (mistty-test-content :show-property '(mistty-skip right-prompt))))))
 
-(ert-deftest mistty-test-postprocess-ipython-continue-prompt ()
-  (ert-with-test-buffer ()
-    (insert (concat "In [3]: for i in (1, 2, 3):" (propertize "    " 'mistty-clear t) "\n"))
-    (insert (concat "   ...:   if i > 1:  " (propertize "    " 'mistty-clear t) "\n"))
-    (insert (concat "   ...:     print(i)  " (propertize "    " 'mistty-clear t) "\n"))
-    (insert (concat "In [133]: for i in (1, 2, 3):\n"))
-    (insert (concat "     ...:     print(i)\n"))
-
-    (mistty--term-postprocess (point-min) 80)
-
-    (should-not (text-property-any (point-min) (point-max) 'mistty-skip 'right-prompt))
-    (should-not (text-property-any (point-min) (point-max) 'mistty-skip 'indent))
-    (should (equal
-             (concat "In [3]: for i in (1, 2, 3):\n"
-                     "[   ...: ]  if i > 1:\n"
-                     "[   ...: ]    print(i)\n"
-                     "In [133]: for i in (1, 2, 3):\n"
-                     "[     ...: ]    print(i)")
-                   (mistty-test-content :show-property '(mistty-skip continue-prompt))))))
-
 (ert-deftest mistty-prompt-contains-open-ended ()
   (let ((mistty--prompt-cell (mistty--make-prompt-cell)))
     (should (mistty--prompt-contains (mistty--make-prompt 'test 10) 10))

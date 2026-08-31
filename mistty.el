@@ -1802,8 +1802,9 @@ Also updates prompt and point."
                  (mistty--set-sync-mark prompt-beg (mistty--prompt-start prompt))
                  (setf (mistty--prompt-realized prompt) t)
                  (setq mistty--active-prompt prompt))))
-
-           (mistty--mark-prompt-fields prompt))
+           (when (mistty--prompt-realized prompt)
+             (mistty--mark-continue-prompts prompt)
+             (mistty--mark-prompt-fields prompt)))
 
          (let ((v (and on-prompt (mistty--can-move-vertically-p))))
            (unless (eq v mistty--can-move-vertically)
@@ -1845,6 +1846,17 @@ Also updates prompt and point."
         (mistty--maybe-scroll-window-down)))
 
     (mistty--report-self-inserted-text)))
+
+(defun mistty--mark-continue-prompts (prompt)
+  "Detect and mark continue prompts that are part of PROMPT."
+  (let* ((scrolline (1+ (mistty--prompt-start prompt)))
+         (end-scrolline (mistty--prompt-end prompt))
+         (bol (mistty--find-scrolline scrolline)))
+    (when bol
+      (while (and (or (null end-scrolline) (< scrolline end-scrolline))
+                  (mistty--detect-continue-prompt bol))
+        (cl-incf scrolline)
+        (setq bol (mistty--bol bol 2))))))
 
 (defun mistty--mark-prompt-fields (prompt)
   "If user input start is known in PROMPT, mark fields.
