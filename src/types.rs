@@ -30,11 +30,6 @@ impl BufferPos {
         Ok(BufferPos(env.call(point_func, [])?.into_rust()?))
     }
 
-    /// Return the lowest valid position of the point.
-    pub fn point_min(env: &Env) -> Result<Self> {
-        Ok(BufferPos(env.call(point_min_func, [])?.into_rust()?))
-    }
-
     /// Return the highest valid position of the point.
     pub fn point_max(env: &Env) -> Result<Self> {
         Ok(BufferPos(env.call(point_max_func, [])?.into_rust()?))

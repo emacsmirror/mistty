@@ -56,7 +56,10 @@ emacs::use_symbols! {
     put_text_property
     term_line_wrap
     mistty_clear
-    mistty_updated
+    mistty_skip
+    indent_sym => "indent"
+    right_prompt_sym => "right-prompt"
+    yank_handler => "yank-handler"
 }
 
 /// Cell or text properties.
@@ -87,11 +90,11 @@ enum ToggleProperty {
     /// Identifies cells that haven't been written to yet.
     Clear,
 
-    /// `render` and `render_damage` mark whatever they write with
-    /// this property, `mistty-updated` on the elisp side, which can
-    /// then be cleared and checked again to identify portions of the
-    /// screen that have changed.
-    Updated,
+    /// Skipped spaces at the beginning of a line.
+    Indent,
+
+    /// Suspected right prompt, including skipped spaces before it.
+    RightPrompt,
 }
 
 impl ToggleProperty {
@@ -103,7 +106,6 @@ impl ToggleProperty {
         ToggleProperty::Underline,
         ToggleProperty::Clear,
         ToggleProperty::Wrapline,
-        ToggleProperty::Updated,
     ];
 
     /// Set of properties relevant when writing in the scrollback area.
@@ -129,9 +131,8 @@ impl ToggleProperty {
             // flagged. Wrapline must be set with set_toggle.
             ToggleProperty::Wrapline => Some(false),
 
-            // Updated is handled specially, as it is just set
-            // whenever some portion of the terminal is rendered.
-            ToggleProperty::Updated => None,
+            // Special properties not mapped to a flag.
+            ToggleProperty::Indent | ToggleProperty::RightPrompt => None,
         }
     }
 }
@@ -231,6 +232,63 @@ fn last_written_cell(row: &Row<Cell>) -> Option<Column> {
     }
 
     None
+}
+
+/// Detect clear regions at the start of a line.
+///
+/// If a clear region is found, return its end position.
+fn detect_indent(
+    row: &Row<Cell>,
+    end_col: Column,
+    right_prompt_start: Option<Column>,
+) -> Option<Column> {
+    if right_prompt_start.is_some() {
+        return None;
+    }
+    for col in 0..end_col.0 {
+        let col = Column(col);
+        if !is_clear(row[col].flags) {
+            if col.0 > 0 {
+                return Some(col);
+            } else {
+                return None;
+            }
+        }
+    }
+
+    Some(end_col)
+}
+
+/// Detect a right prompt.
+///
+/// If a right prompt is found, return its start position.
+fn detect_right_prompt(row: &Row<Cell>, last_written: Option<Column>) -> Option<Column> {
+    match last_written {
+        None => None,
+        Some(last_written) => {
+            if (last_written.0 + 2) >= row.len() {
+                for col in (0..last_written.0).rev() {
+                    let col = Column(col);
+                    if is_clear(row[col].flags) {
+                        let empty = col;
+                        for col in (0..empty.0).rev() {
+                            let col = Column(col);
+                            if !is_clear(row[col].flags) {
+                                let start = col + 1;
+                                if start <= empty {
+                                    return Some(start);
+                                }
+                                return None;
+                            }
+                        }
+                        return Some(Column(0));
+                    }
+                }
+            }
+
+            None
+        }
+    }
 }
 
 /// Return the line containing the last cell that isn't clear.
@@ -368,16 +426,22 @@ pub fn render_lines<'a>(
     let cursor_point = grid.cursor.point;
     let origin = BufferPos::point(env)?;
     let mut tracker = PropertyTracker::new(origin, ToggleProperty::ON_TERMINAL);
-    tracker.set_toggle(origin, ToggleProperty::Updated, true);
-
     let mut as_string = String::with_capacity((end.0 - beg.0) as usize * (last_column.0 + 1));
     let mut pos = origin;
     for line in beg.0..end.0 {
         let line = Line(line);
         let row = &grid[line];
-        let mut end_col = last_written_cell(row).map(|c| c + 1).unwrap_or(Column(0));
-        if line == cursor_point.line && end_col < cursor_point.column {
-            end_col = cursor_point.column;
+        let last_written = last_written_cell(row).map(|c| c + 1);
+        let end_col =
+            if line == cursor_point.line && last_written.is_none_or(|v| v < cursor_point.column) {
+                cursor_point.column
+            } else {
+                last_written.unwrap_or(Column(0))
+            };
+        let right_prompt_start = detect_right_prompt(row, last_written);
+        let indent_end = detect_indent(row, end_col, right_prompt_start);
+        if indent_end.is_some() {
+            tracker.set_toggle(pos, ToggleProperty::Indent, true);
         }
         for col in 0..end_col.0 {
             let col = Column(col);
@@ -385,6 +449,12 @@ pub fn render_lines<'a>(
             let cell_pos = pos;
             pos += append_cell_to_string(cell, &mut as_string);
             tracker.track_change(cell_pos, cell);
+            if Some(col) == indent_end {
+                tracker.set_toggle(cell_pos, ToggleProperty::Indent, false);
+            }
+            if Some(col) == right_prompt_start {
+                tracker.set_toggle(cell_pos, ToggleProperty::RightPrompt, true);
+            }
 
             // Have we found the cursor? If yes, we now know its
             // (upcoming) buffer position.
@@ -393,6 +463,12 @@ pub fn render_lines<'a>(
                     **cursor_pos = Some(cell_pos);
                 }
             }
+        }
+        if indent_end == Some(end_col) {
+            tracker.set_toggle(pos, ToggleProperty::Indent, false);
+        }
+        if right_prompt_start.is_some() {
+            tracker.set_toggle(pos, ToggleProperty::RightPrompt, false);
         }
         // end of line
         if cursor_point.line == line && cursor_point.column == end_col {
@@ -609,8 +685,18 @@ impl PropertyTracker {
                 RenderProperty::Toggle(ToggleProperty::Clear) => {
                     env.call(put_text_property, (start, end, mistty_clear, true))?;
                 }
-                RenderProperty::Toggle(ToggleProperty::Updated) => {
-                    env.call(put_text_property, (start, end, mistty_updated, true))?;
+                RenderProperty::Toggle(ToggleProperty::Indent) => {
+                    env.call(put_text_property, (start, end, mistty_skip, indent_sym))?;
+                }
+                RenderProperty::Toggle(ToggleProperty::RightPrompt) => {
+                    env.call(
+                        put_text_property,
+                        (start, end, mistty_skip, right_prompt_sym),
+                    )?;
+                    env.call(
+                        put_text_property,
+                        (start, end, yank_handler, env.list(((), "", (), ()))?),
+                    )?;
                 }
             }
         }

@@ -311,51 +311,6 @@
            "9")            ; not modified, but the cursor moved from there
           (mistty-test-content :show cursor)))))))
 
-(ert-deftest mistty-alacritty-vt-render-marks-updated ()
-  (let ((term (mistty-alacritty-vt-make-vterm 20 10)))
-    ;; fill the screen
-    (mistty-alacritty-vt-process-bytes term (vconcat "\r0"))
-    (dotimes (i 9)
-      (mistty-alacritty-vt-process-bytes term (vconcat (format "\r\n%d" (1+ i)))))
-    (goto-char (point-min))
-    (ert-with-test-buffer ()
-      (let ((cursor (make-marker)))
-        (mistty-alacritty-vt-render term cursor)
-        (should
-         (equal
-          (concat
-           "[0\n"
-           "1\n"
-           "2\n"
-           "3\n"
-           "4\n"
-           "5\n"
-           "6\n"
-           "7\n"
-           "8\n"
-           "9\n]")
-          (mistty-test-content :show-property '(mistty-updated t))))
-        (remove-text-properties (point-min) (point-max) '(mistty-updated t))
-
-        ;; move cursor 3 lines up, 2 columns right
-        (mistty-alacritty-vt-process-bytes term (vconcat "\r\e[3A\e[2Cmodified\r\e[2A\e[2C"))
-        (goto-char (point-min))
-        (mistty-alacritty-vt-render-damaged term cursor)
-        (should
-         (equal
-          (concat
-           "[0\n]"           ; not sure why
-           "1\n"
-           "2\n"
-           "3\n"
-           "[4\n]"           ; not modified, but the cursor moved there
-           "5\n"
-           "[6 modified\n]"  ; modified
-           "7\n"
-           "8\n"
-           "[9\n]")          ; not modified, but the cursor moved from there
-          (mistty-test-content :show-property '(mistty-updated t))))))))
-
 (ert-deftest mistty-alacritty-vt-pty-write ()
   (let ((term (mistty-alacritty-vt-make-vterm 20 10)))
     ;; \e[6n queries the cursor position. ]
@@ -1217,3 +1172,82 @@
                        "<>%\n")
                (mistty-test-content
                 :trim nil :show cursor :show-property '(term-line-wrap t)))))))
+
+
+(ert-deftest mistty-alacritty-vt-mark-indent ()
+  (let ((term (mistty-alacritty-vt-make-vterm 20 10))
+        (cursor (make-marker)))
+    (ert-with-test-buffer ()
+      (mistty-alacritty-vt-process-bytes
+       term
+       (vconcat "$ for i in a b c\r\n\e[3Cecho\e[2C$i\r\n\e[3C"))
+      (mistty-alacritty-vt-render term cursor)
+      (should
+       (equal
+        (concat
+         "$ for i in a b c\n"
+         "[   ]echo  $i\n"
+         "[   ]<>\n")
+        (mistty-test-content
+         :trim nil :show cursor :show-property '(mistty-skip indent))))
+
+      (mistty-alacritty-vt-process-bytes
+       term
+       (vconcat "call\e[2C$i\r\ndone"))
+      (goto-char (point-min))
+      (mistty-alacritty-vt-render term cursor)
+      (should
+       (equal
+        (concat
+         "$ for i in a b c\n"
+         "[   ]echo  $i\n"
+         "[   ]call  $i\n"
+         "done\n")
+        (mistty-test-content :trim nil :show-property '(mistty-skip indent))))
+      )))
+
+(ert-deftest mistty-alacritty-vt-mark-right-prompt ()
+  (let ((term (mistty-alacritty-vt-make-vterm 30 10))
+        (cursor (make-marker)))
+    (mistty-alacritty-vt-process-bytes
+     term
+     (vconcat "$ echo foo\e[10Cbar\r\n"
+              "\e[24G> right\e[1G$ echo foo\r\n"
+              "\e[23G> right\e[1G$ echo foo\r\n"
+              "\e[22G> right\e[1G$ echo foo\r\n"
+              "\e[21G> right\e[1G$ echo foo\r\n"
+              "\e[24G> right\e[1G"
+              ))
+    (ert-with-test-buffer ()
+        (mistty-alacritty-vt-render term cursor)
+        (should
+         (equal
+          (concat
+           ;; not a right prompt; bar is too much to the left
+           "$ echo foo          bar\n"
+
+           ;; a right prompt, > right is at the end
+           "$ echo foo[             > right]\n"
+
+           ;; a right prompt, > right is almost at the end (1col)
+           "$ echo foo[            > right]\n"
+
+           ;; a right prompt, > right is almost at the end (2col)
+           "$ echo foo[           > right]\n"
+
+           ;; not a right prompt; >right is too far from end
+           "$ echo foo          > right\n"
+
+           ;; a right prompt, even though there is nothing to the left
+           "[                       > right]\n")
+          (mistty-test-content
+           :trim nil :show-property '(mistty-skip right-prompt))))
+
+        ;; the last line shouldn't have an indent, because
+        ;; right-prompt takes precedence.
+        (should
+         (equal
+           "                       > right\n"
+          (mistty-test-content
+           :trim nil :start (mistty--bol (point-max) 0)
+           :show-property '(mistty-skip indent)))))))

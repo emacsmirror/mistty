@@ -158,17 +158,9 @@
 (cl-defmethod mistty--term-cleanup-prompt-sp ((_term mistty--term-alacritty) pos)
   (mistty-alacritty--cleanup-prompt-sp pos))
 
-(cl-defmethod mistty--term-changed ((_term mistty--term-alacritty) beg end)
-  (add-text-properties beg end '(mistty-updated t)))
+(cl-defmethod mistty--term-changed ((_term mistty--term-alacritty) _beg _end))
 
-(cl-defmethod mistty--term-postprocess-changed ((term mistty--term-alacritty))
-  (with-current-buffer (mistty--term-alacritty-buf term)
-    (when-let* ((change-start
-                 (text-property-any (point-min) (point-max) 'mistty-updated t)))
-      ;; TODO: use change-start instead of (point-min); this whole
-      ;; business with mistty-updated is just silly otherwise.
-      (mistty--term-postprocess (point-min) mistty-alacritty-columns)
-      (remove-text-properties change-start (point-max) '(mistty-updated t)))))
+(cl-defmethod mistty--term-postprocess-changed ((_term mistty--term-alacritty)))
 
 (defun mistty--term-alacritty-add-osc-detection (accum term)
   "Register handlers for OSC sequences in ACCUM for TERM."
