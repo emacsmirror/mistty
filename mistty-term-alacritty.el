@@ -160,8 +160,6 @@
 
 (cl-defmethod mistty--term-changed ((_term mistty--term-alacritty) _beg _end))
 
-(cl-defmethod mistty--term-postprocess-changed ((_term mistty--term-alacritty)))
-
 (defun mistty--term-alacritty-add-osc-detection (accum term)
   "Register handlers for OSC sequences in ACCUM for TERM."
 

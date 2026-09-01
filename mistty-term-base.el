@@ -131,12 +131,6 @@ and marks the spaces at the end of the previous line as blank.
 POS should be the position where the CR is called in the prompt-sp
 sequence.")
 
-(cl-defgeneric mistty--term-postprocess-changed (term)
-  "Post-process the regions changed since last call.
-
-This should call `mistty--term-postprocess', which sets \=='mistty-skip
-properties on the changed regions.")
-
 (cl-defgeneric mistty--term-changed (term beg end)
   "Mark the region between BEG AND end as requiring post-processing.")
 

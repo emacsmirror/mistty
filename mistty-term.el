@@ -224,10 +224,6 @@ The old value, if any, is pushed into `mistty--prompt-archive'."
 
 Detected prompts can be found in `mistty-prompt'."
   (mistty--accum-add-post-processor
-   accum
-   (lambda ()
-     (mistty--term-postprocess-changed term)))
-  (mistty--accum-add-post-processor
    accum (mistty--regexp-prompt-detector))
 
   ;; Enable bracketed paste
@@ -392,125 +388,6 @@ the last set of properties to be registered is applied."
     (setq mistty--term-properties-to-add-alist
           (delq cell
                 mistty--term-properties-to-add-alist))))
-
-(defun mistty--term-postprocess (region-start window-width)
-  "Set mistty-skip and yank handlers between REGION-START and REGION-END.
-
-WINDOW-WIDTH is used to detect right prompts.
-
-This sets properties from the mistty-clear properties,
-detecting regions looking at a complete line."
-  (save-excursion
-    (let ((inhibit-read-only t)
-          (inhibit-modification-hooks t))
-      (goto-char region-start)
-      (goto-char (pos-bol))
-      (setq region-start (point))
-      (remove-text-properties
-       region-start (point-max)
-       '(mistty-skip nil yank-handler nil mistty-updated nil))
-      (goto-char region-start)
-      (while
-          (progn
-            (let ((bol (pos-bol))
-                  (eol (pos-eol)))
-              (when (> eol bol)
-                (unless (mistty--detect-right-prompt bol eol window-width)
-                  (let ((end (mistty--detect-indent bol eol)))
-                    (mistty--detect-trailing-spaces end eol)))))
-
-            ;; process next line?
-            (forward-line 1)
-            (< (point) (point-max)))))))
-
-(defun mistty--detect-right-prompt (bol eol window-width)
-  "Detect right prompt and return its left position or nil.
-
-BOL and EOL define the region to look in. WINDOW-WIDTH must be the width
-of the terminal, usually `mistty-alacritty-columns'."
-  (let ((pos (1- eol)) in-prompt)
-    (when (and (< (abs (- window-width (mistty--column-count))) 3)
-               (setq in-prompt (text-property-not-all (max bol (- eol 3)) eol 'mistty-clear t)))
-      (when-let* ((rightmost-nonclear (previous-single-property-change in-prompt 'mistty-clear nil bol)))
-        (when (and (eq (char-before rightmost-nonclear) ?\ )
-                   (> rightmost-nonclear bol))
-          (setq pos (1- rightmost-nonclear))
-          (while (and (>= pos bol)
-                      (eq (char-after pos) ?\ )
-                      (get-text-property pos 'mistty-clear))
-            (cl-decf pos))
-          (cl-incf pos)
-          (add-text-properties
-           pos eol '(mistty-skip right-prompt
-                                 yank-handler (nil "" nil nil)))
-
-          pos)))))
-
-(defun mistty--detect-continue-prompt (bol)
-  "Detect continue prompt and return its right position or nil.
-
-BOL define the start of the region to look in."
-  (catch 'mistty-return
-    (save-excursion
-      (goto-char bol)
-      (dolist (prompt mistty-multi-line-continue-prompts)
-        (when (looking-at prompt)
-          (let ((end (match-end 0)))
-            (when (> end bol)
-              (add-text-properties
-               bol end
-               '(mistty-skip continue-prompt yank-handler (nil "" nil nil)))
-              (throw 'mistty-return end))))))))
-
-(defun mistty--detect-indent (bol eol)
-  "Detect line indentation and return its right position or nil.
-
-BOL and EOL define the region to look in."
-  (let ((pos bol))
-    (while (and (eq (char-after pos) ?\ )
-                (get-text-property pos 'mistty-clear))
-      (cl-incf pos))
-    (when (> pos bol)
-      (when (= pos eol)
-        (setq pos (min pos (+ bol (mistty--previous-line-indent)))))
-      (put-text-property bol pos 'mistty-skip 'indent))
-
-    pos))
-
-(defun mistty--detect-trailing-spaces (bol eol)
-  "Detect trailing spaces the left position or nil.
-
-BOL and EOL define the region to look in."
-  (let ((pos (1- eol)))
-    (while (and (>= pos bol)
-                (eq (char-after pos) ?\ )
-                (get-text-property pos 'mistty-clear))
-      (cl-decf pos))
-    (cl-incf pos)
-
-    (when (< pos eol)
-      (add-text-properties
-       pos eol
-       `(mistty-skip trailing yank-handler (nil "" nil nil))))
-
-    pos))
-
-(defun mistty--previous-line-indent ()
-  "Return the indentation of the previous line.
-
-This requires the text property mistty-skip to have been set on
-the previous line."
-  (or
-   (save-excursion
-     (when (= 0 (forward-line -1))
-       (let* ((bol (pos-bol))
-              (eol (pos-eol))
-              (pos bol))
-         (while (and (< pos eol)
-                     (eq 'indent (get-text-property pos 'mistty-skip)))
-           (cl-incf pos))
-         (- pos bol))))
-   0))
 
 (defun mistty--maybe-bracketed-str (str)
   "Prepare STR to be sent, possibly bracketed, to the terminal.
