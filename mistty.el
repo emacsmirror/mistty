@@ -525,8 +525,12 @@ are sent directly to the terminal."
   "<right>" #'mistty-send-last-key)
 
 (defvar-keymap mistty-fullscreen-mode-map
-  :doc "Keymap active on the terminal buffer while fullscreen."
-  "C-c C-j" #'mistty-toggle-buffers)
+  :doc "Additional keymap active on the terminal buffer while fullscreen.
+
+This is in addition to the mode's keymap, `mistty-fullscreen-map' for
+eterm terminals and `mistty-alacritty-mode-map' for alacritty terminals."
+  "C-c C-j" #'mistty-toggle-buffers
+  "C-c C-q" #'mistty-send-key-sequence)
 
 (define-minor-mode mistty-fullscreen-mode
   "Minor mode active on the terminal buffer while fullscreen.
