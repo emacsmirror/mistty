@@ -27,6 +27,7 @@
 (require 'mistty-scrolline)
 (eval-when-compile
   (require 'cl-lib))
+(require 'ansi-osc) ; links use ansi-osc-hyperlink
 
 (defvar explicit-shell-file-name) ;; defined in shell
 

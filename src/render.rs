@@ -6,7 +6,7 @@ use alacritty_terminal::{
     index::{Column, Line},
     term::{
         TermDamage,
-        cell::{Cell, Flags},
+        cell::{Cell, Flags, Hyperlink},
     },
     vte::ansi::{Color, NamedColor, Rgb},
 };
@@ -23,6 +23,7 @@ emacs::use_functions! {
     face_background
     goto_char
     insert
+    make_text_button
     propertize
     set_marker
 }
@@ -48,6 +49,9 @@ emacs::use_symbols! {
     ansi_color_underline
     ansi_color_white
     ansi_color_yellow
+    ansi_osc_hyperlink
+    browse_url_data
+    type_sym => "type"
     default_face => "default"
     cursor_face => "cursor"
     foreground_sym => ":foreground"
@@ -62,13 +66,15 @@ emacs::use_symbols! {
 }
 
 /// Cell or text properties.
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 enum RenderProperty {
     /// Foreground color, [Cell::fg].
     Fg(Color),
 
     /// Background color, [Cell::bg].
     Bg(Color),
+
+    Link(Hyperlink),
 
     /// Properties that are either on or off, [Cell::flags].
     Toggle(ToggleProperty),
@@ -558,6 +564,7 @@ struct PropertyTracker {
     bg: (Color, BufferPos),
     toggles: &'static [ToggleProperty],
     toggle_map: HashMap<ToggleProperty, BufferPos>,
+    hyperlink: Option<(Hyperlink, BufferPos)>,
 
     buf: Vec<(RenderProperty, BufferPos, BufferPos)>,
 }
@@ -567,6 +574,7 @@ impl PropertyTracker {
         Self {
             fg: (Color::Named(NamedColor::Foreground), origin),
             bg: (Color::Named(NamedColor::Background), origin),
+            hyperlink: None,
             toggle_map: HashMap::new(),
             toggles,
             buf: vec![],
@@ -580,6 +588,8 @@ impl PropertyTracker {
     fn track_change(&mut self, pos: BufferPos, cell: &Cell) {
         self.set_fg(pos, cell.fg);
         self.set_bg(pos, cell.bg);
+        self.set_link(pos, cell.hyperlink());
+
         let flags = cell.flags;
         for toggle in self.toggles {
             if let Some(val) = toggle.is_set(flags) {
@@ -610,6 +620,28 @@ impl PropertyTracker {
         }
     }
 
+    fn set_link(&mut self, pos: BufferPos, cell_link: Option<Hyperlink>) {
+        match (&self.hyperlink, cell_link) {
+            (Some((existing_link, start_pos)), Some(cell_link)) => {
+                if *existing_link == cell_link {
+                    return;
+                }
+                self.buf
+                    .push((RenderProperty::Link(existing_link.clone()), *start_pos, pos));
+                self.hyperlink = Some((cell_link, pos));
+            }
+            (None, Some(cell_link)) => {
+                self.hyperlink = Some((cell_link, pos));
+            }
+            (Some((existing_link, start_pos)), None) => {
+                self.buf
+                    .push((RenderProperty::Link(existing_link.clone()), *start_pos, pos));
+                self.hyperlink = None;
+            }
+            (None, None) => {}
+        }
+    }
+
     /// Disable or enable a property for the given position.
     fn set_toggle(&mut self, pos: BufferPos, toggle: ToggleProperty, is_set: bool) {
         let start = self.toggle_map.get(&toggle);
@@ -635,6 +667,7 @@ impl PropertyTracker {
         for toggle in self.toggles {
             self.set_toggle(end, *toggle, false);
         }
+        self.set_link(end, None);
         assert!(self.toggle_map.is_empty());
         assert_eq!(self.fg.0, Color::Named(NamedColor::Foreground));
         assert_eq!(self.bg.0, Color::Named(NamedColor::Background));
@@ -664,6 +697,19 @@ impl PropertyTracker {
                     env.call(
                         add_face_text_property,
                         (start, end, env.list((background_sym, hex))?),
+                    )?;
+                }
+                RenderProperty::Link(hyperlink) => {
+                    env.call(
+                        make_text_button,
+                        (
+                            start,
+                            end,
+                            type_sym,
+                            ansi_osc_hyperlink,
+                            browse_url_data,
+                            hyperlink.uri(),
+                        ),
                     )?;
                 }
                 RenderProperty::Toggle(ToggleProperty::Italic) => {

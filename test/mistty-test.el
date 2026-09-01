@@ -6978,3 +6978,15 @@ precmd_functions+=(prompt_header)
           (point-min)
           (mistty--term-screen-top-pos mistty--term))
          10))))
+
+(mistty-deftest mistty-test-osc-8 (:type all)
+  (mistty--send-string
+   mistty-proc "printf \"\\e]8;;http://www.example.com/\\afoob\141r\\e]8;;\\a\\n\"\n")
+  (mistty-wait-for-output :start (point-min) :str "foobar")
+  (goto-char (point-min))
+  (forward-line)
+  (let ((button (button-at (point))))
+    (should-not (null button))
+    (should (eq 'ansi-osc-hyperlink (button-get button 'type)))
+    (should (equal "http://www.example.com/" (button-get button 'browse-url-data)))))
+

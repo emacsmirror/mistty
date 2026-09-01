@@ -1173,7 +1173,6 @@
                (mistty-test-content
                 :trim nil :show cursor :show-property '(term-line-wrap t)))))))
 
-
 (ert-deftest mistty-alacritty-vt-mark-indent ()
   (let ((term (mistty-alacritty-vt-make-vterm 20 10))
         (cursor (make-marker)))
@@ -1251,3 +1250,40 @@
           (mistty-test-content
            :trim nil :start (mistty--bol (point-max) 0)
            :show-property '(mistty-skip indent)))))))
+
+(ert-deftest mistty-alacritty-vt-link ()
+  (let ((term (mistty-alacritty-vt-make-vterm 20 10))
+        (cursor (make-marker)))
+    (ert-with-test-buffer ()
+      (mistty-alacritty-vt-process-bytes
+       term
+       (vconcat "hello \e]8;;http://www.example.com/world\e\\world\e]8;;\e\\ !"))
+      (mistty-alacritty-vt-render term cursor)
+      (goto-char (point-min))
+      (search-forward "world")
+      (let* ((hello-beg (match-beginning 0))
+             (hello-end (match-end 0))
+             (button (button-at hello-beg)))
+        (should-not (null button))
+        (should (button-at (1- hello-end)))
+        (should-not (button-at (1- hello-beg)))
+        (should-not (button-at (1+ hello-end)))
+        (should (eq 'ansi-osc-hyperlink (button-get button 'type)))
+        (should (equal "http://www.example.com/world" (button-get button 'browse-url-data)))))))
+
+(ert-deftest mistty-alacritty-vt-consecutive-links ()
+  (let ((term (mistty-alacritty-vt-make-vterm 20 10))
+        (cursor (make-marker)))
+    (ert-with-test-buffer ()
+      (mistty-alacritty-vt-process-bytes
+       term
+       (vconcat "\e]8;;http://www.example.com/hello\e\\hello \e]8;;\e\\"
+                "\e]8;;http://www.example.com/world\e\\world\e]8;;\e\\ !"))
+      (mistty-alacritty-vt-render term cursor)
+      (goto-char (point-min))
+      (search-forward "hello")
+      (should (equal "http://www.example.com/hello" (button-get (button-at (match-beginning 0)) 'browse-url-data)))
+      (should (equal "http://www.example.com/hello" (button-get (button-at (1- (match-end 0))) 'browse-url-data)))
+      (search-forward "world")
+      (should (equal "http://www.example.com/world" (button-get (button-at (match-beginning 0)) 'browse-url-data)))
+      (should (equal "http://www.example.com/world" (button-get (button-at (1- (match-end 0))) 'browse-url-data))))))
