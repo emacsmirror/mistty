@@ -59,7 +59,6 @@ emacs::use_symbols! {
     mistty_skip
     indent_sym => "indent"
     right_prompt_sym => "right-prompt"
-    yank_handler => "yank-handler"
 }
 
 /// Cell or text properties.
@@ -692,10 +691,6 @@ impl PropertyTracker {
                     env.call(
                         put_text_property,
                         (start, end, mistty_skip, right_prompt_sym),
-                    )?;
-                    env.call(
-                        put_text_property,
-                        (start, end, yank_handler, env.list(((), "", (), ()))?),
                     )?;
                 }
             }

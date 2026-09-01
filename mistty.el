@@ -1778,16 +1778,15 @@ Also updates prompt and point."
                              end-scrolline
                              scrolline)))))
 
-         (when-let* ((prompt (mistty--prompt)))
+         (when-let* ((prompt (mistty--prompt))
+                     (prompt-beg (mistty--find-scrolline
+                                  (mistty--prompt-start prompt))))
            ;; If a new prompt was detected, restrict sync region to
            ;; the beginning of that prompt.
            (when (and (not (mistty--prompt-realized prompt))
                       (memq (mistty--prompt-source prompt) '(bracketed-paste osc133))
                       (null (mistty--prompt-end prompt)))
-             (when-let* ((prompt-beg (mistty--find-scrolline
-                                      (mistty--prompt-start prompt)))
-                        (cursor (when (process-live-p mistty-proc)
-                                  (mistty-cursor))))
+             (when-let* ((cursor (when (process-live-p mistty-proc) (mistty-cursor))))
                (when (and (> cursor prompt-beg)
                           (or (eq 'osc133 (mistty--prompt-source prompt))
                               (string-match mistty--prompt-regexp
@@ -1803,8 +1802,9 @@ Also updates prompt and point."
                  (setf (mistty--prompt-realized prompt) t)
                  (setq mistty--active-prompt prompt))))
            (when (mistty--prompt-realized prompt)
-             (mistty--mark-continue-prompts prompt)
-             (mistty--mark-prompt-fields prompt)))
+             (mistty--mark-continue-prompts prompt prompt-beg)
+             (mistty--mark-right-prompt prompt-beg)
+             (mistty--mark-prompt-fields prompt prompt-beg)))
 
          (let ((v (and on-prompt (mistty--can-move-vertically-p))))
            (unless (eq v mistty--can-move-vertically)
@@ -1847,18 +1847,22 @@ Also updates prompt and point."
 
     (mistty--report-self-inserted-text)))
 
-(defun mistty--mark-continue-prompts (prompt)
+(defun mistty--mark-continue-prompts (prompt prompt-start)
   "Detect and mark continue prompts that are part of PROMPT."
   (let* ((scrolline (1+ (mistty--prompt-start prompt)))
          (end-scrolline (mistty--prompt-end prompt))
-         (bol (mistty--find-scrolline scrolline)))
-    (when bol
-      (while (and (or (null end-scrolline) (< scrolline end-scrolline))
-                  (mistty--detect-continue-prompt bol))
-        (cl-incf scrolline)
-        (setq bol (mistty--bol bol 2))))))
+         (bol (mistty--bol prompt-start 2)))
+    (while (and (or (null end-scrolline) (< scrolline end-scrolline))
+                (mistty--detect-continue-prompt bol))
+      (cl-incf scrolline)
+      (setq bol (mistty--bol bol 2)))))
 
-(defun mistty--mark-prompt-fields (prompt)
+(defun mistty--mark-right-prompt (prompt-beg)
+  (let ((line-end (mistty--eol prompt-beg)))
+    (when-let ((pos (text-property-any prompt-beg line-end 'mistty-skip 'right-prompt)))
+      (put-text-property pos line-end 'yank-handler '(nil "" nil nil)))))
+
+(defun mistty--mark-prompt-fields (prompt prompt-beg)
   "If user input start is known in PROMPT, mark fields.
 
 Fields allow the like of `beginning-of-line' and `end-of-line' to ignore
@@ -1866,7 +1870,7 @@ prompt and right prompts."
   (when-let* ((user-input-start (mistty--prompt-user-input-start prompt))
               (start-scrolline (car user-input-start))
               (start-chars (cdr user-input-start))
-              (bol (mistty--find-scrolline start-scrolline))
+              (bol prompt-beg)
               (end (mistty--eol bol))
               (start-pos (min end (+ bol start-chars))))
     (when (> start-pos bol)
@@ -2217,7 +2221,9 @@ It also marks the prompt region with the text property
                         (mistty--prompt-end prompt)
                         prompt-beg
                         prompt-end)
-            (mistty--mark-prompt-fields prompt)
+            (mistty--mark-continue-prompts prompt prompt-beg)
+            (mistty--mark-right-prompt prompt-beg)
+            (mistty--mark-prompt-fields prompt prompt-beg)
             (put-text-property
              prompt-beg prompt-end
              'mistty-input-id (mistty--prompt-input-id prompt))))))
