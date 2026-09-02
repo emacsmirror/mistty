@@ -32,7 +32,9 @@
   :collect        ":compile"
   :define-cleaner (mistty-cleaner-module "Delete generated module" :default t)
   (eldev-call-process "cargo" '("build") :forward-output t :die-on-error t)
-  (eldev-call-process "cp" (list "target/debug/libmistty_alacritty_vt.so" target)
+  (eldev-call-process "cp" (list
+                            (concat "target/debug/libmistty_alacritty_vt" module-file-suffix)
+                            target)
                        :forward-output t :die-on-error t))
 
 ;;; Test dependencies
