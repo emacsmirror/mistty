@@ -1009,7 +1009,8 @@ window."
   "Attach the current `mistty-mode' buffer to TERM."
   (let ((work-buffer (current-buffer))
         (term-buffer (mistty--term-buf term))
-        (proc (mistty--term-proc term)))
+        (proc (mistty--term-proc term))
+        (sync-scrolline mistty--scrolline-home-num))
 
     (when proc
       (process-put proc 'mistty-work-buffer work-buffer)
@@ -1020,6 +1021,7 @@ window."
     (setq mistty-term-buffer term-buffer)
     (setq mistty--prompt-cell (buffer-local-value 'mistty--prompt-cell term-buffer))
     (setq mistty--queue (mistty--make-queue proc))
+    (setq mistty-goto-cursor-next-time t)
     (mistty--needs-refresh)
 
     (with-current-buffer term-buffer
@@ -1028,7 +1030,15 @@ window."
       (setq mistty-work-buffer work-buffer)
       (setq mistty-term-buffer term-buffer)
       (unless mistty-sync-marker
-        (setq mistty-sync-marker (copy-marker (mistty--term-screen-top-pos term))))
+        (setq mistty-sync-marker (make-marker)))
+
+      ;; attempt to recover the previous sync position, if that fails,
+      ;; continue from screen top.
+      (if-let ((sync-pos (mistty--find-scrolline sync-scrolline)))
+          (move-marker mistty-sync-marker sync-pos)
+        (move-marker mistty-sync-marker (mistty--term-screen-top-pos term))
+        (setq mistty--scrolline-home-num sync-scrolline))
+
       (mistty--term-autoresize mistty--term nil)
       (mistty--term-setup-buffer term nil))
 
@@ -1737,7 +1747,9 @@ Also updates prompt and point."
                               (buffer-live-p mistty-term-buffer)
                               (mistty-on-prompt-p (mistty-cursor))))
 
-         (mistty-log "refresh (%s)" (if on-prompt "complete" "quick"))
+         (mistty-log "refresh (%s)@%s"
+                     (if on-prompt "complete" "quick")
+                     mistty--scrolline-home-num)
          (mistty--sync-buffer mistty-term-buffer (not on-prompt))
 
          ;; Make fake newlines invisible. They're not really "visible"

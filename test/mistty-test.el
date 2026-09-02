@@ -1456,6 +1456,41 @@
     (should (equal (concat " mistty tty " bufname) (buffer-name term-buffer)))
     (should (equal bufname (buffer-name work-buffer)))))
 
+(mistty-deftest mistty-test-point-after-leaving-fullscreen (:selected t :type all)
+  (mistty-send-text "echo hello, world")
+  (mistty-send-and-wait-for-prompt)
+
+  (let ((bufname (buffer-name))
+        (work-buffer mistty-work-buffer)
+        (term-buffer mistty-term-buffer)
+        (proc mistty-proc))
+
+    (should (executable-find "vi"))
+    (execute-kbd-macro (kbd "v i RET"))
+    (mistty-wait-for-output
+     :proc proc
+     :test
+     (lambda ()
+       (with-current-buffer work-buffer mistty-fullscreen)))
+    (with-current-buffer work-buffer
+      (mistty-test-goto "echo hello")
+      (goto-char (point-min)))
+    (execute-kbd-macro (kbd ": q ! RET"))
+    (mistty-wait-for-output
+     :proc proc
+     :test
+     (lambda ()
+       (not (buffer-local-value 'mistty-fullscreen work-buffer))))
+    
+    (with-current-buffer work-buffer
+      (should
+       (equal
+        (concat "$ echo hello, world\n"
+                "hello, world\n"
+                "$ vi\n"
+                "<2>$ <><1>")
+        (mistty-test-content :show (list (point) (mistty-cursor) mistty-sync-marker)))))))
+
 (defun mistty-test-enter-fullscreen (on-seq off-seq &optional clear-screen)
   (let ((work-buffer mistty-work-buffer)
         (proc mistty-proc))
