@@ -258,8 +258,8 @@
     (should (equal 'ansi-color-bold (get-text-property (point) 'face)))
 
     (mistty-test-goto "italic")
-    (should (equal (sort '(ansi-color-bold ansi-color-italic))
-                   (sort (get-text-property (point) 'face))))
+    (should (equal (sort '(ansi-color-bold ansi-color-italic) #'value<)
+                   (sort (get-text-property (point) 'face) #'value<)))
 
     (mistty-test-goto "underline")
     (should (equal 'ansi-color-underline (get-text-property (point) 'face)))

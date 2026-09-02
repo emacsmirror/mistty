@@ -221,13 +221,15 @@ With logging disabled, the error is just reported with `message'. With
 logging enabled, the error is logged using `mistty-log' together with a
 short backtrace."
   (declare (indent 1))
-  `(with-demoted-errors ,(format "[mistty] error in %s: %%s" context)
-       (handler-bind
-      ((error (lambda (err)
-                (let ((context ,context))
-                  (mistty-log-error context err)))))
-
-      ,@body)))
+  (let ((msg (format "[mistty] error in %s: %%s" context)))
+    (if (eval-when-compile (< emacs-major-version 30))
+        `(with-demoted-errors ,msg ,@body)
+      `(with-demoted-errors ,msg
+         (handler-bind
+             ((error (lambda (err)
+                       (let ((context ,context))
+                         (mistty-log-error context err)))))
+           ,@body)))))
 
 (defun mistty-log-error (context err)
   "Report a toplevel error in CONTEXT.

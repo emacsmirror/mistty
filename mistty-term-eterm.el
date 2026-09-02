@@ -186,9 +186,8 @@ to call `mistty--term-postprocess'.")
       ;; This makes sure the obsolete option
       ;; term-suppress-hard-newline is not set, as MisTTY relies on
       ;; term.el inserting fake newlines marked with term-line-wrap.
-      (let ((var 'term-suppress-hard-newline))
-        (when (and (boundp var) (symbol-value var))
-          (setf (buffer-local-value var (current-buffer)) nil)))
+      (with-suppressed-warnings ((obsolete term-suppress-hard-newline))
+        (setq term-suppress-hard-newline nil))
 
       (mistty-term--exec (car command) (cdr command))
       (let* ((proc (get-buffer-process term-buffer))

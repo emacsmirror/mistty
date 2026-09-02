@@ -1875,8 +1875,9 @@ Also updates prompt and point."
       (setq bol (mistty--bol bol 2)))))
 
 (defun mistty--mark-right-prompt (prompt-beg)
-  (let ((line-end (mistty--eol prompt-beg)))
-    (when-let ((pos (text-property-any prompt-beg line-end 'mistty-skip 'right-prompt)))
+  (let* ((line-end (max prompt-beg (mistty--eol prompt-beg)))
+         (pos (text-property-any prompt-beg line-end 'mistty-skip 'right-prompt)))
+    (when (and pos (> line-end pos))
       (put-text-property pos line-end 'yank-handler '(nil "" nil nil)))))
 
 (defun mistty--mark-prompt-fields (prompt prompt-beg)
