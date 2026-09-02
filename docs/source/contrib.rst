@@ -72,7 +72,8 @@ To contribute code to the project, open a `Pull Request`_.
 Before you do that, please make sure the any new features is covered
 by tests and that the tests pass.
 
-To run the tests, install and setup `eldev`_, then run :command:`eldev
+To run the tests, install and setup `eldev`_ and `rust
+<https://rust-lang.org/tools/install/>`_, then run :command:`eldev
 test`.
 
 Tests can also be run from inside of Emacs, using `M-x

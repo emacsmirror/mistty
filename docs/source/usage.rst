@@ -25,6 +25,89 @@ You'll likely want to eventually bind that to some shortcut:
 and, unless you're using :program:`Bash`, configure directory tracking
 for your shell (:ref:`dirtrack`), but read on for more details.
 
+.. _installmod:
+
+Experimental Module with Alacritty
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  .. index::
+     pair: variable; mistty-terminal-type
+
+MisTTY recently got support for an alternative terminal emulator,
+`alacritty`, which replaces `eterm`, built into Emacs.
+
+While it takes some efforts to get `alacritty` work, doing so
+addresses some limitations of `eterm`, such as lack of support for
+modern terminal features, and limited unicode support.
+
+The module must be compiled locally, for now, as alacritty support is
+an experimental feature and not yet included into the releases. Make sure
+to always use .el files that match the module file.
+
+1. checkout mistty
+
+.. code-block:: bash
+
+   git checkout https://github.com/szermatt/mistty
+
+2. add the directory to your `load-path`
+
+   Doing this ensures that the version of the module you're using
+   matches the version of MisTTY's lisp code.
+
+3. install `rust <https://rust-lang.org/tools/install/>`_
+
+4. compile the module
+
+.. code-block:: bash
+
+   cargo build --release
+
+5. rename the module so it can be picked up by Emacs
+
+   On Linux:
+
+   .. code-block:: bash
+
+      cp target/release/libmistty_alacritty_vt.so mistty-alacritty-vt-dev.so
+
+
+   On MacOS:
+
+   .. code-block:: bash
+
+      cp target/release/libmistty_alacritty_vt.dylib mistty-alacritty-vt-dev.dylib
+
+6. install the alacritty terminfo (optional)
+
+   This allows you to set the `TERM` environment variable to
+   `alacritty` which supports 24bit colors. Without it, alacritty
+   will still work, with `TERM` set to `xterm-256color` or `xterm`.
+
+   Check if this isn't already installed:
+
+   .. code-block:: bash
+
+      infocmp alacritty
+
+   If `infocmp` fails, install it globally using:
+
+   .. code-block:: bash
+
+      sudo tic -xe alacritty,alacritty-direct extras/alacritty.info
+
+   Or for the current user using:
+
+   .. code-block:: bash
+
+      tic -x -o "$HOME/.terminfo" extras/alacritty.info
+
+
+Once you have installed the module MisTTY will use `alacritty` as
+terminal type. If you want to go back to `eterm`, you can select the
+terminal emulator you'd like to use using :kbd:`M-x customize-option
+mistty-terminal-type`
+
 .. _launching:
 
 Launching
@@ -616,22 +699,6 @@ if not, you can still make it work as follows:
 - If you're connecting to hosts in more diverse ways, you can
   configure the TRAMP path MisTTY should generate using :kbd:`M-x
   configure-option mistty-host-to-tramp-path-alist`
-
-- If you want to configure the TRAMP path on the hosts, you can send
-  it from the prompt as Emacs-specific ``\\032/...\\n`` code
-  containing a TRAMP path instead of the standard file: URL
-  recommended in :ref:`Directory Tracking for Bash <bash_dirtrack>`,
-  in :ref:`Directory Tracking for Fish <fish_dirtrack>`, and in
-  :ref:`Directory Tracking for Zsh <zsh_dirtrack>`. Here's an example
-  of such a code for :program:`Bash` that tells TRAMP to connect to
-  the current docker instance:
-
-  .. code-block:: bash
-
-    if [ "$TERM" = "eterm-color" ]; then
-        PS1='\032//docker:$HOSTNAME:/$PWD\n'$PS1
-    fi
-
 
 That said, if you need more than just SSH to connect to other hosts,
 it might be overall just easier to start remote shells with TRAMP

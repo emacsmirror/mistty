@@ -3,8 +3,9 @@ MisTTY
 
 **MisTTY** is a major mode for :program:`Emacs` 29.1 and up that runs
 a shell inside of a buffer, similarly to comint mode. It is built on
-top of :file:`term.el`. Check out its project page at
-https://github.com/szermatt/mistty.
+top of :program:`eterm`, the terminal emulator built into Emacs, or
+the `alacritty <https://alacritty.org/>`_ library. Check out its
+project page at https://github.com/szermatt/mistty.
 
 :kbd:`M-x mistty` creates a buffer with an interactive shell. (:ref:`launching`)
 
@@ -45,13 +46,13 @@ info g mistty`
 Comparison with other packages
 ------------------------------
 
-MisTTY isn't a terminal emulator, but rather a frontend to an existing
-terminal emulator, the built-in :file:`term.el`. Its goal is to make
-it more convenient to use while inside of Emacs and better integrate
-with Emacs itself. In theory, other terminal emulators than
-:file:`term.el` might be used as engine for MisTTY, such as `vterm
-<https://github.com/akermu/emacs-libvterm>`_ and `eat
-<https://codeberg.org/akib/emacs-eat>`_.
+MisTTY is a frontend to a terminal emulator, currently either
+:program:`eterm`, a pure elisp terminal emulator built into Emacs, or
+:program:`alacritty` using a custom module built against the
+`alacritty library <https://github.com/alacritty/alacritty>`_
+
+Its goal is to make it more convenient to use while inside of Emacs
+and better integrate with Emacs itself.
 
 MisTTY has some similarities with `coterm
 <https://github.com/emacsmirror/coterm>`_; it offers the same switch

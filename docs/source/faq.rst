@@ -4,8 +4,17 @@ FAQ
 **The display is all messed up**
 
      First, check the value of the environment variable :code:`TERM`.
-     It MUST be :code:`eterm-color` or :code:`eterm-direct`; nothing
-     else will work reliably.
+     It MUST correspond to your terminal type, as specified by
+     :code:`mistty-terminal-type`.
+
+     If the terminal you're using is `eterm` the value of the
+     :code:`TERM` environment variable MUST :code:`eterm-color` or
+     :code:`eterm-direct`; nothing else will work reliably.
+
+     If the terminal you're using is `alacritty`, which requires the
+     module to be installed, the value of the :code:`TERM` environment
+     variable should be `alacritty`, `alacritty-direct`, `xterm` or
+     `xterm-256color`
 
      If that still doesn't work, please file a bug as described in
      :ref:`reporting`.
@@ -15,8 +24,19 @@ FAQ
      If you're getting errors such as the following from programs such
      as :program:`less` or :program:`vi`, this means that the
      :code:`TERM` environment variable is set properly, but the host
-     doesn't know about the terminal :code:`eterm-color` or
-     :code:`eterm-direct`.
+     doesn't know about the terminal type set by :code:`TERM`.
+
+     If the terminal you're using is `alacritty` try setting the value
+     to `xterm-256color` or `xterm` as these are widely available.
+     This is especially convenient when connecting to remote hosts. If
+     you want to use `TERM=alacritty` or remote hosts, install the
+     terminfo file on these hosts as described in :ref:`installation`.
+
+     If the terminal you're using is `eterm`, :code:`TERM` must be
+     `eterm` or `eterm-color`, but many hosts don't support these
+     terminfo values.
+
+     You might see the following error:
 
      .. code-block:: text
 
