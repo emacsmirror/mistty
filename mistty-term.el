@@ -98,14 +98,6 @@ definition, because it doesn't allow editing what's above."
 (defconst mistty-down-str "\eOB"
   "Sequence to send to the process when the left arrow is pressed.")
 
-(defvar-local mistty-bracketed-paste nil
-  "Whether bracketed paste is enabled in the terminal.
-
-This variable evaluates to true when bracketed paste is turned on
-by the command that controls, to false otherwise.
-
-This variable is available in both the work and term buffers.")
-
 (defvar-local mistty--term-properties-to-add-alist nil
   "An alist of id to text properties to add to the term buffer.
 
@@ -388,18 +380,6 @@ the last set of properties to be registered is applied."
     (setq mistty--term-properties-to-add-alist
           (delq cell
                 mistty--term-properties-to-add-alist))))
-
-(defun mistty--maybe-bracketed-str (str)
-  "Prepare STR to be sent, possibly bracketed, to the terminal.
-
-If bracketed paste is enabled and STR contains control and
-bracketed paste is enabled, this function returns STR with
-bracketed paste brackets around it."
-  (let ((str (string-replace "\t" (make-string tab-width ? ) str)))
-    (cond
-     ((not mistty-bracketed-paste) str)
-     ((not (string-match "[[:cntrl:]]" str)) str)
-     (t (concat "\e[200~" str "\e[201~")))))
 
 (defun mistty--hide-cursor ()
   "Temporarily hide the cursor.

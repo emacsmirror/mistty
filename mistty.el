@@ -529,8 +529,7 @@ are sent directly to the terminal."
 
 This is in addition to the mode's keymap, `mistty-fullscreen-map' for
 eterm terminals and `mistty-alacritty-mode-map' for alacritty terminals."
-  "C-c C-j" #'mistty-toggle-buffers
-  "C-c C-q" #'mistty-send-key-sequence)
+  "C-c C-j" #'mistty-toggle-buffers)
 
 (define-minor-mode mistty-fullscreen-mode
   "Minor mode active on the terminal buffer while fullscreen.
@@ -871,6 +870,8 @@ be ignored if coming from window size.")
   :interactive nil
   (setq buffer-read-only nil)
   (setq mistty-work-buffer (current-buffer))
+
+  (setq mistty--send-function #'mistty--send-for-mistty-mode)
 
   ;; scroll down only when needed. This typically keeps the point at
   ;; the end of the window. This seems to be more in-line with what
@@ -2321,21 +2322,6 @@ If N is a positive integer that many newlines."
 
      (t (insert "\n")))))
 
-(defun mistty-send-last-key (&optional n)
-  "Send the last key that was typed to the terminal N times.
-
-This command extracts element of `this-command-key`, translates
-it and sends it to the terminal.
-
-This is a convenient variant to `mistty-send-key' which allows
-burying key binding to send to the terminal inside of a keymap
-with an arbitrary prefix.
-
-This command is available in fullscreen mode."
-  (interactive "p")
-  (mistty-send-key
-   (or n 1) (seq-subseq (this-command-keys-vector) -1)))
-
 (defun mistty-positional-p (key)
   "Return non-nil if KEY is a positional key.
 
@@ -2402,22 +2388,13 @@ If N is specified, do it N times."
       (call-interactively 'indent-for-tab-command)
     (mistty-send-key n (kbd "TAB") 'positional)))
 
-(defun mistty-send-key (&optional n key positional)
-  "Send the current key sequence to the terminal.
+(defun mistty--send-for-mistty-mode (translated-key key n positional)
+  "Send a key to the terminal.
 
-This command sends N times the current key sequence, or KEY if it
-is specified, directly to the terminal. If the key sequence is
-positional or if POSITIONAL evaluates to true, MisTTY attempts to
-move the terminal's cursor to the current point.
-
-KEY must be a string or vector as would be returned by `kbd'.
-
-This command is available in fullscreen mode."
-  (interactive "p")
+This is meant to be bound to `mistty--send-function' for `mistty-mode'
+buffers."
   (mistty--require-proc)
-  (let* ((key (or key (this-command-keys-vector)))
-         (translated-key (mistty-translate-key key n))
-         (fire-and-forget (or mistty--forbid-edit
+  (let* ((fire-and-forget (or mistty--forbid-edit
                               (string-match "^[[:graph:]]+$" translated-key)))
          (positional (or positional (mistty-positional-p key))))
     (cond
@@ -2469,28 +2446,6 @@ If an argument is specified, repeat it N time."
 If an argument is specified, repeat it N time."
   (interactive "p")
   (mistty-send-key n (kbd "C-n")))
-
-(defun mistty-send-key-sequence ()
-  "Send all keys to terminal until interrupted.
-
-This function continuously read keys and sends them to the
-terminal, just like `mistty-send-key', until it is interrupted
-with \\[keyboard-quit] or until it is passed a key or event it
-doesn't support, such as a mouse event.."
-  (interactive)
-  (mistty--require-proc)
-  (let ((proc mistty-proc)
-        key)
-    (while
-        (and
-         (setq key
-               (read-key "Sending all KEYS to terminal... Exit with C-g."
-                         'inherit-input-method))
-         (not (eq key ?\C-g)))
-      (pcase key
-        (`(xterm-paste ,str)
-         (mistty--send-string proc (mistty--maybe-bracketed-str str)))
-        (_ (mistty-send-key 1 (make-vector 1 key)))))))
 
 (defun mistty-beginning-of-line (&optional n)
   "Go to the Nth beginning of line, possibly by sending Control a.

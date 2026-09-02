@@ -71,11 +71,11 @@ scrollback lines.")
     ;; This builds a map very similar to term raw-keymap.
     (dotimes (c 128)
       (unless (memq c '(?\C-c ?\C-x))
-        (define-key map (make-string 1 c) 'mistty-alacritty-send-self)))
+        (define-key map (make-string 1 c) 'mistty-send-key)))
     (define-key map "\e" esc-map)
     (dotimes (c 128)
       (unless (memq c '(?O ?\[))
-        (define-key esc-map (make-string 1 c) 'mistty-alacritty-send-self)))
+        (define-key esc-map (make-string 1 c) 'mistty-send-key)))
 
     ;; C-q <any key> sends that key to the terminal unmodified
     (define-key map "\C-q" '(keymap (t . mistty-send-last-key)))
@@ -84,13 +84,15 @@ scrollback lines.")
                    [C-right] [C-left] [delete] [deletechar] [backspace]
                    [home] [end] [insert] [S-prior] [S-next] [S-insert]
                    [prior] [next] [?\C-/] [?\C- ] [?\C-\M-/] [?\C-\M- ]))
-      (define-key map key 'mistty-alacritty-send-self))
+      (define-key map key 'mistty-send-key))
 
     ;; Mirror keybindings from mistty-mode-map, for consistency.
     (keymap-set map "C-c C-c" #'mistty-send-last-key)
     (keymap-set map "C-c C-z" #'mistty-send-last-key)
     (keymap-set map "C-c C-\\" #'mistty-send-last-key)
     (keymap-set map "C-c C-g" #'mistty-send-last-key)
+    (keymap-set map "C-c C-q" #'mistty-send-key-sequence)
+    ;; TODO: support xterm-paste?
 
   map)
   "Keymap of major mode MisTTY Alacritty.
@@ -287,28 +289,6 @@ The current buffer must have a virtual terminal associated."
      '("-i")
      (window-max-chars-per-line)
      (floor (window-screen-lines)))))
-
-(defun mistty-alacritty-send-self (&optional n key)
-  "Send KEY N times to the process connected to the terminal.
-
-The key is translated to something a terminal application may
-understand using `mistty-translate-key'."
-  (interactive "p")
-  (if-let ((proc (get-buffer-process (current-buffer))))
-      (let* ((key (or key (this-command-keys-vector)))
-             (translated-key (mistty-translate-key key n)))
-        (mistty-log "SEND KEY %s %s %S" n key translated-key)
-        (process-send-string proc translated-key))
-    (self-insert-command n key)))
-
-(defun mistty-alacritty-send-last-key (&optional n)
-  "Send the last key that was typed to the terminal N times.
-
-This command extracts element of `this-command-key`, translates
-it and sends it to the terminal."
-  (interactive "p")
-  (mistty-alacritty-send-self
-   (or n 1) (seq-subseq (this-command-keys-vector) -1)))
 
 (defun mistty-alacritty--TERM ()
   "Choose a value for the TERM env variable.

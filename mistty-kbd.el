@@ -348,6 +348,89 @@ The default value of this map was created by applying
 `mistty-reverse-input-decode-map', defined in
 mistty-reverse-input-decode-map.el to `xterm-function-map'.")
 
+(defvar-local mistty-bracketed-paste nil
+  "Whether bracketed paste is enabled in the buffer's terminal.
+
+This variable is non-nil when bracketed paste is turned on by the
+command that controls.")
+
+(defvar-local mistty--send-function #'mistty--send-default
+  "Function to use to send a string to the right process.
+
+This allows calling `mistty-send-key' `mistty-send-last-key'
+`mistty-send-key-sequence' or `mistty-translate-key' on non-mistty
+buffers, as long as they either have a process or have redefined this
+function..
+
+The function should take 4 arguments STR KEY N POSITIONAL. STR is a
+translated string to send to the terminal. If non-nil, KEY is the
+original Emacs key that was transformed into STR. If non-nil, N is the
+number of times KEY appears in STR, for repeated keys. If POSITIONAL is
+non-nil, this tells the `mistty-mode' buffer to move the point to the
+cursor.
+
+The default implementation just sends to the buffer process.")
+
+(defun mistty--send-default (str _key _n _positional)
+  "Send STR to the buffer process.
+
+This is meant to be used as default for `mistty--send-function'. It works
+on any buffer that has a process associated to it."
+  (process-send-string (get-buffer-process (current-buffer)) str))
+
+(defun mistty-send-key (&optional n key positional)
+  "Send the current key sequence to the terminal.
+
+This command sends N times the current key sequence, or KEY if it is
+specified, directly to the terminal. In a `mistty-mode' buffer, if the
+key sequence is positional or if POSITIONAL evaluates to true, MisTTY
+attempts to move the terminal's cursor to the current point.
+
+KEY must be a string or vector as would be returned by `kbd'.
+
+This command is available in fullscreen mode."
+  (interactive "p")
+  (let* ((key (or key (this-command-keys-vector)))
+         (translated-key (mistty-translate-key key n)))
+    (funcall mistty--send-function translated-key key n positional)))
+
+(defun mistty-send-last-key (&optional n)
+  "Send the last key that was typed to the terminal N times.
+
+This command extracts element of `this-command-key`, translates
+it and sends it to the terminal.
+
+This is a convenient variant to `mistty-send-key' which allows
+burying key binding to send to the terminal inside of a keymap
+with an arbitrary prefix.
+
+This command is available in fullscreen mode."
+  (interactive "p")
+  (mistty-send-key
+   (or n 1) (seq-subseq (this-command-keys-vector) -1)))
+
+(defun mistty-send-key-sequence ()
+  "Send all keys to terminal until interrupted.
+
+This function continuously read keys and sends them to the
+terminal, just like `mistty-send-key', until it is interrupted
+with \\[keyboard-quit] or until it is passed a key or event it
+doesn't support, such as a mouse event.."
+  (interactive)
+  (let (key)
+    (while
+        (and
+         (setq key
+               (read-key "Sending all KEYS to terminal... Exit with C-g."
+                         'inherit-input-method))
+         (not (eq key ?\C-g)))
+
+      (pcase key
+        (`(xterm-paste ,str)
+         (funcall mistty--send-function
+                  (mistty--maybe-bracketed-str str) nil nil nil))
+        (_ (mistty-send-key 1 (make-vector 1 key)))))))
+
 (defun mistty-translate-key (key &optional n)
   "Generate string to sent to the terminal for KEY.
 
@@ -382,6 +465,18 @@ If N is specified, the string is repeated N times."
      (t
       (error "Key unknown in mistty-term-key-map: %s"
              (key-description key))))))
+
+(defun mistty--maybe-bracketed-str (str)
+  "Prepare STR to be sent, possibly bracketed, to the terminal.
+
+If bracketed paste is enabled and STR contains control and
+bracketed paste is enabled, this function returns STR with
+bracketed paste brackets around it."
+  (let ((str (string-replace "\t" (make-string tab-width ? ) str)))
+    (cond
+     ((not mistty-bracketed-paste) str)
+     ((not (string-match "[[:cntrl:]]" str)) str)
+     (t (concat "\e[200~" str "\e[201~")))))
 
 (provide 'mistty-kbd)
 

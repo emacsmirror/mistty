@@ -146,7 +146,7 @@ This map is ignored when using alacritty as a terminal. Check out
     "<menu-bar> <terminal>" nil
 
     ;; switching the term buffer to line mode would cause issues.
-    "<remap> <term-line-mode>" #'mistty-toggle-buffers)
+    "<remap> <term-line-mode>" nil)
 
 (defvar mistty-shadowed-term-mode-hook nil
   "Special variable under which hooks found it `term-mode-hook' are stored.

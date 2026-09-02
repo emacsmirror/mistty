@@ -2282,7 +2282,9 @@
 
 (mistty-deftest mistty-test-send-key-sequence-in-scrollback ( :type all)
   (mistty-simulate-scrollback-buffer
-   (should-error (call-interactively 'mistty-send-key-sequence))))
+   (should-error
+    (ert-simulate-keys '(?f ?o ?o)
+      (call-interactively 'mistty-send-key-sequence)))))
 
 (mistty-deftest mistty-test-revert-insert-after-prompt (:shell zsh :type all)
   (dotimes (i 3)
