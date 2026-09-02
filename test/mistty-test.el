@@ -1481,6 +1481,7 @@
      :test
      (lambda ()
        (not (buffer-local-value 'mistty-fullscreen work-buffer))))
+    (mistty-wait-for-output :start (point-min) :str "vi\n$ ")
     
     (with-current-buffer work-buffer
       (should
