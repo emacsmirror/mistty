@@ -100,8 +100,11 @@ scrollback lines.")
 This intercepts all major key bindings and sends them to the terminal.
 Overwrite to recover key bindings.")
 
-(define-derived-mode mistty-alacritty-mode fundamental-mode "MisTTY Direct"
-  "Major mode that provides a raw terminal tied to a subprocess.
+(define-derived-mode mistty-alacritty-mode fundamental-mode "MisTTY/FS"
+  "Major mode for Mistty Fullscreen.
+
+This mode provides a raw terminal tied to a subprocess based on the
+alacritty library.
 
 Call `mistty-alacritty-exec' to create the virtual terminal and start the
 process."
