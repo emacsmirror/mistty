@@ -40,8 +40,9 @@ jobs:
 
     - name: Test the module
       run: 'cargo test'
-      
+
+    - name: Build the module
+      run: 'eldev build mistty-alacritty-vt-dev.so''
+
     - name: Test the project
-      run: 'eldev -c -dtT test --ci || eldev -c -dtT test --ci :failed'
-      # TODO: test from package using eldev -c This requires solving the
-      # problem of how to package a module.
+      run: 'eldev -p -dtT test --ci || eldev -p -dtT test --ci :failed'
