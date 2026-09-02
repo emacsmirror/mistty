@@ -994,7 +994,7 @@ window."
                                    (window-screen-lines))))))
     (mistty--attach
      (mistty--create-term (or mistty-terminal-type
-                              (if (require 'mistty-alacritty-vt nil 'noerror)
+                              (if (mistty-alacritty-available-p)
                                   'alacritty
                                 'eterm))
                           (concat " mistty tty " (buffer-name))

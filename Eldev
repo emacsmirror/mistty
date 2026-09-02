@@ -19,7 +19,7 @@
       `(:or ,eldev-standard-excludes
             "./venv" "./docs/build" "./license" "./deps"))
 
-;;; Module
+;;; Module (development version)
 ;;
 ;; MisTTY depends on a rust module. The module itself is built using
 ;; cargo and included as a dependency.
@@ -28,7 +28,7 @@
   :message        source-and-target
   :type           many-to-one
   :source-files   ("Cargo.toml" "src/**/*.rs")
-  :targets        (lambda (_sources) (concat "mistty-alacritty-vt" module-file-suffix))
+  :targets        (lambda (_sources) (concat "mistty-alacritty-vt-dev" module-file-suffix))
   :collect        ":compile"
   :define-cleaner (mistty-cleaner-module "Delete generated module" :default t)
   (eldev-call-process "cargo" '("build") :forward-output t :die-on-error t)

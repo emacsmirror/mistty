@@ -20,7 +20,6 @@
 ;; alacritty-based terminal, with none of the extra features and
 ;; overhead of MisTTY. The result is similar to term.el in raw mode.
 
-(require 'mistty-alacritty-vt)
 (require 'mistty-util)
 (require 'mistty-kbd)
 (require 'mistty-log)
@@ -28,8 +27,37 @@
 (eval-when-compile
   (require 'cl-lib))
 (require 'ansi-osc) ; links use ansi-osc-hyperlink
-
 (defvar explicit-shell-file-name) ;; defined in shell
+
+;; Loading the module is optional here, so this file can be safely
+;; loaded and compiled. Availability check should be done dynamically
+;; dynamically using (mistty-alacritty-available-p)
+
+(defvar mistty-alacritty-modulename "mistty-alacritty-vt-dev"
+  "Name of the module the provides mistty-alacritty-vt")
+;; TODO: load versioned module instead of just 'dev' module once the
+;; module is part of the release. For now, the module should be
+;; considered experimental and always compiled from the same checkout
+;; as the lisp files.
+
+(unless (featurep 'mistty-alacritty-vt)
+  (when (and (load mistty-alacritty-modulename 'noerror 'nomessage)
+             (not (featurep 'mistty-alacritty-vt)))
+    (error "module doesn't define feature mistty-alacritty-vt")))
+
+;; These declarations allow compiling without loading the module.
+(eval-when-compile
+  (declare-function mistty-alacritty-vt-alt-screen-p nil (term))
+  (declare-function mistty-alacritty-vt-cleanup-prompt-sp nil (term pos))
+  (declare-function mistty-alacritty-vt-clear-to-eol nil (term line col))
+  (declare-function mistty-alacritty-vt-cursor nil (term))
+  (declare-function mistty-alacritty-vt-enable-scrollback nil (term))
+  (declare-function mistty-alacritty-vt-make-vterm nil (w h))
+  (declare-function mistty-alacritty-vt-process-bytes nil (term bytes))
+  (declare-function mistty-alacritty-vt-render nil (term cursor))
+  (declare-function mistty-alacritty-vt-render-damaged nil (term cursor))
+  (declare-function mistty-alacritty-vt-resize nil (term w h))
+  (declare-function mistty-alacritty-vt-write-scrollback nil (term)))
 
 (defcustom mistty-term-name nil
   "Value for the TERM env variable for the virtual terminal.
@@ -114,7 +142,22 @@ process."
 
   (use-local-map mistty-alacritty-mode-map))
 
+(defun mistty-alacritty-available-p ()
+  "Check whether the module is available.
+
+Calling any other function when this one returns nil will fail."
+  (featurep 'mistty-alacritty-vt))
+
 (defun mistty-alacritty-exec (name program args width height)
+  "Execute a command inside of an alacritty terminal.
+
+This creates a process NAME that runs PROGRAM with ARGS inside of a
+terminal with the given WIDTH and HEIGHT and displays the result in the
+current buffer. The created process is set as the current buffer's
+process."
+  (unless (mistty-alacritty-available-p)
+    (error "Alacritty terminal is unavailable; module '%s' not found"
+           mistty-alacritty-modulename))
   (unless (eq major-mode 'mistty-alacritty-mode)
     (error "Must be called from a mistty-alacritty-mode buffer."))
   (when (get-buffer-process (current-buffer))

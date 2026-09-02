@@ -1,4 +1,4 @@
-;;; Tests MisTTY module integration -*- lexical-binding: t -*-
+;;; Tests the module mistty-alacritty-vt -*- lexical-binding: t -*-
 
 ;; This program is free software: you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -15,7 +15,7 @@
 ;; `http://www.gnu.org/licenses/'.
 
 (require 'ert)
-(require 'mistty-alacritty-vt)
+(require 'mistty-alacritty) ; loads mistty-alacritty-vt
 (require 'mistty-testing)
 (require 'turtles)
 
