@@ -218,6 +218,7 @@ default, the default directory is a temp directory created for the test."
                (mistty-allow-clearing-scrollback nil)
                (mistty-default-terminal-size nil)
                (mistty-terminal-type (quote ,type))
+               (mistty-alacritty-term-name "xterm-256color")
                (mistty-log mistty-test-log))
            (message "RUNNING: %s" (ert-test-name (ert-running-test)))
            (ert-with-temp-directory mistty-tmpdir

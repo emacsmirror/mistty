@@ -1989,7 +1989,7 @@
     (dotimes (i 10)
       (with-temp-file (format "%sfile%d" tempdir i)))
     
-    (let (echo-start ls-start)
+    (let ((mistty--inhibit-fake-nl-cleanup nil) echo-start ls-start)
       (mistty--send-string mistty-proc (format "cd '%s'" tempdir))
       (mistty-send-and-wait-for-prompt)
 
@@ -2040,7 +2040,7 @@
   (ert-with-temp-directory tempdir
     (dotimes (i 10)
       (with-temp-file (format "%sfile%d" tempdir i)))
-    (let (echo-start ls-start)
+    (let ((mistty--inhibit-fake-nl-cleanup nil) echo-start ls-start)
       (mistty--send-string mistty-proc "setopt no_always_last_prompt no_list_ambiguous")
       (mistty-send-and-wait-for-prompt)
       (mistty--send-string mistty-proc (format "cd '%s'" tempdir))
