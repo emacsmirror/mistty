@@ -60,15 +60,15 @@
   (declare-function mistty-alacritty-vt-write-scrollback nil (term)))
 
 (defcustom mistty-alacritty-term-name nil
-  "Value for the TERM env variable for the virtual terminal.
+  "Value for the TERM env variable for alacritty virtual terminals.
 
-This should be set to alacritty or alacritty-direct, as long as the
-alacritty terminal definition is installed. This is necessary for
-truecolor (24bit) support.
+If the alacritty terminal definition is installed, set it to alacritty
+or alacritty-direct to get full 24bit color support.
 
 See https://github.com/alacritty/alacritty/blob/master/INSTALL.md#terminfo
 
-For backward compatibility, you may want set it to xterm-256color or
+For backward compatibility or if you often log into other hosts that
+don't have alacritty installed, you may want set it to xterm-256color or
 even xterm.
 
 If this is nil, MisTTY checks whether the alacritty terminfo is present
