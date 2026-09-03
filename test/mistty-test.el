@@ -1242,7 +1242,8 @@
   (should (equal "two" (mistty-test-content :start (pos-bol) :end (pos-eol)))))
 
 (mistty-deftest mistty-test-catchup (:type all)
-  (let ((count 200))
+  (let ((count 200)
+        (mistty--inhibit-fake-nl-cleanup nil))
     (ert-with-temp-file tempfile
       (with-temp-file tempfile
         (dotimes (n count)
