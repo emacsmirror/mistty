@@ -59,7 +59,7 @@
   (declare-function mistty-alacritty-vt-resize nil (term w h))
   (declare-function mistty-alacritty-vt-write-scrollback nil (term)))
 
-(defcustom mistty-term-name nil
+(defcustom mistty-alacritty-term-name nil
   "Value for the TERM env variable for the virtual terminal.
 
 This should be set to alacritty or alacritty-direct, as long as the
@@ -305,6 +305,9 @@ The current buffer must have a virtual terminal associated."
       (set-marker mistty-alacritty--home (point))
       (mistty-alacritty-vt-render-damaged vterm mistty-alacritty--cursor)
       (mistty-log "RENDER @%s" mistty--scrolline-home-num)
+      (mistty-log "===OOK <<EOF\n%s<>%sEOF"
+                  (buffer-substring-no-properties (point-min) mistty-alacritty--home)
+                  (buffer-substring-no-properties mistty-alacritty--home (point-max)))
       (when-let ((proc (get-buffer-process (current-buffer))))
         (when (process-live-p proc)
           (set-marker (process-mark proc) mistty-alacritty--cursor))))
@@ -339,9 +342,9 @@ The current buffer must have a virtual terminal associated."
 (defun mistty-alacritty--TERM ()
   "Choose a value for the TERM env variable.
 
-This is controlled by the custom variable `mistty-term-name'"
+This is controlled by the custom variable `mistty-alacritty-term-name'"
   (cond
-   (mistty-term-name mistty-term-name)
+   (mistty-alacritty-term-name mistty-alacritty-term-name)
    ((shell-command-to-string "infocmp alacritty") "alacritty")
    (t "xterm-256color")))
 
