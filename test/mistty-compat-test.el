@@ -65,15 +65,16 @@
                    (mistty-test-content :start start :show (point))))
 
     (mistty-run-command
-     (setq this-command 'hippie-expand)
-     (call-interactively 'hippie-expand))
+     (let ((this-command 'hippie-expand)
+           (last-command nil))
+       (call-interactively 'hippie-expand)))
     (should (equal "echo hi<>"
                    (mistty-test-content :start start :show (point))))
 
     (mistty-run-command
-     (setq this-command 'hippie-expand)
-     (setq last-command 'hippie-expand)
-     (call-interactively 'hippie-expand))
+     (let ((this-command 'hippie-expand)
+           (last-command 'hippie-expand))
+       (call-interactively 'hippie-expand)))
     (should (equal "echo hallo<>"
                    (mistty-test-content :start start :show (point))))))
 
