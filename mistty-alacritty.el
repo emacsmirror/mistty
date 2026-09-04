@@ -292,7 +292,10 @@ The current buffer must have a virtual terminal associated."
       (pcase ev
         (`(pty-write ,data)
          (mistty-log "REPLY %S" data)
-         (process-send-string proc data))))))
+         (process-send-string proc data))
+        (`(title ,title)
+         (mistty-log "TITLE %S" title)
+         (setq ansi-osc-window-title title))))))
 
 (defun mistty-alacritty--render ()
   "Render the virtual terminal on the current buffer.

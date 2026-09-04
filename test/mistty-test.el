@@ -7029,3 +7029,10 @@ precmd_functions+=(prompt_header)
     (should (eq 'ansi-osc-hyperlink (button-get button 'type)))
     (should (equal "http://www.example.com/" (button-get button 'browse-url-data)))))
 
+(mistty-deftest mistty-test-osc-0 (:type all)
+  (let ((ansi-osc-window-title nil))
+    (mistty--send-string
+     mistty-proc "printf \"\\e]0;new window title\\afoob\141r\\n\"\n")
+    (mistty-wait-for-output :start (point-min) :str "foobar")
+    (should (equal "new window title" ansi-osc-window-title))))
+

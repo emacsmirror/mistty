@@ -18,6 +18,7 @@ emacs::use_functions! {
 }
 emacs::use_symbols! {
     pty_write_sym => "pty-write"
+    title_sym => "title"
 }
 
 /// Size of the scrollback, in lines. There needs to be enough space
@@ -210,6 +211,9 @@ impl VTerm {
                             result = pty_write(env, result, rgb_to_seq(color))?;
                         }
                     }
+                }
+                Event::Title(title) => {
+                    result = env.cons(env.list((title_sym, title))?, result)?;
                 }
                 _ => {}
             };

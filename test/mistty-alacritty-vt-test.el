@@ -1287,3 +1287,14 @@
       (search-forward "world")
       (should (equal "http://www.example.com/world" (button-get (button-at (match-beginning 0)) 'browse-url-data)))
       (should (equal "http://www.example.com/world" (button-get (button-at (1- (match-end 0))) 'browse-url-data))))))
+
+(ert-deftest mistty-alacritty-vt-set-title ()
+  (let ((term (mistty-alacritty-vt-make-vterm 20 10))
+        (cursor (make-marker)))
+    (should (equal
+             '((title "window-title"))
+             (mistty-alacritty-vt-process-bytes
+              term (vconcat "foo\e]0;window-title\e\\bar"))))
+    (ert-with-test-buffer ()
+       (mistty-alacritty-vt-render term cursor)
+       (should (equal "foobar" (mistty-test-content))))))
