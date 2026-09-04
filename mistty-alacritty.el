@@ -305,9 +305,6 @@ The current buffer must have a virtual terminal associated."
       (set-marker mistty-alacritty--home (point))
       (mistty-alacritty-vt-render-damaged vterm mistty-alacritty--cursor)
       (mistty-log "RENDER @%s" mistty--scrolline-home-num)
-      (mistty-log "===OOK <<EOF\n%s<>%sEOF"
-                  (buffer-substring-no-properties (point-min) mistty-alacritty--home)
-                  (buffer-substring-no-properties mistty-alacritty--home (point-max)))
       (when-let ((proc (get-buffer-process (current-buffer))))
         (when (process-live-p proc)
           (set-marker (process-mark proc) mistty-alacritty--cursor))))
