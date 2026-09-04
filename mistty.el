@@ -32,7 +32,6 @@
 ;; https://mistty.readthedocs.io/en/latest/
 ;;
 
-(require 'term)
 (require 'seq)
 (require 'subr-x)
 (require 'pcase)
@@ -40,6 +39,7 @@
 (require 'fringe)
 (require 'cl-lib)
 (require 'imenu)
+(require 'shell)
 (eval-when-compile
   (require 'files-x) ; with-connection-local-variables
   (require 'minibuffer))
@@ -52,9 +52,11 @@
 (require 'mistty-util)
 (require 'mistty-log)
 (require 'mistty-queue)
+(require 'mistty-scrolline)
 (require 'mistty-undo)
-
-(defvar term-width) ; defined in term.el
+(require 'mistty-term-base)
+(require 'mistty-term-alacritty)
+(require 'mistty-term-eterm)
 
 ;;; Code:
 
@@ -84,6 +86,26 @@ this variable for different hosts by setting mistty-shell-command
 as a connection-local variable."
   :type '(repeat string)
   :group 'mistty)
+
+(defcustom mistty-terminal-type nil
+  "Choose a terminal emulator.
+
+The terminal emulator MisTTY uses can be either:
+
+- \\='eterm the pure elisp terminal that's part of Emacs. It's found in
+  eterm.el.
+
+- \\='alacritty a modern terminal emulator implemented in Rust.
+
+Alacritty is more standard-compliant and supports more features than
+eterm, but it requires installing and loading an Emacs module.
+
+If this option is nil (auto), MisTTY uses alacritty if the module is
+available and otherwise fallback."
+  :group 'mistty
+  :type '(choice (const :tag "auto" nil)
+                 (const :tag "eterm (built-in)" eterm)
+                 (const :tag "alacritty (module required)" alacritty)))
 
 (defcustom mistty-variables-to-copy
   '(default-directory
@@ -502,53 +524,21 @@ are sent directly to the terminal."
   "<left>" #'mistty-send-last-key
   "<right>" #'mistty-send-last-key)
 
-(defvar-keymap mistty-fullscreen-map
-  :parent term-raw-map
-  :doc "Keymap active while in fullscreen mode.
+(defvar-keymap mistty-fullscreen-mode-map
+  :doc "Additional keymap active on the terminal buffer while fullscreen.
 
-While in fullscreen mode, the buffer is a `term-mode' with its
-own keymaps (`term-mod-map' and `term-raw-map')
+This is in addition to the mode's keymap, `mistty-fullscreen-map' for
+eterm terminals and `mistty-alacritty-mode-map' for alacritty terminals."
+  "C-c C-j" #'mistty-toggle-buffers)
 
-This map is applied in addition to these as a way of making key
-mapping somewhat consistent between fullscreen and normal mode."
+(define-minor-mode mistty-fullscreen-mode
+  "Minor mode active on the terminal buffer while fullscreen.
 
-    "C-q" mistty-send-last-key-map
-    "C-c C-q" #'mistty-send-key-sequence
-
-    ;; Mirror keybindings from mistty-mode-map, for consistency.
-    "C-c C-c" #'mistty-send-last-key
-    "C-c C-z" #'mistty-send-last-key
-    "C-c C-\\" #'mistty-send-last-key
-    "C-c C-g" #'mistty-send-last-key
-
-    ;; Overwrite mapping from term-raw-map so they can be remapped
-    ;; with mistty-term-key-map, if necessary.
-    "<up>" #'mistty-send-key
-    "<down>" #'mistty-send-key
-    "<right>" #'mistty-send-key
-    "<left>" #'mistty-send-key
-    "C-<up>" #'mistty-send-key
-    "C-<down>" #'mistty-send-key
-    "C-<right>" #'mistty-send-key
-    "C-<left>" #'mistty-send-key
-    "<delete>" #'mistty-send-key
-    "<deletechar>" #'mistty-send-key
-    "<backspace>" #'mistty-send-key
-    "<home>" #'mistty-send-key
-    "<end>" #'mistty-send-key
-    "<insert>" #'mistty-send-key
-    "<prior>" #'mistty-send-key
-    "<next>" #'mistty-send-key
-
-    ;; This only applies if term-bind-function-keys is non-nil.
-    "<remap> <term-send-function-key>" #'mistty-send-key
-
-    ;; Disable the "Terminal" menu; nothing that it contains should be
-    ;; used on Term buffers used by MisTTY.
-    "<menu-bar> <terminal>" nil
-
-    ;; switching the term buffer to line mode would cause issues.
-    "<remap> <term-line-mode>" #'mistty-toggle-buffers)
+The keybindings in `mistty-fullscreen-mode-map' are active while this
+mode is enabled."
+  :group 'mistty
+  :lighter nil
+  :keymap mistty-fullscreen-mode-map)
 
 ;; Variables:
 
@@ -695,6 +685,12 @@ best.
 
 This variable is available in the work buffer.")
 
+(defvar-local mistty--term nil
+  "The current terminal instance.
+
+This variable is available in both the work buffer and the term
+buffer.")
+
 (defvar-local mistty--queue nil
   "A queue of data to send to the process; a mistty--queue struct.
 
@@ -710,11 +706,6 @@ kept in sync.
 
 This variable is available in both the work buffer and the term
 buffer.")
-
-(defvar-local mistty--sync-marker-scrolline 0
-  "Define the scrolline assigned to `mistty-sync-marker'.
-
-This is updated at the same time as the marker, on both buffers.")
 
 (defvar-local mistty--active-prompt nil
   "A `mistty--prompt' struct of the active prompt.")
@@ -863,10 +854,6 @@ fullscreen mode.")
 (defvar-local mistty--point-marker nil
   "Marker (re)used by mistty--sync-buffer on Emacs 31 and later.")
 
-(eval-when-compile
-  ;; defined in term.el
-  (defvar term-home-marker))
-
 (defconst mistty-min-terminal-width 8
   "Minimum terminal width.
 
@@ -884,6 +871,8 @@ be ignored if coming from window size.")
   (setq buffer-read-only nil)
   (setq mistty-work-buffer (current-buffer))
 
+  (setq mistty--send-function #'mistty--send-for-mistty-mode)
+
   ;; scroll down only when needed. This typically keeps the point at
   ;; the end of the window. This seems to be more in-line with what
   ;; commands such as more expect than the default Emacs behavior.
@@ -899,6 +888,7 @@ be ignored if coming from window size.")
   (add-hook 'completion-in-region-mode-hook #'mistty--detect-completion-in-region nil t)
 
   (setq mistty-sync-marker (point-max-marker))
+  (mistty--init-scrolline mistty-sync-marker 0)
   (setq mistty--sync-ov (make-overlay mistty-sync-marker (point-max) nil nil 'rear-advance))
   (setq mistty--ignored-overlays (list mistty--sync-ov))
   (setq-local beginning-of-defun-function #'mistty-beginning-of-defun)
@@ -1003,58 +993,75 @@ window."
         (setq height (floor (with-selected-window win
                                    (window-screen-lines))))))
     (mistty--attach
-     (mistty--create-term
-      (concat " mistty tty " (buffer-name)) command args
-      ;; local-map
-      mistty-fullscreen-map
-      width height)))
+     (mistty--create-term (or mistty-terminal-type
+                              (if (mistty-alacritty-available-p)
+                                  'alacritty
+                                'eterm))
+                          (concat " mistty tty " (buffer-name))
+                          (cons command args)
+                          :width width
+                          :height height)))
   (mistty--wrap-capf-functions)
   (mistty--update-mode-lines)
   (run-hooks 'mistty-after-process-start-hook))
 
-(defun mistty--attach (term-buffer)
-  "Attach the current `mistty-mode' buffer to TERM-BUFFER.
-
-This sets `mistty-term-buffer' to TERM-BUFFER in the current
-buffer and `mistty-proc' to that buffer's process."
+(defun mistty--attach (term)
+  "Attach the current `mistty-mode' buffer to TERM."
   (let ((work-buffer (current-buffer))
-        (proc (get-buffer-process term-buffer)))
+        (term-buffer (mistty--term-buf term))
+        (proc (mistty--term-proc term))
+        (sync-scrolline mistty--scrolline-home-num))
 
     (when proc
       (process-put proc 'mistty-work-buffer work-buffer)
       (process-put proc 'mistty-term-buffer term-buffer))
 
+    (setq mistty--term term)
     (setq mistty-proc proc)
     (setq mistty-term-buffer term-buffer)
     (setq mistty--prompt-cell (buffer-local-value 'mistty--prompt-cell term-buffer))
     (setq mistty--queue (mistty--make-queue proc))
+    (setq mistty-goto-cursor-next-time t)
     (mistty--needs-refresh)
 
     (with-current-buffer term-buffer
+      (setq mistty--term term)
       (setq mistty-proc proc)
       (setq mistty-work-buffer work-buffer)
       (setq mistty-term-buffer term-buffer)
       (unless mistty-sync-marker
-        (setq mistty-sync-marker (copy-marker term-home-marker))))
+        (setq mistty-sync-marker (make-marker)))
+
+      ;; attempt to recover the previous sync position, if that fails,
+      ;; continue from screen top.
+      (if-let ((sync-pos (mistty--find-scrolline sync-scrolline)))
+          (move-marker mistty-sync-marker sync-pos)
+        (move-marker mistty-sync-marker (mistty--term-screen-top-pos term))
+        (setq mistty--scrolline-home-num sync-scrolline))
+
+      (mistty--term-autoresize mistty--term nil)
+      (mistty--term-setup-buffer term nil))
 
     (when proc
       (let ((accum (process-filter proc)))
         (mistty--accum-reset accum)
-        (mistty--add-prompt-detection accum)
-        (mistty--add-da1 accum)
-        (mistty--add-osc-detection accum)
-        (mistty--add-skip-unsupported accum)
+        (mistty--term-setup-accum
+         term accum
+         :enter-fullscreen
+         (lambda ()
+           (mistty--enter-fullscreen work-buffer proc))
+         :active-prompt
+         (lambda ()
+           (mistty--with-live-buffer work-buffer
+             mistty--active-prompt))
+         :after-clear-screen
+         (lambda ()
+           (mistty--with-live-buffer work-buffer
+             (if mistty-allow-clearing-scrollback
+                 (mistty--clear-scrollback)
+               (mistty--scroll-after-reset)))))
         (mistty--add-toggle-cursor accum work-buffer)
-        (mistty--add-sync-buffers accum work-buffer term-buffer)
-
-        ;; Switch to fullscreen mode
-        (mistty--accum-add-processor
-         accum
-         '(seq CSI (or "47" "?47" "?1047" "?1049") ?h)
-         (lambda (ctx _str)
-           (mistty--accum-ctx-flush ctx)
-           (mistty--enter-fullscreen proc)
-           (mistty--accum-ctx-push-down ctx "\e[47h"))))
+        (mistty--add-sync-buffers accum work-buffer term-buffer))
       (set-process-sentinel proc #'mistty--process-sentinel))
 
     (add-hook 'kill-buffer-hook #'mistty--kill-term-buffer nil t)
@@ -1064,8 +1071,10 @@ buffer and `mistty-proc' to that buffer's process."
 
     (if-let* ((size mistty--terminal-size))
         (mistty--set-process-window-size (car size) (cdr size))
-      (mistty--set-process-window-size-from-windows)
-      (add-hook 'window-size-change-functions #'mistty--window-size-change nil t))))
+      (add-hook 'window-size-change-functions #'mistty--window-size-change nil t)
+      ;; window sizes might not be reliable without a redisplay
+      (redisplay t)
+      (mistty--set-process-window-size-from-windows))))
 
 (defun mistty--add-toggle-cursor (accum buf)
   "Configure ACCUM to show/hide cursor in BUF."
@@ -1112,7 +1121,7 @@ Returns M or a new marker."
   (when mistty-proc
     (let ((accum (process-filter mistty-proc)))
       (mistty--accum-reset accum))
-    (set-process-sentinel mistty-proc #'term-sentinel)
+    (set-process-sentinel mistty-proc (mistty--term-sentinel-func mistty--term))
     (setq mistty-proc nil)))
 
 (defun mistty--kill-term-buffer ()
@@ -1135,11 +1144,10 @@ The buffer might be a `mistty-mode' buffer in non-fullscreen mode or a
 `term-mode' buffer in fullscreen mode."
   (and
    (buffer-live-p buffer)
-   (pcase (buffer-local-value 'major-mode buffer)
-     ('mistty-mode (not (buffer-local-value 'mistty-fullscreen buffer)))
-     ('term-mode (buffer-local-value 'mistty-fullscreen buffer)))
+   (if (buffer-local-value 'mistty-fullscreen buffer)
+       (mistty--term-is-term-buffer buffer)
+     (eq (buffer-local-value 'major-mode buffer) 'mistty-mode))
 
-   ;; returns
    buffer))
 
 (defun mistty-live-buffer-p (buffer)
@@ -1410,37 +1418,40 @@ See the documentation of `mistty-create' for details."
 
 PROC is the process, which might not be live anymore, and MSG is
 a special string describing the new process state."
-  (mistty--update-mode-lines proc)
+  (mistty-with-errors-logged "process sentinel"
+    (mistty--update-mode-lines proc)
 
-  (let ((work-buffer (process-get proc 'mistty-work-buffer))
-        (term-buffer (process-buffer proc)))
-    (mistty--with-live-buffer work-buffer
-      (when (memq (process-status proc) '(signal exit))
-        (while (accept-process-output proc 0 0 t))))
-
-    (cond
-     ((and (buffer-live-p term-buffer)
-           (buffer-live-p work-buffer))
-      (term-sentinel proc msg)
+    (let ((work-buffer (process-get proc 'mistty-work-buffer))
+          (term-buffer (process-buffer proc)))
       (mistty--with-live-buffer work-buffer
-        (mistty--needs-refresh) ;; term-buffer was modified by term-sentinel
-        (save-restriction
-          (widen)
-          (mistty--refresh)
-          (when (and (processp mistty-proc)
-                     (>= (point) (mistty-cursor)))
-            (goto-char (point-max)))
-          (mistty--detach)))
-      (kill-buffer term-buffer))
+        (when (memq (process-status proc) '(signal exit))
+          (while (accept-process-output proc 0 0 t))))
 
-     ((buffer-live-p work-buffer)
-      (with-current-buffer work-buffer
-        (mistty--detach)
-        (insert-before-markers "\n\nTerminal killed.\n")))
+      (cond
+       ((and (buffer-live-p term-buffer)
+             (buffer-live-p work-buffer))
+        (mistty--term-sentinel proc msg)
+        (mistty--with-live-buffer work-buffer
+          (mistty--needs-refresh) ;; term-buffer was modified by term-sentinel
+          (save-restriction
+            (widen)
+            (mistty--refresh)
+            (when (and (processp mistty-proc)
+                       (>= (point) (mistty-cursor)))
+              (goto-char (point-max)))
+            (mistty--detach)))
+        (kill-buffer term-buffer))
 
-     ((buffer-live-p term-buffer)
-      (kill-buffer term-buffer)))
-    (mistty--run-after-process-end-hooks work-buffer proc)))
+       ((buffer-live-p work-buffer)
+        (with-current-buffer work-buffer
+          (mistty--detach)
+          (delete-region (mistty--blank-end-start) (point-max))
+          (goto-char (point-max))
+          (insert "\n\nTerminal killed.\n")))
+
+       ((buffer-live-p term-buffer)
+        (kill-buffer term-buffer)))
+      (mistty--run-after-process-end-hooks work-buffer proc))))
 
 (defun mistty--run-after-process-end-hooks (buf proc)
   "Run hooks on `mistty-after-process-end-hook'.
@@ -1469,14 +1480,14 @@ special string describing the new process state."
         (work-buffer (process-get proc 'mistty-work-buffer)))
     (cond
      ((and process-dead (buffer-live-p term-buffer) (buffer-live-p work-buffer))
-      (mistty--leave-fullscreen proc)
+      (mistty--leave-fullscreen work-buffer proc)
       (mistty--process-sentinel proc msg))
      ((and process-dead (not (buffer-live-p term-buffer)) (buffer-live-p work-buffer))
       (let ((kill-buffer-query-functions nil))
         (kill-buffer (process-get proc 'mistty-work-buffer)))
-      (term-sentinel proc msg)
+      (mistty--term-sentinel proc msg)
       (mistty--run-after-process-end-hooks work-buffer proc))
-     (t (term-sentinel proc msg)))))
+     (t (mistty--term-sentinel proc msg)))))
 
 (defun mistty--add-sync-buffers (accum work-buffer term-buffer)
   "Sync the terminal region of WORK-BUFFER with TERM-BUFFER.
@@ -1510,72 +1521,65 @@ terminal region of WORK-BUFFER in sync with TERM-BUFFER."
      (mistty--with-live-buffer work-buffer
        (mistty--cancel-timeout mistty--queue)
        (mistty--refresh)
-       (mistty--maybe-truncate-when-idle)
        (mistty--dequeue mistty--queue 'intermediate)
        (mistty--dequeue-with-timer mistty--queue 'stable))))
 
-  ;; Realign buffers after a clear or reset
-  (mistty--accum-add-processor
+  (mistty--accum-add-post-processor
    accum
-   '(or (seq ESC ?c)
-        (seq CSI ?H CSI (? ?0) ?J)
-        (seq CSI ?2 ?J))
+   (lambda ()
+     (mistty--with-live-buffer work-buffer
+       (mistty--maybe-truncate-when-idle))))
+
+  (mistty--accum-add-post-processor
+   accum
+   (lambda ()
+     (mistty--with-live-buffer term-buffer
+       (mistty--maybe-truncate-term-buffer))))
+
+  (mistty--accum-add-processor
+   accum '(seq ESC ?c) ;; Reset (incl. clear scrollback)
    (lambda (ctx str)
+     (mistty--accum-ctx-push-down ctx str)
      (mistty--accum-ctx-flush ctx)
-     (mistty--reset)
-     (mistty--accum-ctx-push-down ctx str))))
+     (mistty-log "RESET")
 
-(defun mistty--reset ()
-  "Reset the link between work and term buffer.
+     (mistty--with-live-buffer work-buffer
+       (mistty--cancel-queue mistty--queue)
+       (while-let ((cs (car mistty--changesets)))
+         (mistty--release-changeset cs))
+       (setq mistty--inhibit-refresh nil)
+       (setq mistty-bracketed-paste nil))
+     (mistty--with-live-buffer term-buffer
+       (setq mistty-bracketed-paste nil))
 
-This should be called just before reseting the terminal."
-  (let ((reset-scrolline nil)
-        (home-pos nil))
-    (mistty--with-live-buffer mistty-work-buffer
-      (mistty--cancel-queue mistty--queue)
-      (while-let ((cs (car mistty--changesets)))
-        (mistty--release-changeset cs))
-      (setq mistty--inhibit-refresh nil)
-      (setq mistty--need-refresh t)
-      (mistty--refresh)
-      (mistty--prepare-end-for-reset)
-      (setq reset-scrolline (mistty--scrolline (point-max)))
-      (setq home-pos (point-max)))
-    (mistty--with-live-buffer mistty-term-buffer
-      (mistty--term-reset-scrolline reset-scrolline)
-      (setq mistty-bracketed-paste nil))
-    (mistty--with-live-buffer mistty-work-buffer
-      (setq mistty-bracketed-paste nil)
-      (mistty--set-sync-mark (point-max) reset-scrolline)
-      (mistty-log "RESET terminal at scrolline %s" reset-scrolline))
+     (if mistty-allow-clearing-scrollback
+         (mistty--clear-scrollback)
+       (mistty--scroll-after-reset))))
 
-    (if mistty-allow-clearing-scrollback
-        (mistty--clear-scrollback)
-      ;; Scroll the main window so the region that was cleared is
-      ;; not visible anymore. This way, it looks like the buffer
-      ;; was cleared even though history is kept.
-      (mistty--with-live-buffer mistty-work-buffer
-        (when-let* ((win (get-buffer-window mistty-work-buffer)))
-          (with-selected-window win
-            (set-window-start win (mistty--bol home-pos) 'noforce)))))))
+  (mistty--accum-add-processor
+   accum '(seq CSI ?3 ?J) ;; Clear scrollback
+   (lambda (ctx str)
+     (when mistty-allow-clearing-scrollback
+       (mistty--accum-ctx-push-down ctx str)
+       (mistty--accum-ctx-flush ctx)
+       (mistty-log "CLEAR SCROLLBACK")
+       (mistty--clear-scrollback)))))
 
-(defun mistty--prepare-end-for-reset ()
-  "Prepare work buffer to put terminal region at (point-max).
+(defun mistty--scroll-after-reset ()
+  "Scroll the main window to the top of the screen.
 
-This function might erase whitespaces at the end of the buffer."
-  (mistty--require-work-buffer)
-  (save-excursion
-    (let ((inhibit-modification-hooks t))
-      ;; If there's a current prompt, clear it. This allows the shell
-      ;; to send reset to clear a prompt, as recent versions of fish
-      ;; do.
-      (when-let* ((prompt mistty--active-prompt)
-                  (pos (mistty--scrolline-pos (mistty--prompt-start prompt))))
-        (delete-region pos (point-max)))
-      (goto-char (mistty--last-non-ws))
-      (delete-region (point) (point-max))
-      (unless (memq (char-before (point-max)) '(nil ?\n))
-        (insert "\n")))))
+This way, it looks like the buffer was cleared even though history is
+kept."
+  (when-let*
+      ((win (get-buffer-window mistty-work-buffer))
+       (screen-start-scrolline
+        (mistty--with-live-buffer mistty-term-buffer
+          (mistty--term-scrolline-at-screen-start)))
+       (screen-start-pos
+        (mistty--with-live-buffer mistty-work-buffer
+          (mistty--find-scrolline screen-start-scrolline))))
+    (mistty-log "SCROLL to %s@%s" screen-start-scrolline screen-start-pos)
+    (set-window-start win screen-start-pos 'noforce)))
 
 (defun mistty--clear-scrollback ()
   "Clear the work buffer above `mistty-sync-marker'."
@@ -1615,15 +1619,61 @@ the point being visible."
 This function detects FUNC moving the sync mark in TERM-BUFFER and
 triggers realignment with the work buffer when that happens."
   (let ((old-sync-position (mistty--with-live-buffer term-buffer
-                             (marker-position mistty-sync-marker))))
+                             (marker-position mistty-sync-marker)))
+        sync-scrolline home-scrolline)
     ;; Reminder: call func with no buffer set, to avoid strange
     ;; breakages when the term buffer is killed.
     (funcall func)
     (mistty--with-live-buffer term-buffer
-      (when (/= mistty-sync-marker old-sync-position)
+      (setq sync-scrolline (mistty--with-live-buffer mistty-work-buffer
+                             mistty--scrolline-home-num))
+      (setq home-scrolline (mistty--term-screen-top-scrolline mistty--term))
+      (cond
+       ((< sync-scrolline home-scrolline)
+        (mistty-log "Detected rapid scroll (sync @%s, home now @%s). Catching up."
+                    sync-scrolline home-scrolline)
+        (let* ((catchup-lines (- home-scrolline sync-scrolline))
+               (home (mistty--term-screen-top-pos mistty--term))
+               (catchup-start (save-excursion
+                                (goto-char home)
+                                (pos-bol (1+ (- catchup-lines)))))
+               (catchup-end (marker-position home)))
+          (mistty-log "Catchup [%s-%s] %s lines" catchup-start catchup-end catchup-lines)
+          (move-marker mistty-sync-marker catchup-end)
+          (setq mistty--scrolline-home-num home-scrolline)
+          (mistty--with-live-buffer mistty-work-buffer
+            (let ((screen-top (save-excursion
+                                (goto-char mistty-sync-marker)
+                                (let ((inhibit-modification-hooks t))
+                                  (insert-buffer-substring
+                                   mistty-term-buffer catchup-start catchup-end))
+                                (point))))
+              (mistty--set-sync-mark screen-top home-scrolline)))))
+       ((/= mistty-sync-marker old-sync-position)
         (mistty-log "Detected terminal change above sync mark, at scrolline %s"
-                    mistty--sync-marker-scrolline)
-        (mistty--realign-buffers)))))
+                    mistty--scrolline-home-num)
+        (mistty--realign-buffers))))))
+
+(defun mistty--maybe-truncate-term-buffer ()
+  "Truncate scrollback area in term buffer.
+
+This function removes excessive scrollback data. It will still leave a
+few lines of scrollback to help recovery."
+  (mistty--require-term-buffer)
+  (let ((home-marker (mistty--term-screen-top-pos mistty--term)))
+    (when (>= mistty-sync-marker home-marker)
+      (let ((chars (- home-marker (point-min))))
+        (when (>= chars 1000)
+          (save-excursion
+            (goto-char (- home-marker 200))
+            (goto-char (pos-bol))
+            (unless (bobp)
+              (mistty-log "[term] truncate %s chars of scrollback, leaving %s."
+                          (- (point) (point-min))
+                          (- home-marker (point)))
+              (let ((inhibit-read-only t)
+                    (inhibit-modification-hooks t))
+                (delete-region (point-min) (point))))))))))
 
 (defun mistty-goto-cursor ()
   "Move the point to the terminal's cursor."
@@ -1648,11 +1698,6 @@ not yet, if it the work buffer is out of sync with
     (error "No process"))
   (mistty--from-pos-of (process-mark mistty-proc) mistty-term-buffer))
 
-(defun mistty--cursor-scrolline ()
-  "Return the scrolline position of the cursor."
-  (with-current-buffer mistty-term-buffer
-    (mistty--term-scrolline)))
-
 (defun mistty--from-pos-of (pos buffer-of-pos)
   "Return the local equivalent to POS defined in BUFFER-OF-POS."
   (+ mistty-sync-marker (with-current-buffer buffer-of-pos
@@ -1665,30 +1710,6 @@ Note that the position might not exist in `mistty-work-buffer',
 not yet, if it the work buffer is out of sync with
 `mistty-term-buffer'."
   (mistty--from-pos-of pos mistty-term-buffer))
-
-(defun mistty--scrolline (pos)
-  "Return the scrolline that correspond to POS.
-
-This works in both the sync and term buffers.
-
-To get the position of the cursor `mistty--cursor-scrolline' is more
-efficient that passing the result of `mistty-cursor' to this function."
-  (save-restriction
-    (+ mistty--sync-marker-scrolline (mistty--count-scrollines mistty-sync-marker pos))))
-
-(defun mistty--scrolline-pos (scrolline)
-  "Return the position of the beginning of SCROLLINE.
-
-Return nil if SCROLLINE is not below the sync marker or outside the
-region accessible from the current buffer.
-
-Work in the work or term buffer."
-  (save-restriction
-    (save-excursion
-      (when (>= scrolline mistty--sync-marker-scrolline)
-        (goto-char mistty-sync-marker)
-        (when (zerop (mistty--go-down-scrollines (- scrolline mistty--sync-marker-scrolline)))
-          (point))))))
 
 (defun mistty--needs-refresh ()
   "Let next call to `mistty--refresh' know there's something to refresh."
@@ -1716,7 +1737,7 @@ Also updates prompt and point."
                                    (= (point) mistty--cursor-after-last-refresh)))
           on-prompt)
       (mistty--copy-buffer-local-variables
-       (cons 'mistty-bracketed-paste (cons 'term-width mistty-variables-to-copy))
+       (cons 'mistty-bracketed-paste mistty-variables-to-copy)
        mistty-term-buffer)
       (mistty--inhibit-undo
        (save-restriction
@@ -1726,7 +1747,9 @@ Also updates prompt and point."
                               (buffer-live-p mistty-term-buffer)
                               (mistty-on-prompt-p (mistty-cursor))))
 
-         (mistty-log "refresh (%s)" (if on-prompt "complete" "quick"))
+         (mistty-log "refresh (%s)@%s"
+                     (if on-prompt "complete" "quick")
+                     mistty--scrolline-home-num)
          (mistty--sync-buffer mistty-term-buffer (not on-prompt))
 
          ;; Make fake newlines invisible. They're not really "visible"
@@ -1741,7 +1764,7 @@ Also updates prompt and point."
                         (text-property-search-forward 'term-line-wrap t t)))
              (when (save-excursion
                      (goto-char (prop-match-beginning prop-match))
-                     (zerop (% (current-column) term-width)))
+                     (zerop (% (current-column) (mistty--term-columns mistty--term))))
                (add-text-properties
                 (prop-match-beginning prop-match)
                 (prop-match-end prop-match)
@@ -1761,7 +1784,7 @@ Also updates prompt and point."
          (when mistty--end-prompt
            (when-let* ((prompt mistty--active-prompt)
                        (scrolline (mistty--with-live-buffer mistty-term-buffer
-                                    (mistty--term-scrolline)))
+                                    (mistty--scrolline-at-point)))
                        (end-scrolline (mistty--prompt-end prompt)))
              (when (>= scrolline end-scrolline)
                (when (mistty--maybe-move-sync-mark end-scrolline)
@@ -1772,22 +1795,21 @@ Also updates prompt and point."
                              end-scrolline
                              scrolline)))))
 
-         (when-let* ((prompt (mistty--prompt)))
+         (when-let* ((prompt (mistty--prompt))
+                     (prompt-beg (mistty--find-scrolline
+                                  (mistty--prompt-start prompt))))
            ;; If a new prompt was detected, restrict sync region to
            ;; the beginning of that prompt.
            (when (and (not (mistty--prompt-realized prompt))
                       (memq (mistty--prompt-source prompt) '(bracketed-paste osc133))
                       (null (mistty--prompt-end prompt)))
-             (when-let* ((prompt-beg (mistty--scrolline-pos (mistty--prompt-start prompt)))
-                        (cursor (when (process-live-p mistty-proc)
-                                  (mistty-cursor))))
+             (when-let* ((cursor (when (process-live-p mistty-proc) (mistty-cursor))))
                (when (and (> cursor prompt-beg)
                           (or (eq 'osc133 (mistty--prompt-source prompt))
                               (string-match mistty--prompt-regexp
                                             (save-excursion
                                               (goto-char cursor)
-                                              (mistty--scrolline-text-before-point
-                                               'no-properties)))))
+                                              (mistty--unwrapped-scrolline-text-to-point)))))
                  (mistty-log "Realized %s prompt #%s [%s-] @%s"
                              (mistty--prompt-source prompt)
                              (mistty--prompt-input-id prompt)
@@ -1796,8 +1818,10 @@ Also updates prompt and point."
                  (mistty--set-sync-mark prompt-beg (mistty--prompt-start prompt))
                  (setf (mistty--prompt-realized prompt) t)
                  (setq mistty--active-prompt prompt))))
-
-           (mistty--mark-prompt-fields prompt))
+           (when (mistty--prompt-realized prompt)
+             (mistty--mark-continue-prompts prompt prompt-beg)
+             (mistty--mark-right-prompt prompt-beg)
+             (mistty--mark-prompt-fields prompt prompt-beg)))
 
          (let ((v (and on-prompt (mistty--can-move-vertically-p))))
            (unless (eq v mistty--can-move-vertically)
@@ -1821,20 +1845,10 @@ Also updates prompt and point."
          (unless mistty--active-prompt
            (mistty--with-live-buffer mistty-term-buffer
              ;; Next time, only sync the visible portion of the terminal.
-             (when (< mistty-sync-marker term-home-marker)
+             (when (< mistty-sync-marker (mistty--term-screen-top-pos mistty--term))
                (let ((scrolline (mistty--term-scrolline-at-screen-start)))
                  (mistty--with-live-buffer mistty-work-buffer
-                   (mistty--maybe-move-sync-mark scrolline))))
-
-             ;; Truncate the term buffer, since scrolling back is available on
-             ;; the work buffer anyways. This has to be done now, after syncing
-             ;; the marker, and not in term-emulate-terminal, which is why
-             ;; term-buffer-maximum-size is set to 0.
-             (mistty--adjust-scrolline-base)
-             (save-excursion
-               (goto-char term-home-marker)
-               (forward-line -5)
-               (delete-region (point-min) (point)))))
+                   (mistty--maybe-move-sync-mark scrolline))))))
 
          ;; Move the point to the cursor, if necessary.
          (when (process-live-p mistty-proc)
@@ -1850,30 +1864,67 @@ Also updates prompt and point."
 
     (mistty--report-self-inserted-text)))
 
-(defun mistty--mark-prompt-fields (prompt)
+(defun mistty--mark-continue-prompts (prompt prompt-start)
+  "Detect and mark continue prompts that are part of PROMPT."
+  (let* ((scrolline (1+ (mistty--prompt-start prompt)))
+         (end-scrolline (mistty--prompt-end prompt))
+         (bol (mistty--bol prompt-start 2)))
+    (while (and (or (null end-scrolline) (< scrolline end-scrolline))
+                (mistty--detect-continue-prompt bol))
+      (cl-incf scrolline)
+      (setq bol (mistty--bol bol 2)))))
+
+(defun mistty--mark-right-prompt (prompt-beg)
+  (let* ((line-end (max prompt-beg (mistty--eol prompt-beg)))
+         (pos (text-property-any prompt-beg line-end 'mistty-skip 'right-prompt)))
+    (when (and pos (> line-end pos))
+      (put-text-property pos line-end 'yank-handler '(nil "" nil nil)))))
+
+(defun mistty--mark-prompt-fields (prompt prompt-beg)
   "If user input start is known in PROMPT, mark fields.
 
 Fields allow the like of `beginning-of-line' and `end-of-line' to ignore
 prompt and right prompts."
-  (when-let* ((start (mistty--prompt-user-input-start prompt))
-             (bol (mistty--scrolline-pos (car start)))
-             (eol (mistty--eol bol)))
-    (when (> (cdr start) 0)
+  (when-let* ((user-input-start (mistty--prompt-user-input-start prompt))
+              (start-scrolline (car user-input-start))
+              (start-chars (cdr user-input-start))
+              (bol prompt-beg)
+              (end (mistty--eol bol))
+              (start-pos (min end (+ bol start-chars))))
+    (when (> start-pos bol)
       (add-text-properties
-       bol (+ bol (cdr start))
+       bol start-pos
        '(field prompt
                inhibit-line-move-field-capture t
                front-sticky (field inhibit-line-move-field-capture)
                rear-nonsticky t)))
-    (when-let* ((right-prompt-start (text-property-any bol eol 'mistty-skip 'right-prompt)))
+    (when-let* ((right-prompt-start
+                 (when (> end start-pos)
+                   (text-property-any start-pos end 'mistty-skip 'right-prompt))))
       ;; Give room for the point to go one column past the beginning
       ;; of the right prompt to not confuse field-aware commands
       ;; such as backward-word.
       (cl-incf right-prompt-start)
-      (when (> eol right-prompt-start)
+      (when (> end right-prompt-start)
         (add-text-properties
-         right-prompt-start eol
+         right-prompt-start end
          '(field right-prompt
+                 inhibit-line-move-field-capture t
+                 front-sticky (field inhibit-line-move-field-capture)
+                 rear-nonsticky t)))
+        (setq end right-prompt-start))
+    (let ((pos end))
+      (while (and (eq ?  (char-before pos))
+                  (eq 'trailing (get-text-property (1- pos) 'mistty-skip)))
+        (cl-decf pos))
+      (when (> end pos)
+        ;; Give room to allow the cursor to go to the end of the line
+        ;; and continue typing without leaving the field.
+        (cl-incf pos))
+      (when (> end pos)
+        (add-text-properties
+         pos end
+         '(field trailing
                  inhibit-line-move-field-capture t
                  front-sticky (field inhibit-line-move-field-capture)
                  rear-nonsticky t))))))
@@ -2099,7 +2150,7 @@ If it is, it sets the sync marker at that position and call
 `mistty--set-sync-mark'.
 
 Return nil if SCROLLINE is not accessible on the work buffer."
-  (when-let* ((pos (mistty--scrolline-pos scrolline)))
+  (when-let* ((pos (mistty--find-scrolline scrolline)))
     (mistty--set-sync-mark pos scrolline)
 
     t))
@@ -2113,26 +2164,34 @@ terminal region.
 SCROLLINE is a scrolline that's currently visible on the terminal."
   (mistty--require-work-buffer)
   (mistty--with-live-buffer mistty-term-buffer
-    (let ((pos (mistty--term-scrolline-pos scrolline)))
+    (let ((pos (mistty--find-scrolline scrolline)))
       (unless pos
         (error "Scrolline %s not accessible in terminal buffer" scrolline))
       (set-marker mistty-sync-marker pos)))
 
   (unless (and (= sync-pos mistty-sync-marker)
-               (= scrolline mistty--sync-marker-scrolline))
+               (= scrolline mistty--scrolline-home-num))
     (mistty-log "MOVE SYNC MARKER %s to %s at scrolline %s"
                 (marker-position mistty-sync-marker)
                 sync-pos
                 scrolline)
-    (setq mistty--active-prompt nil)
-    (setq mistty--end-prompt nil)
+    (when-let* ((p mistty--active-prompt))
+      (if (and (mistty--prompt-realized p)
+               (not (mistty--prompt-end p)))
+          (mistty-log "Keep prompt #%s"
+                      (mistty--prompt-input-id mistty--active-prompt))
+      (mistty-log "Deactivate prompt #%s"
+                  (mistty--prompt-input-id mistty--active-prompt))
+      (setq mistty--active-prompt nil)
+      (setq mistty--end-prompt nil)))
+
     (mistty--process-archived-prompts sync-pos)
     (let ((old-marker-position (marker-position mistty-sync-marker)))
       (move-marker mistty-sync-marker sync-pos)
       (when (< old-marker-position sync-pos)
         (mistty--prepare-for-scrollback
-         old-marker-position mistty--sync-marker-scrolline mistty-sync-marker)))
-    (setq mistty--sync-marker-scrolline scrolline)
+         old-marker-position mistty--scrolline-home-num mistty-sync-marker)))
+    (setq mistty--scrolline-home-num scrolline)
     (move-overlay mistty--sync-ov mistty-sync-marker (point-max))))
 
 (defun mistty--update-sync-marker-scrolline ()
@@ -2140,13 +2199,13 @@ SCROLLINE is a scrolline that's currently visible on the terminal."
   (mistty--require-work-buffer)
   (let (scrolline)
     (mistty--with-live-buffer mistty-term-buffer
-      (setq scrolline (mistty--term-scrolline-at mistty-sync-marker))
-      (setq mistty--sync-marker-scrolline scrolline)
+      (setq scrolline (mistty--scrolline-at mistty-sync-marker))
+      (setq mistty--scrolline-home-num scrolline)
       (mistty-log "SYNC MARKER AT SCROLLINE %s ON SCREEN %s-"
                   scrolline
                   (mistty--term-scrolline-at-screen-start)))
     (when scrolline
-      (setq mistty--sync-marker-scrolline scrolline))))
+      (setq mistty--scrolline-home-num scrolline))))
 
 (defun mistty--process-archived-prompts (limit-pos)
   "Remove any archived prompt above END and mark their regions.
@@ -2158,7 +2217,7 @@ This function cleans up `mistty--prompt-archive', removing prompts above END.
 It also marks the prompt region with the text property
 \\=`mistty-input-id so they can be detected by functions like
 `mistty-next-output'."
-  (let ((limit (mistty--scrolline limit-pos))
+  (let ((limit (mistty--scrolline-at limit-pos))
         (inhibit-modification-hooks t)
         (inhibit-read-only t))
     (when-let* ((prompt (mistty--prompt)))
@@ -2167,10 +2226,10 @@ It also marks the prompt region with the text property
         (setf (mistty--prompt) nil)))
     (dolist (prompt (mistty--prompt-archive))
       (when (mistty--prompt-realized prompt)
-        (when-let* ((prompt-beg (mistty--scrolline-pos
-                                (mistty--prompt-start prompt)))
+        (when-let* ((prompt-beg (mistty--find-scrolline
+                                 (mistty--prompt-start prompt)))
                    (prompt-end (when (mistty--prompt-end prompt)
-                                 (mistty--scrolline-pos
+                                 (mistty--find-scrolline
                                   (mistty--prompt-end prompt)))))
           (when (> prompt-end prompt-beg)
             (mistty-log "End %s prompt #%s. Mark input range: [%s-%s]/[%s-%s]"
@@ -2180,7 +2239,9 @@ It also marks the prompt region with the text property
                         (mistty--prompt-end prompt)
                         prompt-beg
                         prompt-end)
-            (mistty--mark-prompt-fields prompt)
+            (mistty--mark-continue-prompts prompt prompt-beg)
+            (mistty--mark-right-prompt prompt-beg)
+            (mistty--mark-prompt-fields prompt prompt-beg)
             (put-text-property
              prompt-beg prompt-end
              'mistty-input-id (mistty--prompt-input-id prompt))))))
@@ -2201,23 +2262,17 @@ just tend to cause issues."
         (inhibit-read-only t))
     (mistty--mark-scrollines beg scrolline end)
     (when (not mistty--inhibit-fake-nl-cleanup)
-      (mistty--remove-fake-newlines beg end term-width))))
+      (mistty--cleanup-scrollback beg end))))
 
 (defun mistty--mark-scrollines (beg scrolline end)
   "Add text property \\='mistty-scrolline to scrollines from BEG to END.
 
 SCROLLINE is the scrolline at BEG."
-  (save-excursion
-    (goto-char beg)
-    (while (< (point) end)
-      (let ((bos (mistty--beginning-of-scrolline-pos))
-            (eos (mistty--end-of-scrolline-pos)))
-        (when (eq ?\n (char-after eos))
-          (cl-incf eos))
-        (when (> eos bos)
-          (put-text-property bos eos 'mistty-scrolline scrolline))
-        (cl-incf scrolline)
-        (mistty--go-down-scrollines 1)))))
+  (mistty--for-each-scrolline
+   (lambda (bol eol)
+     (put-text-property bol eol 'mistty-scrolline scrolline)
+     (cl-incf scrolline))
+   beg end))
 
 (defun mistty-send-string (str)
   "Send STR to the process."
@@ -2279,21 +2334,6 @@ If N is a positive integer that many newlines."
       (mistty--send-string mistty-proc nl-seq))
 
      (t (insert "\n")))))
-
-(defun mistty-send-last-key (&optional n)
-  "Send the last key that was typed to the terminal N times.
-
-This command extracts element of `this-command-key`, translates
-it and sends it to the terminal.
-
-This is a convenient variant to `mistty-send-key' which allows
-burying key binding to send to the terminal inside of a keymap
-with an arbitrary prefix.
-
-This command is available in fullscreen mode."
-  (interactive "p")
-  (mistty-send-key
-   (or n 1) (seq-subseq (this-command-keys-vector) -1)))
 
 (defun mistty-positional-p (key)
   "Return non-nil if KEY is a positional key.
@@ -2361,22 +2401,13 @@ If N is specified, do it N times."
       (call-interactively 'indent-for-tab-command)
     (mistty-send-key n (kbd "TAB") 'positional)))
 
-(defun mistty-send-key (&optional n key positional)
-  "Send the current key sequence to the terminal.
+(defun mistty--send-for-mistty-mode (translated-key key n positional)
+  "Send a key to the terminal.
 
-This command sends N times the current key sequence, or KEY if it
-is specified, directly to the terminal. If the key sequence is
-positional or if POSITIONAL evaluates to true, MisTTY attempts to
-move the terminal's cursor to the current point.
-
-KEY must be a string or vector as would be returned by `kbd'.
-
-This command is available in fullscreen mode."
-  (interactive "p")
+This is meant to be bound to `mistty--send-function' for `mistty-mode'
+buffers."
   (mistty--require-proc)
-  (let* ((key (or key (this-command-keys-vector)))
-         (translated-key (mistty-translate-key key n))
-         (fire-and-forget (or mistty--forbid-edit
+  (let* ((fire-and-forget (or mistty--forbid-edit
                               (string-match "^[[:graph:]]+$" translated-key)))
          (positional (or positional (mistty-positional-p key))))
     (cond
@@ -2428,28 +2459,6 @@ If an argument is specified, repeat it N time."
 If an argument is specified, repeat it N time."
   (interactive "p")
   (mistty-send-key n (kbd "C-n")))
-
-(defun mistty-send-key-sequence ()
-  "Send all keys to terminal until interrupted.
-
-This function continuously read keys and sends them to the
-terminal, just like `mistty-send-key', until it is interrupted
-with \\[keyboard-quit] or until it is passed a key or event it
-doesn't support, such as a mouse event.."
-  (interactive)
-  (mistty--require-proc)
-  (let ((proc mistty-proc)
-        key)
-    (while
-        (and
-         (setq key
-               (read-key "Sending all KEYS to terminal... Exit with C-g."
-                         'inherit-input-method))
-         (not (eq key ?\C-g)))
-      (pcase key
-        (`(xterm-paste ,str)
-         (mistty--send-string proc (mistty--maybe-bracketed-str str)))
-        (_ (mistty-send-key 1 (make-vector 1 key)))))))
 
 (defun mistty-beginning-of-line (&optional n)
   "Go to the Nth beginning of line, possibly by sending Control a.
@@ -2625,42 +2634,28 @@ returns nil."
 
              (move-marker beg orig-beg)
              (if (< old-length 0)
-                 (let ((end
-                        ;; When looking for the end of the text to be
-                        ;; deleted marked with old-length=-1, ignore the
-                        ;; final \n or anything marked mistty-skip, as
-                        ;; these cannot be deleted.
-                        (save-excursion
-                          (goto-char (point-max))
-                          (when (eq (char-before) ?\n)
-                            (goto-char (1- (point))))
-                          (while (get-text-property (1- (point)) 'mistty-skip)
-                            (goto-char (1- (point))))
-                          (point))))
-                   (setq old-length (if (> end orig-beg) (- end orig-beg) 0))
-                   (move-marker old-end (max orig-beg end)))
-               (move-marker old-end (+ orig-beg old-length)))
+                 (let ((end (max beg (mistty--blank-end-start))))
+                   (setq old-length (- end beg))
+                   (move-marker old-end end))
+               (move-marker old-end (+ beg old-length)))
 
-             ;; never delete the final \n that some shells add.
-             (when (and (> old-length 0)
-                        (= old-end (point-max))
-                        (= ?\n (char-before old-end)))
-               (move-marker old-end (1- old-end))
-               (setq old-length (1- old-length)))
+             ;; don't try to delete blank lines at EOB
+             (let ((blank-end (mistty--blank-end-start)))
+               (let ((end (max beg blank-end)))
+                 (when (> old-end end)
+                   (move-marker old-end end)))
 
-             ;; don't even try to move through trailing ws, as they may
-             ;; not exist (Issue #34)
-             (setq trailing-ws-to-delete 0)
-             (when (memq (char-after old-end) '(nil ?\n))
-               (let ((at-end (<= (mistty--last-non-ws) old-end )))
-                 (while (and (> old-length 0)
-                             (eq ?\  (char-before old-end)))
-                   (move-marker old-end (1- old-end))
-                   (when at-end
-                     (cl-incf trailing-ws-to-delete))
-                   (cl-decf old-length))))
+               ;; don't even try to move through trailing ws at the
+               ;; end of the prompt, as they may not exist (Issue #34)
+               ;; even though they're not reported as blank.
+               (setq trailing-ws-to-delete 0)
+               (when (= old-end blank-end)
+                 (while (and (eq ?\  (char-before old-end)) (> old-end beg))
+                   (cl-incf trailing-ws-to-delete)
+                   (move-marker old-end (1- old-end)))))
+             (setq old-length (- old-end beg))
 
-             (mistty-log "replay: %s %s %s old-content: '%s' (limit: [%s-%s])"
+             (mistty-log "replay: %s '%s' %s old-content: '%s' (limit: [%s-%s])"
                          (marker-position orig-beg)
                          content
                          old-length
@@ -2855,6 +2850,7 @@ returns nil."
              (mistty--update-backstage)
              (mistty--with-live-buffer term-buffer
                (mistty--detect-dead-spaces-after-insert
+                mistty--term
                 content (+ mistty-sync-marker (marker-position beg))))
 
              ;; Move right prompt just like the shell would, to avoid it
@@ -3183,11 +3179,13 @@ Return nil if no command could be extracted."
 
       ;; Trim
       (goto-char (point-min))
-      (while (search-forward-regexp "^[[:blank:]\n\r]+" nil 'noerror)
+      (while (search-forward-regexp "^[[:blank:]]+" nil 'noerror)
         (replace-match ""))
       (goto-char (point-min))
-      (while (search-forward-regexp "[[:blank:]\n\r]+$" nil 'noerror)
+      (while (search-forward-regexp "[[:blank:]\r]+$" nil 'noerror)
         (replace-match ""))
+      (while (eq ?\n (char-before (point-max)))
+        (delete-region (1- (point-max)) (point-max)))
 
       ;; Get rid of newlines.
       (goto-char (point-min))
@@ -3269,9 +3267,9 @@ ACTIVE-PROMPT-RANGES must be the output of
 
 Also accepts inactive (potential) prompts."
   (when-let* ((prompt (or mistty--active-prompt (mistty--prompt)))
-              (start-pos (mistty--scrolline-pos (mistty--prompt-start prompt)))
+              (start-pos (mistty--find-scrolline (mistty--prompt-start prompt)))
               (end-pos (or (when-let* ((end (mistty--prompt-end prompt)))
-                             (mistty--scrolline-pos end))
+                             (mistty--find-scrolline end))
                            (point-max))))
     (list start-pos end-pos end-pos)))
 
@@ -3321,7 +3319,7 @@ Return the prompt range that was accepted or nil."
 
 (defun mistty--post-command ()
   "Function called from the `post-command-hook' in `mistty-mode' buffers."
-  (with-demoted-errors "mistty: post-command error %S"
+  (mistty-with-errors-logged "post-command"
     (mistty--post-command-for-undo)
 
     (ignore-errors
@@ -3453,34 +3451,35 @@ This is the body of `mistty--post-command', which replays any
 modifications or cursor movement executed during the command. It
 is run in an idle timer to avoid failures inside of the
 post-command hook."
-  (mistty--with-live-buffer buf
-    (mistty--detect-foreign-overlays 'noschedule)
-    (mistty--inhibit-undo
-     (save-restriction
-       (widen)
-       (when (and (not mistty--inhibit)
-                  (process-live-p mistty-proc)
-                  (buffer-live-p mistty-term-buffer))
-         (let ((cs (mistty--active-changeset))
-               (replay nil))
-           (when cs
-             (if (setq replay (mistty--should-replay cs))
-                 ;; Give changeset over to the interaction to replay.
-                 (let ((last-interaction (mistty--queue-last-interact mistty--queue)))
-                   (unless (and last-interaction
-                                (eq 'replay (mistty--interact-type last-interaction))
-                                ;; append to existing interaction
-                                (mistty--call-interact last-interaction 'replay cs))
-                     (mistty--enqueue mistty--queue (mistty--replay-interaction cs))))
+  (mistty-with-errors-logged "post-command-1"
+    (mistty--with-live-buffer buf
+      (mistty--detect-foreign-overlays 'noschedule)
+      (mistty--inhibit-undo
+       (save-restriction
+         (widen)
+         (when (and (not mistty--inhibit)
+                    (process-live-p mistty-proc)
+                    (buffer-live-p mistty-term-buffer))
+           (let ((cs (mistty--active-changeset))
+                 (replay nil))
+             (when cs
+               (if (setq replay (mistty--should-replay cs))
+                   ;; Give changeset over to the interaction to replay.
+                   (let ((last-interaction (mistty--queue-last-interact mistty--queue)))
+                     (unless (and last-interaction
+                                  (eq 'replay (mistty--interact-type last-interaction))
+                                  ;; append to existing interaction
+                                  (mistty--call-interact last-interaction 'replay cs))
+                       (mistty--enqueue mistty--queue (mistty--replay-interaction cs))))
 
-               ;; Abandon changeset
-               (mistty--release-changeset cs)
-               (mistty--refresh-after-changeset)))
+                 ;; Abandon changeset
+                 (mistty--release-changeset cs)
+                 (mistty--refresh-after-changeset)))
 
-           (when (and (not replay) (not mistty--forbid-edit) point-moved (>= (point) mistty-sync-marker))
-             (mistty--enqueue mistty--queue (mistty--cursor-to-point-interaction)))
+             (when (and (not replay) (not mistty--forbid-edit) point-moved (>= (point) mistty-sync-marker))
+               (mistty--enqueue mistty--queue (mistty--cursor-to-point-interaction)))
 
-           (mistty--refresh)))))))
+             (mistty--refresh))))))))
 
 (defun mistty--should-replay (cs)
   "Decide whether CS should be replayed.
@@ -3500,7 +3499,7 @@ Might modify CS before allowing replay."
      ;; modifications after the new prompt.
      ((and (mistty--possible-prompt-p)
            (mistty--changeset-restrict
-            cs (mistty--scrolline-pos (mistty--prompt-start (mistty--prompt)))))
+            cs (mistty--find-scrolline (mistty--prompt-start (mistty--prompt)))))
       (mistty--realize-possible-prompt)
       (setq replay t))
 
@@ -3512,7 +3511,7 @@ Might modify CS before allowing replay."
               (mistty--bol (point-max) -5))
            (not mistty--need-refresh))
       (let* ((pos (mistty--bol (mistty--changeset-end cs) 3))
-             (scrolline (mistty--scrolline pos)))
+             (scrolline (mistty--scrolline-at pos)))
         (mistty--set-sync-mark pos scrolline)))
 
      (t ;; revert everything
@@ -3653,8 +3652,7 @@ To go back to tracking window size, call
 (defun mistty--set-process-window-size-from-windows ()
   "Adjust process terminal size based on the windows displaying it."
   (when (process-live-p mistty-proc)
-    (let* ((adjust-func (or (process-get mistty-proc 'adjust-window-size-function)
-                            window-adjust-process-window-size-function))
+    (let* ((adjust-func window-adjust-process-window-size-function)
            (size (funcall adjust-func mistty-proc
                           (append
                            (get-buffer-window-list mistty-work-buffer nil t)
@@ -3673,56 +3671,37 @@ Width and height are limited to `mistty-min-terminal-width' and
   (when (process-live-p mistty-proc)
     (let ((width (max width mistty-min-terminal-width))
           (height (max height mistty-min-terminal-height)))
-      (mistty--with-live-buffer mistty-term-buffer
-        (set-process-window-size mistty-proc height width)
-        (term-reset-size height width)))))
+      (mistty--term-resize mistty--term width height))))
 
-(defun mistty--enter-fullscreen (proc)
+(defun mistty--enter-fullscreen (work-buffer proc)
   "Enter fullscreen mode for PROC."
-  (mistty--with-live-buffer (process-get proc 'mistty-work-buffer)
+  (mistty--with-live-buffer work-buffer
     (mistty--detach)
     (let ((bufname (buffer-name)))
       (rename-buffer (generate-new-buffer-name (concat bufname " scrollback")))
       (with-current-buffer mistty-term-buffer
-        (rename-buffer bufname)
-        (jit-lock-mode t)
-        (turn-on-font-lock)))
+        (rename-buffer bufname)))
     (mistty--swap-buffer-in-windows mistty-work-buffer mistty-term-buffer)
 
     (let ((msg (mistty--fullscreen-message)))
       (overlay-put mistty--sync-ov 'after-string (concat "\n" msg "\n"))
       (run-with-idle-timer 0.1 nil #'mistty--report-fullscreen (current-buffer) msg))
 
-    (let ((accum (process-filter proc))
-          (end (copy-marker (point-max))))
+    (let ((accum (process-filter proc)))
       (mistty--accum-reset accum)
-      (mistty--add-da1 accum)
-      (mistty--add-osc-detection accum)
-      (mistty--add-skip-unsupported accum)
-      (mistty--add-toggle-cursor accum mistty-term-buffer)
-      (mistty--accum-add-processor
-       accum
-       '(seq CSI (or "47" "?47" "?1047" "?1049") ?l)
-       (lambda (ctx _str)
-         (mistty--accum-ctx-push-down ctx "\e[47l")
-         (mistty--accum-ctx-flush ctx)
-         ;; When handling CSI 47 h, term.el sometimes add a newline
-         ;; that is not removed after handling CSI 47 l. This
-         ;; manifests as extra newlines, especially visible when
-         ;; launching recent versions of fish. This code works around
-         ;; the problem by deleting anything after the position that
-         ;; was end-of-buffer just before CSI 47 h was handled.
-         (when (and end (< end (point-max))
-                    (eq ?\n (char-after end)))
-           (let ((inhibit-read-only t))
-             (delete-region end (point-max))))
-         (move-marker end nil)
-         (mistty--leave-fullscreen proc))))
+      (mistty--term-setup-accum-for-fullscreen
+       mistty--term accum
+       :leave-fullscreen
+       (lambda ()
+         (mistty--leave-fullscreen work-buffer proc)))
+      (mistty--add-toggle-cursor accum mistty-term-buffer))
     (set-process-sentinel proc #'mistty--fs-process-sentinel)
     (mistty--update-mode-lines proc)
-    (mistty--set-process-window-size-from-windows)
     (setq mistty-fullscreen t)
     (mistty--with-live-buffer mistty-term-buffer
+      (mistty--term-setup-buffer mistty--term t)
+      (mistty--term-autoresize mistty--term t)
+      (mistty-fullscreen-mode 1)
       (setq mistty-fullscreen t))
     (run-hooks 'mistty-entered-fullscreen-hook)
     (mistty-log "Entered fullscreen mode")))
@@ -3746,7 +3725,7 @@ This function looks into the maps to find the key bindings for
                     #'mistty-toggle-buffers mistty-mode-map
                     'firstonly 'noindirect))
         (from-term (where-is-internal
-                    #'mistty-toggle-buffers mistty-fullscreen-map
+                    #'mistty-toggle-buffers mistty-fullscreen-mode-map
                     'firstonly 'noindirect))
         (keybinding-descr nil))
     (cond
@@ -3763,14 +3742,14 @@ This function looks into the maps to find the key bindings for
             (when keybinding-descr ". ")
             keybinding-descr)))
 
-(defun mistty--leave-fullscreen (proc)
-  "Leave fullscreen mode for PROC."
-  (mistty--with-live-buffer (process-get proc 'mistty-work-buffer)
+(defun mistty--leave-fullscreen (work-buffer proc)
+  "Leave fullscreen mode for WORK-BUFFER and PROC."
+  (mistty--with-live-buffer work-buffer
     (save-restriction
       (widen)
       (overlay-put mistty--sync-ov 'after-string nil)
 
-      (mistty--attach (process-buffer proc))
+      (mistty--attach mistty--term)
       (mistty--refresh)
       (when (and proc (process-live-p proc))
         (mistty-goto-cursor))
@@ -3781,13 +3760,10 @@ This function looks into the maps to find the key bindings for
         (rename-buffer bufname))
 
       (mistty--swap-buffer-in-windows mistty-term-buffer mistty-work-buffer)
-      (with-current-buffer mistty-term-buffer
-        (font-lock-mode -1)
-        (jit-lock-mode nil))
-
       (mistty--update-mode-lines proc)
       (setq mistty-fullscreen nil)
       (mistty--with-live-buffer mistty-term-buffer
+        (mistty-fullscreen-mode -1)
         (setq mistty-fullscreen nil))
       (run-hooks 'mistty-left-fullscreen-hook)
       (mistty-log "Left fullscreen mode"))))
@@ -3952,7 +3928,7 @@ prompts."
   "Return non-nil if `mistty--possible-prompt' is usable."
   (when-let* ((prompt (mistty--prompt))
               (scrolline (mistty--prompt-start prompt))
-              (start (mistty--scrolline-pos scrolline)))
+              (start (mistty--find-scrolline scrolline)))
     (when (and (eq 'regexp (mistty--prompt-source prompt))
                (not (mistty--prompt-realized prompt)))
       (let* ((content (mistty--prompt-text prompt))
@@ -3970,7 +3946,7 @@ prompts."
 (defun mistty--prompt-contains-pos (prompt pos)
   "Return non-nil if POS is inside PROMPT."
   (when-let* ((scrolline (mistty--prompt-start prompt))
-              (start (mistty--scrolline-pos scrolline))
+              (start (mistty--find-scrolline scrolline))
               (length (if-let* ((text (mistty--prompt-text prompt)))
                           (length text)
                         0))
@@ -4022,60 +3998,66 @@ This function skips spaces marked with ==\'mistty-skip, depending
 on the direction of the last move.
 
 This is meant to be added to `pre-redisplay-functions'"
-  (let (pos last-pos move-to)
-    (when (and mistty-skip-empty-spaces
-               ;; Never move point at cursor.
-               (or (null mistty--cursor-after-last-refresh)
-                   (not (equal (point) mistty--cursor-after-last-refresh)))
-               (or (null mistty-proc)
-                   (not (equal (point) (mistty-cursor))))
-               (mistty-on-prompt-p (setq pos (window-point win))))
-      (when-let* ((last-state (window-parameter win 'mistty--cursor-skip-state)))
-        (when (eq (car last-state) (current-buffer))
-          (setq last-pos (cdr last-state))))
-      (unless (equal pos last-pos)
-        (pcase-dolist (`(,beg . ,end)
-                       (mistty--cursor-skip-ranges
-                        pos (lambda (type)
-                              (memq type '(indent right-prompt continue-prompt empty-lines-at-eob dead)))))
-          (unless move-to
-            (setq
-             move-to
-             (cond
-              ;; at the end of the range, which is also eob, move to beg
-              ((and end (= end (point-max)))
-               beg)
+  (when (and mistty-proc
+             (process-live-p mistty-proc)
+             (buffer-live-p mistty-term-buffer))
+    (let (pos last-pos move-to)
+      (when (and mistty-skip-empty-spaces
+                 ;; Never move point at cursor.
+                 (or (null mistty--cursor-after-last-refresh)
+                     (not (equal (point) mistty--cursor-after-last-refresh)))
+                 (or (null mistty-proc)
+                     (not (equal (point) (mistty-cursor))))
+                 (mistty-on-prompt-p (setq pos (window-point win))))
+        (when-let* ((last-state (window-parameter win 'mistty--cursor-skip-state)))
+          (when (eq (car last-state) (current-buffer))
+            (setq last-pos (cdr last-state))))
+        (unless (equal pos last-pos)
+          (pcase-dolist (`(,beg . ,end)
+                         (mistty--cursor-skip-ranges
+                          pos (lambda (type)
+                                (memq type '(indent right-prompt continue-prompt empty-lines-at-eob dead)))))
+            (unless move-to
+              (setq
+               move-to
+               (cond
+                ;; at the end of the range, which is also eob, move to beg
+                ((and end (or (>= end (point-max))
+                              (and (>= end (point-min))
+                                   (eq 'empty-lines-at-eob
+                                       (get-text-property end 'mistty-skip)))))
+                 beg)
 
-              ;; at a boundary, stay there
-              ((or (null beg) (null end) (= pos beg) (= pos end)) nil)
+                ;; at a boundary, stay there
+                ((or (null beg) (null end) (= pos beg) (= pos end)) nil)
 
-              ;; horizontal movement from the left, go right
-              ((and last-pos (<= last-pos beg) (mistty--same-line-p last-pos beg))
-               end)
-              ;; horizontal movement from the right, go left
-              ((and last-pos (>= last-pos end) (mistty--same-line-p last-pos end))
-               beg)
-              ;; vertical move; on beg's line, so go to beg
-              ((and (mistty--same-line-p pos beg) (not (mistty--same-line-p pos end)))
-               beg)
-              ;; vertical move; on end's line, so go to end
-              ((and (mistty--same-line-p pos end) (not (mistty--same-line-p pos beg)))
-               end)
-              ;; closer to beg than to end, go to beg
-              ((< (- pos beg) (- end pos))
-               beg)
-              ;; otherwise go to end
-              (t
-               end)))
-            (when (equal move-to pos)
-              (setq move-to nil))
-            (when move-to
-              (mistty-log "CURSOR MOVE beg %s end %s pos %s last-pos %s -> %s"
-                          beg end pos last-pos move-to))))
-        (when move-to
-          (set-window-point win move-to))
-        (set-window-parameter win 'mistty--cursor-skip-state
-                              (cons (current-buffer) (or move-to pos)))))))
+                ;; horizontal movement from the left, go right
+                ((and last-pos (<= last-pos beg) (mistty--same-line-p last-pos beg))
+                 end)
+                ;; horizontal movement from the right, go left
+                ((and last-pos (>= last-pos end) (mistty--same-line-p last-pos end))
+                 beg)
+                ;; vertical move; on beg's line, so go to beg
+                ((and (mistty--same-line-p pos beg) (not (mistty--same-line-p pos end)))
+                 beg)
+                ;; vertical move; on end's line, so go to end
+                ((and (mistty--same-line-p pos end) (not (mistty--same-line-p pos beg)))
+                 end)
+                ;; closer to beg than to end, go to beg
+                ((< (- pos beg) (- end pos))
+                 beg)
+                ;; otherwise go to end
+                (t
+                 end)))
+              (when (equal move-to pos)
+                (setq move-to nil))
+              (when move-to
+                (mistty-log "CURSOR MOVE beg %s end %s pos %s last-pos %s -> %s"
+                            beg end pos last-pos move-to))))
+          (when move-to
+            (set-window-point win move-to))
+          (set-window-parameter win 'mistty--cursor-skip-state
+                                (cons (current-buffer) (or move-to pos))))))))
 
 (defun mistty--cursor-skip-forward (pos)
   "Return the right end of the skip ranges containing POS.
@@ -4480,8 +4462,8 @@ and SCROLLINE."
                                           "" "\n")
                              (mistty--with-live-buffer mistty-term-buffer
                                (save-excursion
-                                 (goto-char (mistty--term-scrolline-pos scrolline))
-                                 (mistty--current-scrolline-text 'no-properties))))
+                                 (goto-char (mistty--find-scrolline scrolline))
+                                 (mistty--unwrapped-scrolline-text))))
                 (setq pos end-row))))
         (goto-char pos)
         (cl-incf scrolline))))

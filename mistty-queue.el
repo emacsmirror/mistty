@@ -282,6 +282,7 @@ If VALUE is set, send that value to the first call to
     (let ((proc (mistty--queue-proc queue)))
       (dolist (p (nreverse pending-outputs))
         (dolist (str (nreverse p))
+          (mistty-log "SEND %S" str)
           (process-send-string proc str))))))
 
 (cl-defun mistty--dequeue-1 (queue value)
@@ -302,7 +303,7 @@ send, in reverse order."
                     (when-let* ((p (mistty--interact-pending-output interact)))
                       (push p pending-outputs)))
                 (error
-                 (mistty-log "Interaction failed; giving up: %s" err)
+                 (mistty-log-error "interaction; giving up" err)
                  (message "mistty: Interaction failed; giving up: %s" err)
                  'done))
             (setf (mistty--interact-pending-output interact) nil))

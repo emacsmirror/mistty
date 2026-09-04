@@ -1,4 +1,8 @@
-; -*- mode: emacs-lisp; lexical-binding: t -*-
+;;; Project build file for MisTTY -*- mode: emacs-lisp; lexical-binding: t -*-
+;;
+;; This project is built and packaged using eldev, see:
+;;   https://emacs-eldev.github.io/eldev/#installation
+;;   https://emacs-eldev.github.io/eldev/#_getting_started
 
 (eldev-use-package-archive 'gnu-elpa)
 
@@ -10,19 +14,54 @@
 
 (eldev-use-plugin 'autoloads)
 
+;; Exclude work and build files so Eldev doctor ignores them.
+(setf eldev-standard-excludes
+      `(:or ,eldev-standard-excludes
+            "./venv" "./docs/build" "./license" "./deps"))
+
+;;; Module (development version)
+;;
+;; MisTTY depends on a rust module. The module itself is built using
+;; cargo and included as a dependency.
+(eldev-defbuilder mistty-build-module (source target)
+  :short-name     "CARGO-BUILD"
+  :message        source-and-target
+  :type           many-to-one
+  :source-files   ("Cargo.toml" "src/**/*.rs")
+  :targets        (lambda (_sources) (concat "mistty-alacritty-vt-dev" module-file-suffix))
+  :collect        ":compile"
+  :define-cleaner (mistty-cleaner-module "Delete generated module" :default t)
+  (eldev-call-process "cargo" '("build") :forward-output t :die-on-error t)
+  (eldev-call-process "cp" (list
+                            (concat "target/debug/libmistty_alacritty_vt" module-file-suffix)
+                            target)
+                       :forward-output t :die-on-error t))
+
+;;; Test dependencies
+
 (eldev-add-loading-roots 'test "test")
 (eldev-add-extra-dependencies
  '(test emacs)
+ ;; Integration with tempel is tested in mistty-compat-test.el
  '(:package tempel :version "0.8"))
 
+;; Turtles is a test utility used by some tests that want to have a
+;; look at what emacs displays, not just the buffer content.
+;;
+;; This setup avoid compilation warnings in yasnippet to block
+;; the build of this project.
 (eldev-add-extra-dependencies '(test emacs) 'turtles)
 (eldev-use-vc-repository
  'turtles :github "szermatt/turtles" :commit "2.0.1"
-:setup (setq eldev-build-treat-warnings-as-errors nil
+ :setup (setq eldev-build-treat-warnings-as-errors nil
               eldev-build-suppress-warnings t)
  :teardown (setq eldev-build-treat-warnings-as-errors t
                  eldev-build-suppress-warnings nil))
 
+;; Integration with yasnippet is tested in mistty-compat-test.el
+;;
+;; This setup avoid compilation warnings in yasnippet to block
+;; the build of this project.
 (eldev-add-extra-dependencies '(test emacs) 'yasnippet)
 (eldev-use-vc-repository
  'yasnippet :github "joaotavora/yasnippet" :commit "0.14.0"
@@ -31,10 +70,13 @@
  :teardown (setq eldev-build-treat-warnings-as-errors t
                  eldev-build-suppress-warnings nil))
 
-;; Exclude work and build files so Eldev doctor ignores them.
-(setf eldev-standard-excludes
-      `(:or ,eldev-standard-excludes
-            "./venv" "./docs/build" "./license" "./deps"))
+;;; Testing options
+;;
+;; The following defines options that allow configuring the version of
+;; bash, zsh, fish and ipython used in in the tests.
+;;
+;; Additionally, --test-log can be used to get more verbose test
+;; output.
 
 (eldev-defoption mistty-test-bash-exe (&optional path)
   "Tests look for Bash at PATH."
@@ -76,6 +118,27 @@
   :options        (--ci)
   :for-command    test
   (setq mistty-test-ci t))
+
+;;; Documentation
+;;
+;; The documentation is written using Sphinx. Sphinx must be installed
+;; into the current Python menv, as specified with
+;; docs/requirements.txt as documented on the html command below.
+;; Sphinx automatically builds and deploys the content of the docs
+;; directory to https://mistty.readthedocs.io/
+;;
+;; The eldev builders defined below transform the doc into mistty.texi
+;; and mistty.info for packaging.
+;;
+;; To build the .info, call:
+;;   eldev build mistty.info
+;;
+;; To build the HTML documentation, call:
+;;   eldev html
+;;
+;; To clean the temporary doc files, call:
+;;   eldev clean
+;;
 
 (eldev-defbuilder mistty-builder-build-info (source target)
   :short-name     "SPHINX-TEXI"
@@ -119,6 +182,19 @@ First install Sphinx with:
   "Delete Sphinx build dir"
   :default t
   '("docs/build"))
+
+;;; Release and maintenance
+;;
+;; The code below extends eldev release to update the version in the
+;; the documentation.
+;;
+;; eldev release VERSION
+;;
+;; Generates a commit that sets the package and docmentation to that
+;; version and tag it with that version. Immediately after, it creates
+;; a commit that sets the package and documentation to a development
+;; version (version + 0.0.1 + "snapshot").
+;;
 
 (eldev-use-plugin 'maintainer)
 (setq eldev-release-test-local t)

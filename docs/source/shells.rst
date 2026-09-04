@@ -55,16 +55,18 @@ Directory tracking in Bash
 
 .. index:: pair: variable; mistty-set-EMACS
 
-Recent versions of :program:`bash` already send the current directory
-when they detects that it's called from Emacs with
-:code:`TERM=eterm-color`. This works fine for local shell as well as remote
-shells run with TRAMP.
+If you're using :program:`eterm` as your terminal emulator, as defined
+by the value of :code:`mistty-terminal-type`, recent versions of
+:program:`bash` will automatically send the current directory when
+they detects that it's called from Emacs with
+:code:`TERM=eterm-color`. This works fine for local shell as well as
+remote shells run with TRAMP.
 
-If you ssh into a host from an existing MisTTY buffer, however,
-:program:`bash` will not send the remote directory. If you want this
-use case to work, extend your prompt to send out an OSC7 sequence to
-have :program:`bash` send the current directory and hostname to
-MisTTY.
+If you're not using :program:`eterm` as your terminal emulator or if
+you ssh into a host from an existing MisTTY buffer, :program:`bash`
+will not send the remote directory. If you want this use case to work,
+extend your prompt to send out an OSC7 sequence to have
+:program:`bash` send the current directory and hostname to MisTTY.
 
 To do that, you might add the following to :file:`~/.bashrc`:
 

@@ -16,6 +16,7 @@
 
 (require 'ert)
 (require 'ert-x)
+(require 'term)
 (require 'tramp)
 (eval-when-compile
 (require 'cl-lib))
@@ -23,24 +24,38 @@
 (require 'mistty)
 (require 'mistty-testing)
 
-(ert-deftest mistty-tramp-test-shell-start ()
+(ert-deftest mistty-tramp-test-shell-start/alacritty ()
   (let* ((tramp-methods (mistty-test-tramp-methods))
          (tramp-prefix (mistty-test-tramp-prefix))
-         (home (file-name-directory "/"))
-         (default-directory (concat tramp-prefix home)))
-    (mistty-with-test-buffer ()
-      (should (equal (concat tramp-prefix "/")
-                     (buffer-local-value 'default-directory (current-buffer))))
-      (should (equal mistty-test-bash-exe (mistty-test-remote-command)))
+         (home (file-name-directory "/")))
+    (mistty-with-test-buffer (:cd (concat tramp-prefix home) :type alacritty)
+      (mistty-tramp-test-shell-start
+       tramp-prefix (format "%s,tramp:%s" emacs-version tramp-version)))))
 
-      ;; This just makes sure the shell is functional.
-      (mistty-send-text "echo hello")
-      (should (equal "hello" (mistty-send-and-capture-command-output)))
+(ert-deftest mistty-tramp-test-shell-start/eterm ()
+  (let* ((tramp-methods (mistty-test-tramp-methods))
+         (tramp-prefix (mistty-test-tramp-prefix))
+         (home (file-name-directory "/")))
+    (mistty-with-test-buffer (:cd (concat tramp-prefix home) :type eterm)
+      (mistty-tramp-test-shell-start
+       tramp-prefix
+       (format
+        "%s,term:%s,tramp:%s"
+        emacs-version term-protocol-version tramp-version)))))
 
-      ;; TRAMP sets INSIDE_EMACS and reports its version.
-      (mistty-send-string "echo $INSIDE_EMACS")
-      (should (equal (format "%s,term:%s,tramp:%s" emacs-version term-protocol-version tramp-version)
-                     (mistty-send-and-capture-command-output))))))
+(defun mistty-tramp-test-shell-start (tramp-prefix inside-emacs)
+  (should (equal (concat tramp-prefix "/")
+                 (buffer-local-value 'default-directory (current-buffer))))
+  (should (equal mistty-test-bash-exe (mistty-test-remote-command)))
+
+  ;; This just makes sure the shell is functional.
+  (mistty-send-text "echo hello")
+  (should (equal "hello" (mistty-send-and-capture-command-output)))
+
+  ;; TRAMP sets INSIDE_EMACS and reports its version.
+  (mistty-send-string "echo $INSIDE_EMACS")
+  (should (equal inside-emacs
+                 (mistty-send-and-capture-command-output))))
 
 (ert-deftest mistty-tramp-test-connection-local-explicit-shell-file-name ()
   (skip-unless mistty-test-zsh-exe)
@@ -105,70 +120,42 @@
         (let ((kill-buffer-query-functions nil))
           (kill-buffer buf))))))
 
-(ert-deftest mistty-tramp-test-termcap ()
+(turtles-ert-deftest mistty-tramp-test-window-size/alacritty ()
   (let* ((tramp-methods (mistty-test-tramp-methods))
          (tramp-prefix (mistty-test-tramp-prefix))
-         (default-directory (concat tramp-prefix "/"))
-         (term-term-name "eterm-test"))
-    (mistty-with-test-buffer ()
-
-      ;; TERMINFO shouldn't be set in remote shells.
-      (mistty-send-text "echo TERMINFO=${TERMINFO}.")
-      (should (equal "TERMINFO=." (mistty-send-and-capture-command-output)))
-
-      ;; TERMCAP should be set.
-      (mistty-send-text "if [ -n \"$TERMCAP\" ]; then echo set; else echo unset; fi")
-      (should (equal "set" (mistty-send-and-capture-command-output)))
-
-      ;; captoinfo reads and processes the TERMCAP env variable. This
-      ;; makes sure that the content of TERMCAP is valid.
-      (mistty-send-text "captoinfo")
-      (should (string-match "eterm-test,\n +am, mir.*" (mistty-send-and-capture-command-output))))))
-
-(ert-deftest mistty-tramp-test-dirtrack-on-sg ()
-  (let* ((tramp-methods (mistty-test-tramp-methods))
-         (tramp-prefix (mistty-test-tramp-prefix))
-         (default-directory (concat tramp-prefix "/")))
-    (mistty-with-test-buffer (:shell zsh)
-      ;; Not using bash, because it sends \032 dirtrack, which would
-      ;; interfere with this test.
-
-      (should (equal (concat tramp-prefix "/") default-directory))
-
-      (mistty--send-string mistty-proc "printf '\\032//var/log\\nok\\n'")
-      (should (equal "ok" (mistty-send-and-capture-command-output)))
-      (should (equal (concat tramp-prefix "/var/log/") default-directory))
-
-      (mistty--send-string mistty-proc "printf '\\032//home\\nok\\n'")
-      (should (equal "ok" (mistty-send-and-capture-command-output)))
-      (should (equal (concat tramp-prefix "/home/") default-directory)))))
-
-(turtles-ert-deftest mistty-tramp-test-window-size ()
-  (let* ((tramp-methods (mistty-test-tramp-methods))
-         (tramp-prefix (mistty-test-tramp-prefix))
-         (home (file-name-directory "/"))
-         (default-directory (concat tramp-prefix home)))
+         (home (file-name-directory "/")))
     (delete-other-windows)
-    (mistty-with-test-buffer (:selected t)
-      (let ((win (selected-window))
-            cols-before cols-after)
-        (mistty--send-string mistty-proc "tput cols")
-        (setq cols-before (string-to-number (mistty-send-and-capture-command-output)))
+    (mistty-with-test-buffer (:selected t :cd (concat tramp-prefix home) :type alacritty)
+      (mistty-tramp-test-window-size))))
 
-        (split-window-horizontally nil win)
-        (mistty--window-size-change win)
+(turtles-ert-deftest mistty-tramp-test-window-size/eterm ()
+  (let* ((tramp-methods (mistty-test-tramp-methods))
+         (tramp-prefix (mistty-test-tramp-prefix))
+         (home (file-name-directory "/")))
+    (delete-other-windows)
+    (mistty-with-test-buffer (:selected t :cd (concat tramp-prefix home) :type eterm)
+      (mistty-tramp-test-window-size))))
 
-        ;; Make sure the terminal has taken the size change into
-        ;; account.
-        (mistty-send-text "echo ok")
-        (mistty-send-and-wait-for-prompt)
+(defun mistty-tramp-test-window-size ()
+  (let ((win (selected-window))
+        cols-before cols-after)
+    (mistty--send-string mistty-proc "tput cols")
+    (setq cols-before (string-to-number (mistty-send-and-capture-command-output)))
 
-        ;; This makes sure the terminal is told about the window size
-        ;; change.
-        (mistty--send-string mistty-proc "tput cols")
-        (setq cols-after (string-to-number (mistty-send-and-capture-command-output)))
-        (should-not (equal cols-before cols-after))
-        (should (< cols-after cols-before))))))
+    (split-window-horizontally nil win)
+    (mistty--window-size-change win)
+
+    ;; Make sure the terminal has taken the size change into
+    ;; account.
+    (mistty-send-text "echo ok")
+    (mistty-send-and-wait-for-prompt)
+
+    ;; This makes sure the terminal is told about the window size
+    ;; change.
+    (mistty--send-string mistty-proc "tput cols")
+    (setq cols-after (string-to-number (mistty-send-and-capture-command-output)))
+    (should-not (equal cols-before cols-after))
+    (should (< cols-after cols-before))))
 
 (ert-deftest mistty-tramp-test-buffer-name ()
   (let ((mistty-buffer-name '("mistty" mistty-buffer-name-user mistty-buffer-name-host)))
@@ -179,7 +166,7 @@
     (let ((default-directory "/sudo::/"))
       (should (equal "*mistty-root*" (mistty-new-buffer-name))))))
 
-(ert-deftest mistty-tramp-test-set-EMACS ()
+(ert-deftest mistty-tramp-test-set-EMACS/alacritty ()
   (setenv "EMACS" nil) ;; Sometimes set to run Eldev
 
   (let* ((tramp-methods (mistty-test-tramp-methods))
@@ -190,7 +177,7 @@
          (connection-local-criteria-alist nil)
          (mistty-set-EMACS nil))
 
-    (mistty-with-test-buffer ()
+    (mistty-with-test-buffer (:cd (concat tramp-prefix home) :type alacritty)
       (mistty-send-text "if test -n \"$EMACS\"; then echo set; else echo unset; fi")
       (should (equal "unset" (mistty-send-and-capture-command-output))))
 
@@ -202,6 +189,33 @@
     ;; This makes sure the connection-local setup above works.
     (should (equal t (with-connection-local-variables mistty-set-EMACS)))
 
-    (mistty-with-test-buffer ()
+    (mistty-with-test-buffer (:cd (concat tramp-prefix home) :type alacritty)
+      (mistty-send-text "if test -n \"$EMACS\"; then echo set; else echo unset; fi")
+      (should (equal "set" (mistty-send-and-capture-command-output))))))
+
+(ert-deftest mistty-tramp-test-set-EMACS/eterm ()
+  (setenv "EMACS" nil) ;; Sometimes set to run Eldev
+
+  (let* ((tramp-methods (mistty-test-tramp-methods))
+         (tramp-prefix (mistty-test-tramp-prefix))
+         (home (file-name-directory "/"))
+         (default-directory (concat tramp-prefix home))
+         (connection-local-profile-alist nil)
+         (connection-local-criteria-alist nil)
+         (mistty-set-EMACS nil))
+
+    (mistty-with-test-buffer (:cd (concat tramp-prefix home) :type eterm)
+      (mistty-send-text "if test -n \"$EMACS\"; then echo set; else echo unset; fi")
+      (should (equal "unset" (mistty-send-and-capture-command-output))))
+
+    (connection-local-set-profile-variables
+     'test-profile
+     '((mistty-set-EMACS . t)))
+    (connection-local-set-profiles (mistty-test-tramp-protocol) 'test-profile)
+
+    ;; This makes sure the connection-local setup above works.
+    (should (equal t (with-connection-local-variables mistty-set-EMACS)))
+
+    (mistty-with-test-buffer (:cd (concat tramp-prefix home) :type eterm)
       (mistty-send-text "if test -n \"$EMACS\"; then echo set; else echo unset; fi")
       (should (equal "set" (mistty-send-and-capture-command-output))))))

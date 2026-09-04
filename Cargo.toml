@@ -1,0 +1,13 @@
+[package]
+name = "mistty-alacritty-vt"
+version = "0.1.0"
+edition = "2024"
+authors = ["Stephane Zermatten <szermatt@gmx.net>"]
+publish = false
+
+[dependencies]
+alacritty_terminal = "0.26.0"
+emacs = "0.21"
+
+[lib]
+crate-type = ["cdylib"]

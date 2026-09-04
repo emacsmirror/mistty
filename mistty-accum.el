@@ -421,13 +421,14 @@ mistty--accum whose slots can be accessed."
                                             (add-processor-f #'add-processor)
                                             (add-around-f #'add-around))
           (proc data)
-        (mistty--fifo-enqueue unprocessed data)
-        (cl-incf unprocessed-bytes (length data))
+        (mistty-with-errors-logged "process filter"
+          (mistty--fifo-enqueue unprocessed data)
+          (cl-incf unprocessed-bytes (length data))
 
-        (when (toplevel-accumulator-p proc)
-          (process-data proc)
-          (flush proc)
-          (post-process proc))))))
+          (when (toplevel-accumulator-p proc)
+            (process-data proc)
+            (flush proc)
+            (post-process proc)))))))
 
 (defun mistty--split-incomplete-chars (str)
   "Extract incomplete multibyte chars at the end of STR.

@@ -22,16 +22,11 @@
 (eval-when-compile
   (require 'cl-lib))
 (require 'turtles)
+(require 'color)
 
 (require 'mistty-changeset)
 (require 'mistty-log)
 (require 'mistty-queue)
-
-(eval-when-compile
-  ;; defined in term
-  (defvar term-width)
-  (defvar term-height)
-  (defvar term-home-marker))
 
 (defvar mistty-test-bash-exe (executable-find "bash"))
 (defvar mistty-test-zsh-exe (executable-find "zsh")) ;; optional
@@ -47,7 +42,11 @@
                                                              mistty-test-log))
   "Emacs instance that runs mistty tests."
   (clear-minibuffer-message)
-  (setq mistty-log-to-messages t))
+  (setq mistty-log-to-messages t)
+
+  ;; Prevent minibuffer window from changing size and interfering with
+  ;; window size tests
+  (setq resize-mini-windows nil))
 
 (defvar mistty-wait-for-output-timeout-s
   (if noninteractive 10 3)
@@ -98,12 +97,92 @@ Defaults to (point-min).")
 This is handled by `mistty-test-report-issue' and must contain
 the symbol of the expected issues, in order.")
 
+(cl-defmacro mistty-deftest (name (&key shell type selected term-size turtles) &body body)
+  "Declare multi-shell, multi-terminal emulator tests with a mistty buffer.
+
+To select multiple shells, pass a list to the :shell argument containing
+the symbol of the shell (bash, fish, zsh, ipython) instead of a single
+symbol.
+
+For example: :shell (bash zsh fish)
+
+To initialize the shell, replace the symbol with a list containing the
+symbol and then one or more init sequences to be concatenated together.
+
+For example: :shell ((zsh init-zsh) (fish init-fish-1 init-fish-2))
+
+To select multiple terminal types, pass a list to the :type argument.
+
+For example: :type (eterm alacritty)
+
+If :turtles is non-nil, run a turtles test with the mistty instance.
+
+This is a wrapper around `ert-deftest' and `mistty-with-test-buffer'
+that will generate one identical test per shell."
+  (declare (indent 2))
+  `(progn
+     ,@(let* ((shell (cond ((null shell) '(bash))
+                           ((listp shell) shell)
+                           (t (list shell))))
+              (multishell (length> shell 1))
+              (type (cond ((null type) '(nil))
+                          ((eq type 'all) '(alacritty eterm))
+                          ((listp type) type)
+                          (t (list type))))
+              (multitype (length> type 1)))
+         (mapcar
+          (lambda (arg)
+            (let* ((shell (car arg))
+                   (type (cadr arg))
+                   (shell-name (if (symbolp shell) shell (car shell)))
+                   (shell-init (if (symbolp shell) nil (cdr shell))))
+              `(,(if turtles 'turtles-ert-deftest 'ert-deftest)
+                ,(mistty--testing-test-name
+                  name (when multishell shell-name) (when multitype type))
+                ,(if turtles '(:instance 'mistty) ())
+                 (mistty-with-test-buffer
+                     (:shell ,shell-name :type ,type
+                             :init ,(if (length> shell-init 1)
+                                        (cons 'concat shell-init)
+                                      (car shell-init))
+                             :selected ,selected :term-size ,term-size)
+                   ,@body))))
+          (mistty--combine shell type)))))
+
+(defun mistty--testing-test-name (name shell type)
+  "Built a test name based on NAME, including SHELL and/or TYPE.
+
+SHELL or TYPE appear as parameters in the test name, separated with a /
+instead of the usual -."
+  (if (and (null shell) (null type))
+      name
+    (intern
+     (concat
+      (symbol-name name)
+      (if shell (concat "/" (symbol-name shell)))
+      (if type (concat "/" (symbol-name type)))))))
+
+(defun mistty--combine (lista listb)
+  "Return LISTA x LISTB.
+
+If, for example LISTA contains (a b) and LISTB contains (c d e) the
+result will be ((a c) (a d) (a e) (b c) (b d) (b e))."
+  (mapcan
+   (lambda (elta)
+     (mapcar
+      (lambda (eltb) (list elta eltb))
+      listb))
+   lista))
+
 (cl-defmacro mistty-with-test-buffer
-    ((&key (shell 'bash) selected init term-size) &body body)
+    ((&key (shell 'bash) type selected init term-size cd) &body body)
   "Run BODY in a MisTTY buffer.
 
 SHELL specifies the program that is run in that buffer, bash,
 zsh, or fish.
+
+TYPE sets `mistty-terminal-type', which selects either the eterm or
+alacritty terminal emulator.
 
 INIT is a string to append to the shell RC file.
 
@@ -112,7 +191,10 @@ window while BODY is running.
 
 TERM-SIZE specifies either 'window, to track window size or a fixed
 terminal size, detached from window size, as (cons WIDTH HEIGHT).
-Defaults to 80x24"
+Defaults to 80x24.
+
+If specified CD is the default directory active during the test. By
+default, the default directory is a temp directory created for the test."
   (declare (indent 1))
   (let ((exec-var (intern (concat "mistty-test-" (symbol-name shell) "-exe"))))
     `(prog1 nil
@@ -135,20 +217,24 @@ Defaults to 80x24"
                (mistty-left-fullscreen-hook nil)
                (mistty-allow-clearing-scrollback nil)
                (mistty-default-terminal-size nil)
+               (mistty-terminal-type (quote ,type))
+               (mistty-alacritty-term-name "xterm-256color")
                (mistty-log mistty-test-log))
+           (message "RUNNING: %s" (ert-test-name (ert-running-test)))
            (ert-with-temp-directory mistty-tmpdir
-             (unwind-protect
-                 (prog1
-                     ,(if selected
-                          `(with-selected-window (display-buffer (current-buffer))
+             (let ((default-directory ,(if cd cd 'mistty-tmpdir)))
+               (unwind-protect
+                   (prog1
+                       ,(if selected
+                            `(with-selected-window (display-buffer (current-buffer))
+                               (mistty-test-setup (quote ,shell) mistty-tmpdir ,init ,term-size)
+                               ,@body)
+                          `(progn
                              (mistty-test-setup (quote ,shell) mistty-tmpdir ,init ,term-size)
-                             ,@body)
-                        `(progn
-                           (mistty-test-setup (quote ,shell) mistty-tmpdir ,init ,term-size)
-                           ,@body))
-                   (should-not mistty-test-had-issues)
-                   (setq mistty-test-ok 'ok))
-               (unless mistty-test-ok (mistty-start-log)))))))))
+                             ,@body))
+                     (should-not mistty-test-had-issues)
+                     (setq mistty-test-ok 'ok))
+                 (unless mistty-test-ok (mistty-start-log))))))))))
 
 (cl-defmacro mistty-simulate-scrollback-buffer (&body body)
   "Run BODY in a simulated scrollback buffer."
@@ -157,7 +243,8 @@ Defaults to 80x24"
      (unwind-protect
          (progn
            ,@body)
-       (mistty--attach term-buffer))))
+       (mistty--attach (with-current-buffer term-buffer
+                         mistty--term)))))
 
 (defmacro mistty-run-command (&rest body)
   `(progn
@@ -283,6 +370,7 @@ Defaults to 80x24"
             "bind \\ca beginning-of-line; "
             "bind \\ce end-of-line; "
             "bind \\cg cancel; "
+            "bind \\cl clear-screen; "
             "bind \\b delete-char; " ;; simulate fish 4.0.0
             "bind \\ch backward-delete-char; "
             init))
@@ -372,8 +460,8 @@ require the cursor to be at the end of the matched string."
           (if on-error
               (funcall on-error)
             (mistty-test-report-issue
-             (format "condition not met after %ss (wait-for-output %s)"
-                     mistty-wait-for-output-timeout-s condition-descr))))
+             (format "condition not met after %ss (wait-for-output@%s %s)"
+                     mistty-wait-for-output-timeout-s start condition-descr))))
         (if (process-live-p proc)
             (when (accept-process-output proc 0 100 t)
               (while (accept-process-output proc 0 0 t)))
@@ -391,7 +479,8 @@ everything between the two prompts, return it, and narrow the
 buffer to a new region at the beginning of the new prompt."
   (let ((first-prompt-end (point))
         output-start next-prompt-start output)
-    (setq next-prompt-start (mistty-send-and-wait-for-prompt send-command-func prompt))
+    (setq next-prompt-start (mistty-send-and-wait-for-prompt
+                             :send send-command-func :prompt prompt))
     (setq output-start
           (save-excursion
             (goto-char first-prompt-end)
@@ -407,19 +496,23 @@ buffer to a new region at the beginning of the new prompt."
       (mistty-test-narrow next-prompt-start))
     output))
 
-(defun mistty-send-and-wait-for-prompt (&optional send-command-func prompt)
+(cl-defun mistty-send-and-wait-for-prompt (&key send prompt proc start)
   "Send the current command line and wait for a prompt to appear.
 
 Puts the point at the end of the prompt and return the position
 of the beginning of the prompt."
-  (let ((before-send (point)))
-    (funcall (or send-command-func #'mistty-send-command))
-    (mistty-wait-for-output
-     :regexp (or (if prompt (concat "^" (regexp-quote prompt)))
-                 mistty-test-prompt-re
-                 (error "mistty-test-prompt-re not set"))
-     :start before-send)
-    (match-beginning 0)))
+  (let ((before-send (copy-marker (or start (if mistty-proc (mistty-cursor) (point))))))
+    (unwind-protect
+        (progn
+          (funcall (or send #'mistty-send-command))
+          (mistty-wait-for-output
+           :regexp (or (if prompt (concat "^" (regexp-quote prompt)))
+                       mistty-test-prompt-re
+                       (error "mistty-test-prompt-re not set"))
+           :start before-send
+           :proc (or proc mistty-proc))
+          (match-beginning 0))
+      (set-marker before-send nil))))
 
 (defun mistty-test-report-issue (issue)
   "Report ISSUE with extra debugging information.
@@ -435,11 +528,13 @@ This is meant to be assigned to `mistty--report-issue-function'
       ;; unexpected
       (save-excursion (mistty-start-log))
       (let ((error-message
-             (format "%s: BUF<<EOF%sEOF"
+             (format "%s: BUF[%s,%s]<<EOF%sEOF"
                      issue
+                     (point-min)
+                     (point-max)
                      (mistty-test-content
                       :show-property '(mistty-skip t)
-                      :show (list (point) (ignore-errors (mistty-cursor)))))))
+                      :show (list (point) (ignore-errors (mistty-cursor)) mistty-sync-marker)))))
         (mistty-log error-message)
         ;; Errors might get caught. This makes sure
         (setq mistty-test-had-issues t)
@@ -743,14 +838,14 @@ This simulates what happens in the command loop."
 
 (defun mistty-test-line-at-scrolline (scrolline)
   (save-excursion
-    (let ((pos (mistty--scrolline-pos scrolline)))
+    (let ((pos (mistty--find-scrolline scrolline)))
       (unless pos
         (error "Scrolline at %s outside of range [%s, %s].<<EOF%sEOF"
                scrolline mistty--sync-marker-scrolline
                (mistty--scrolline (point-max))
                (mistty-test-content :start mistty-sync-marker)))
       (goto-char pos)
-      (buffer-substring-no-properties (pos-bol) (pos-eol)))))
+      (string-trim-right (buffer-substring-no-properties (pos-bol) (pos-eol))))))
 
 (defun mistty-test-all-inputs ()
   "Returns the position of all input, from point-min to point-max."
@@ -812,5 +907,28 @@ Kill the process and its buffer once BODY returns."
   "Return the content of PROC's buffer."
   (with-current-buffer (process-buffer proc)
     (buffer-string)))
+
+(defun mistty-color-hex (c)
+  "Transform color name to hexadecimal representation.
+
+Lets unspecified-fg and unspecified-bg through."
+  (if (and (stringp c) (string-prefix-p "unspecified-" c))
+      ;; let unspecified-fg and unspecified-bg through
+      c
+    (let ((c (color-name-to-rgb c)))
+      (color-rgb-to-hex (nth 0 c) (nth 1 c) (nth 2 c) 2))))
+
+(defun mistty-colors-at-point ()
+  "Return the foreground and background color at point, in hex."
+  (list (mistty-color-hex (foreground-color-at-point))
+        (mistty-color-hex (background-color-at-point))))
+
+(defun mistty-face-colors (fg &optional bg)
+  "Get the foreground and background of the two given faces.
+
+This is meant to be compared with the output of `mistty-color-at-point'."
+  (list (mistty-color-hex (face-foreground fg))
+        (mistty-color-hex (face-background (or bg fg)))))
+
 
 (provide 'mistty-testing)

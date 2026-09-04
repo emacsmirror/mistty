@@ -27,6 +27,7 @@
 ;;; Code:
 
 (require 'ring)
+(require 'backtrace)
 (eval-when-compile
   (require 'cl-lib))
 
@@ -53,6 +54,14 @@ Setting this value allows turning on logging once something wrong
 has happened."
   :group 'mistty
   :type '(integer))
+
+(defcustom mistty-log-max-backtrace-length 800
+  "Maximum length, in characters, of logged backtraces.
+
+Backtraces that are longer than this value are truncated by
+`mistty-log-error'."
+  :group 'mistty
+  :type 'integer)
 
 (defvar-local mistty--backlog nil
   "If non-nil, a ring of `mistty--log' arguments.")
@@ -196,6 +205,49 @@ The header include EVENT-TIME and the name of BUF."
           (- event-time
              (or mistty--log-start-time
                  (setq mistty--log-start-time event-time)))))
+
+(defmacro mistty-with-errors-logged (context &rest body)
+  "Catch and log errors thrown in CONTEXT while evaluating BODY.
+
+This macro is meant to be used in contextes where there's nothing that
+can be done about errors except logging them, such as process filters or
+timer callbacks.
+
+CONTEXT should be a short string describing where body is called from,
+such as \"process filter\" or \"timer\". It shouldn't be a function, as
+that function would be evaluated during compilation.
+
+With logging disabled, the error is just reported with `message'. With
+logging enabled, the error is logged using `mistty-log' together with a
+short backtrace."
+  (declare (indent 1))
+  (let ((msg (format "[mistty] error in %s: %%s" context)))
+    (if (eval-when-compile (< emacs-major-version 30))
+        `(with-demoted-errors ,msg ,@body)
+      `(with-demoted-errors ,msg
+         (handler-bind
+             ((error (lambda (err)
+                       (let ((context ,context))
+                         (mistty-log-error context err)))))
+           ,@body)))))
+
+(defun mistty-log-error (context err)
+  "Report a toplevel error in CONTEXT.
+
+This function logs the error together with a shortened backtrace. It is
+important to call this function from `handler-bind' and not
+`condition-case' for the backtrace to be useful.
+
+If logging is disabled, this function falls back to reporting the error
+with `message'."
+  (mistty-log
+   "ERROR in %s: %s\n=== backtrace ===\n%s\n=== backtrace end ===\n"
+   context
+   err
+   (when mistty-log
+     (truncate-string-to-width
+      (backtrace-to-string (backtrace-get-frames 'mistty-log-error))
+      mistty-log-max-backtrace-length))))
 
 (provide 'mistty-log)
 

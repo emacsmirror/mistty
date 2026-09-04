@@ -8,3 +8,7 @@ mistty.info
 .cask
 *-autoloads.el*
 *.elc
+/*.so
+/*.dylib
+/*.dll
+/target

@@ -65,29 +65,48 @@
                   (mistty-test-pos "d"))))))
 
 (ert-deftest mistty-util-test-remove-fake-nl ()
-  (let ((fake-nl (propertize "\n" 'term-line-wrap t)))
+  (ert-with-test-buffer ()
+    (let ((fake-nl (propertize "\n" 'term-line-wrap t)))
     (insert fake-nl "abc" fake-nl fake-nl "def" fake-nl "ghi\n" fake-nl )
 
     (mistty--remove-text-with-property 'term-line-wrap)
     (should (equal "abcdefghi\n"
-                   (mistty--safe-bufstring (point-min) (point-max))))))
+                   (mistty--safe-bufstring (point-min) (point-max)))))))
 
-(ert-deftest mistty-util-test-remove-fake-nl-in-range ()
-  (let ((fake-nl (propertize "\n" 'term-line-wrap t)))
-    (insert fake-nl "abc" fake-nl fake-nl "def" fake-nl "gh" fake-nl "i\n" fake-nl )
+(ert-deftest mistty-util-test-cleanup-fake-nl-for-scrollback ()
+  (ert-with-test-buffer ()
+    (let ((fake-nl (propertize "\n" 'term-line-wrap t)))
+      (insert fake-nl "abc" fake-nl fake-nl "def" fake-nl "gh" fake-nl "i\n" fake-nl )
 
-    (mistty--remove-fake-newlines
-     (mistty-test-pos "abc") (mistty-test-pos "gh"))
-    (should (equal (concat fake-nl "abcdefgh" fake-nl "i\n" fake-nl)
-                   (buffer-string)))))
+      (mistty--cleanup-scrollback
+       (mistty-test-pos "abc") (mistty-test-pos "gh"))
+      (should (equal (concat fake-nl "abcdefgh" fake-nl "i\n" fake-nl)
+                     (buffer-string))))))
 
-(ert-deftest mistty-util-test-leave-misplaced-fake-nl ()
-  (let ((fake-nl (propertize "\n" 'term-line-wrap t)))
-    (insert "abc" fake-nl "def" fake-nl "gh" fake-nl "i" fake-nl)
+(ert-deftest mistty-util-test-cleanup-trailing-spaces-for-scrollback ()
+  (ert-with-test-buffer ()
+    (insert "ignore before start" (propertize "    " 'mistty-skip 'trailing) "\n")
+    (insert "hello " (propertize "     " 'mistty-skip 'trailing) "\n")
+    (insert "world" (propertize "     " 'mistty-skip 'trailing) "\n")
+    ;; The line below is incorrect on purpose. It makes sure that only trailing
+    ;; spaces are deleted.
+    (insert (propertize " !     " 'mistty-skip 'trailing) "\n")
+    ;; The line below makes sure that unmarked spaces are left alone.
+    (insert "  \n")
+    (insert "ignore after end" (propertize "    " 'mistty-skip 'trailing) "\n")
 
-    ;; Only fake-nl at column 3 are removed.
-    (mistty--remove-fake-newlines (point-min) (point-max) 3)
-    (should (equal "abcdefgh\ni\n" (buffer-string)))))
+    (mistty--cleanup-scrollback
+     (mistty-test-pos "hello") (mistty-test-pos "ignore after end"))
+
+    (should
+     (equal
+      (concat "ignore before start    \n"
+              "hello \n"
+              "world\n"
+              " !\n"
+              "  \n"
+              "ignore after end    \n")
+      (buffer-substring-no-properties (point-min) (point-max))))))
 
 (ert-deftest mistty-util-test-remove-skipped-spaces ()
   (insert (propertize "   " 'mistty-skip t) "abc "
@@ -122,7 +141,7 @@
     (goto-char (point-min))
     (while (= 0 (forward-line 1))
       (should (equal (length (buffer-substring (pos-bol) (pos-eol)))
-                     (mistty--line-width))))))
+                     (mistty--column-count))))))
 
 (ert-deftest mistty-util-has-text-pproperties ()
   (ert-with-test-buffer ()
@@ -191,323 +210,6 @@
     (should (mistty--real-nl-p))
     (goto-char 3)
     (should-not (mistty--real-nl-p))))
-
-(ert-deftest mistty-count-scrollines ()
-  (ert-with-test-buffer ()
-    (insert "abc")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "def\n")
-    (insert "ghi")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "jkl\n")
-
-    (should (equal 0 (mistty--count-scrollines (mistty-test-pos "a")
-                                               (mistty-test-pos-after "c"))))
-    (should (equal 0 (mistty--count-scrollines (mistty-test-pos "abc")
-                                          (mistty-test-pos-after "de"))))
-    (should (equal 1 (mistty--count-scrollines (mistty-test-pos "abc")
-                                          (mistty-test-pos-after "def\n"))))
-
-    (should (equal 1 (mistty--count-scrollines (mistty-test-pos "abc")
-                                               (mistty-test-pos "jkl"))))
-
-    (should (equal 2 (mistty--count-scrollines (point-min) (point-max))))))
-
-
-(ert-deftest mistty--go-beginning-of-scrolline ()
-  (ert-with-test-buffer ()
-    (insert "abc")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "def\n")
-    (insert "ghi")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "jkl")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "mno")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "pqr\n")
-
-    (mistty-test-goto-after "abc")
-    (mistty--go-beginning-of-scrolline)
-    (should (equal "a" (char-to-string (char-after (point)))))
-
-    (mistty-test-goto-after "def")
-    (mistty--go-beginning-of-scrolline)
-    (should (equal "a" (char-to-string (char-after (point)))))
-
-    (mistty-test-goto "ghi")
-    (mistty--go-beginning-of-scrolline)
-    (should (equal "g" (char-to-string (char-after (point)))))
-
-    (mistty-test-goto-after "ghi")
-    (mistty--go-beginning-of-scrolline)
-    (should (equal "g" (char-to-string (char-after (point)))))
-
-    (mistty-test-goto-after "jk")
-    (mistty--go-beginning-of-scrolline)
-    (should (equal "g" (char-to-string (char-after (point)))))
-
-    (mistty-test-goto-after "pqr")
-    (mistty--go-beginning-of-scrolline)
-    (should (equal "g" (char-to-string (char-after (point)))))
-
-    ;; When at a newline, BOL is the char after.This is consistent
-    ;; with pos-bol and forward-line,
-    (mistty-test-goto-after "def\n")
-    (mistty--go-beginning-of-scrolline)
-    (should (equal "g" (char-to-string (char-after (point)))))
-
-    (mistty-test-goto-after "pqr\n")
-    (mistty--go-beginning-of-scrolline)
-    (should (equal (point-max) (point)))))
-
-(ert-deftest mistty--go-beginning-of-scrolline-pos ()
-  (ert-with-test-buffer ()
-    (insert "abc")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "def\n")
-    (insert "ghi")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "jkl\n")
-
-    (mistty-test-goto "def")
-    (should (equal (point-min) (mistty--beginning-of-scrolline-pos)))
-    (should (equal "d" (char-to-string (char-after (point)))))))
-
-(ert-deftest mistty--go-end-of-scrolline ()
-  (ert-with-test-buffer ()
-    (insert "abc")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "def\n")
-    (insert "ghi")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "jkl")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "mno")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "pqr\n")
-
-    (mistty-test-goto "abc")
-    (mistty--go-end-of-scrolline)
-    (should (equal "f" (char-to-string (char-before (point)))))
-
-    (mistty-test-goto "def")
-    (mistty--go-end-of-scrolline)
-    (should (equal "f" (char-to-string (char-before (point)))))
-
-    (mistty-test-goto "ghi")
-    (mistty--go-end-of-scrolline)
-    (should (equal "r" (char-to-string (char-before (point)))))
-
-    (mistty-test-goto "ghi")
-    (mistty--go-end-of-scrolline)
-    (should (equal "r" (char-to-string (char-before (point)))))
-
-    (mistty-test-goto "jk")
-    (mistty--go-end-of-scrolline)
-    (should (equal "r" (char-to-string (char-before (point)))))
-
-    (mistty-test-goto-after "pqr")
-    (mistty--go-end-of-scrolline)
-    (should (equal "r" (char-to-string (char-before (point)))))
-
-    (mistty-test-goto-after "def")
-    (mistty--go-end-of-scrolline)
-    (should (equal "f" (char-to-string (char-before (point)))))
-
-    (mistty-test-goto-after "pqr\n")
-    (mistty--go-end-of-scrolline)
-    (should (equal (point-max) (point)))))
-
-(ert-deftest mistty--go-end-of-scrolline-pos ()
-  (ert-with-test-buffer ()
-    (insert "abc")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "def\n")
-
-    (mistty-test-goto "abc")
-    (should (equal (mistty-test-pos-after "def") (mistty--end-of-scrolline-pos)))
-    (should (equal "a" (char-to-string (char-after (point)))))))
-
-(ert-deftest mistty--go-down-scrollines-0 ()
-  (ert-with-test-buffer ()
-    (insert "abc")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "def\n")
-    (insert "ghi")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "jkl")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "mno")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "pqr\n")
-    (insert "stu")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "vwx")
-
-    ;; n=0: beginning of scrolline
-    (goto-char (point-min))
-    (should (zerop (mistty--go-down-scrollines 0)))
-    (should (equal (point) (point-min)))
-
-    (mistty-test-goto "def")
-    (should (zerop (mistty--go-down-scrollines 0)))
-    (should (equal (point) (point-min)))))
-
-
-(ert-deftest mistty--go-down-scrollines-positive ()
-  (ert-with-test-buffer ()
-    (insert "abc")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "def\n")
-    (insert "ghi")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "jkl")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "mno")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "pqr\n")
-    (insert "stu")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "vwx\n")
-
-    ;; n > 0: go down
-    (mistty-test-goto "abc")
-    (should (zerop (mistty--go-down-scrollines 1)))
-    (should (equal "g" (char-to-string (char-after (point)))))
-
-    (mistty-test-goto "def")
-    (should (zerop (mistty--go-down-scrollines 1)))
-    (should (equal "g" (char-to-string (char-after (point)))))
-
-    (mistty-test-goto "ghi")
-    (should (zerop (mistty--go-down-scrollines 1)))
-    (should (equal "s" (char-to-string (char-after (point)))))
-
-    (mistty-test-goto "abc")
-    (should (zerop (mistty--go-down-scrollines 2)))
-    (should (equal "s" (char-to-string (char-after (point)))))
-
-    (mistty-test-goto "abc")
-    (should (zerop (mistty--go-down-scrollines 3)))
-    (should (equal (point-max) (point)))
-
-    (mistty-test-goto "abc")
-    (should (equal 1 (mistty--go-down-scrollines 4)))
-    (should (equal (point-max) (point)))
-
-    (mistty-test-goto "abc")
-    (should (equal 2 (mistty--go-down-scrollines 5)))
-    (should (equal (point-max) (point)))))
-
-(ert-deftest mistty--go-down-scrollines-negative ()
-  (ert-with-test-buffer ()
-    (insert "abc")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "def\n")
-    (insert "ghi")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "jkl")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "mno")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "pqr\n")
-    (insert "stu")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "vwx\n")
-
-    ;; n < 0: go up
-    (mistty-test-goto "vwx")
-    (should (zerop (mistty--go-down-scrollines -1)))
-    (should (equal "g" (char-to-string (char-after (point)))))
-
-    (mistty-test-goto "stu")
-    (should (zerop (mistty--go-down-scrollines -1)))
-    (should (equal "g" (char-to-string (char-after (point)))))
-
-    (mistty-test-goto "vwx")
-    (should (zerop (mistty--go-down-scrollines -2)))
-    (should (equal "a" (char-to-string (char-after (point)))))
-
-    (mistty-test-goto "vwx")
-    (should (equal -1 (mistty--go-down-scrollines -3)))
-    (should (equal "a" (char-to-string (char-after (point)))))
-
-    (mistty-test-goto "vwx")
-    (should (equal -2 (mistty--go-down-scrollines -4)))
-    (should (equal "a" (char-to-string (char-after (point)))))))
-
-(ert-deftest mistty--go-up-scrollines ()
-  (ert-with-test-buffer ()
-    (insert "abc")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "def\n")
-    (insert "ghi")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "jkl")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "mno")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "pqr\n")
-    (insert "stu")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "vwx")
-
-    (mistty-test-goto "vwx")
-    (should (equal 2 (mistty--go-up-scrollines 4)))
-
-    (mistty-test-goto "abc")
-    (should (equal -2 (mistty--go-up-scrollines -4)))))
-
-(ert-deftest mistty--current-scrolline-text()
-  (ert-with-test-buffer ()
-    (insert "abc")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "def\n")
-    (insert "ghi")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "jkl")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "mno")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "pqr")
-
-    (mistty-test-goto "def")
-    (should (equal "abcdef" (mistty--current-scrolline-text)))
-
-    (mistty-test-goto "mno")
-    (should (equal "ghijklmnopqr" (mistty--current-scrolline-text)))
-
-
-    (mistty-test-goto "def")
-    (put-text-property (mistty-test-pos "def")
-                       (mistty-test-pos-after "def")
-                       'mistty-test 'foobar)
-    (should (equal 'foobar
-                   (get-text-property 3 'mistty-test
-                                      (mistty--current-scrolline-text))))
-    (should (equal nil
-                   (get-text-property 3 'mistty-test
-                                      (mistty--current-scrolline-text 'no-properties))))))
-
-(ert-deftest mistty--scrolline-text-before-point ()
-  (ert-with-test-buffer ()
-    (insert "abc")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "def\n")
-    (insert "ghi")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "jkl")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "mno")
-    (insert (propertize "\n" 'term-line-wrap t))
-    (insert "pqr")
-
-    (mistty-test-goto-after "de")
-    (should (equal "abcde" (mistty--scrolline-text-before-point)))
-
-    (mistty-test-goto "ef")
-    (should (equal "abcd" (mistty--scrolline-text-before-point)))))
 
 (ert-deftest mistty-test-fifo-one-element ()
   (let ((fifo (mistty--make-fifo)))
