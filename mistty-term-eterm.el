@@ -72,7 +72,10 @@ work here as well.
 If you add here a handler that sets a buffer-local variable,
 consider adding that variable to `mistty-variables-to-copy' so
 that its value is available in the main MisTTY buffer, not just
-the terminal buffer."
+the terminal buffer.
+
+This option only works on eterm terminals. It has no effect on alacritty
+terminals."
   :group 'mistty
   :type '(alist :key-type string :value-type function))
 
@@ -93,22 +96,31 @@ buffers and term-mode buffers started by Mistty, call:
 
 You might want to execute the above command as well if you have reasons
 to think that some term-mode customization are interfering with MisTTY's
-operations."
+operations.
+
+This option only works on eterm terminals. It has no effect on alacritty
+terminals."
   :group 'mistty
   :type 'hook)
 
-(defvar-keymap mistty-fullscreen-map
-  :parent term-raw-map
-  :doc "Keymap active while in fullscreen mode (eterm only).
+(define-obsolete-variable-alias
+  'mistty-fullscreen-map  'mistty-term-mode-map "1.5.1snapshot")
 
-While in fullscreen mode, the buffer is a `term-mode' with its
-own keymaps (`term-mod-map' and `term-raw-map')
+(defvar-keymap mistty-term-mode-map
+  :parent term-raw-map
+  :doc "Keymap active in eterm terminal while in fullscreen mode .
+
+While in fullscreen mode, the buffer is a `term-mode' with this keymap,
+`mistty-term-mode-map' which extends `term-raw-map'.
 
 This map is applied in addition to these as a way of making key
 mapping somewhat consistent between fullscreen and normal mode.
 
-This map is ignored when using alacritty as a terminal. Check out
-`mistty-alacritty-mode-map' or `mistty-fullscreen-mode-map' instead."
+This map is ignored when using alacritty as a terminal. If you want to
+add a key binding in a way that's not specific to eterm terminals, check
+out `mistty-fullscreen-mode-map'. If you want to add key bindings that
+are specific to alacritty terminals, check out
+`mistty-alacritty-mode-map'."
 
     "C-q" '(keymap (t . mistty-send-last-key))
     "C-c C-q" #'mistty-send-key-sequence
@@ -200,7 +212,7 @@ to call `mistty--term-postprocess'.")
         (set-process-window-size proc height width)
         (set-process-filter proc (mistty--make-accumulator
                                   #'mistty--emulate-terminal))
-        (setq-local term-raw-map mistty-fullscreen-map)
+        (setq-local term-raw-map mistty-term-mode-map)
         (term-char-mode)
         (add-hook 'after-change-functions #'mistty--after-change-on-term nil t)
 

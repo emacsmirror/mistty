@@ -455,7 +455,8 @@ This map is active whenever the current buffer is in MisTTY mode."
   "C-c C-z" #'mistty-send-last-key
   "C-c C-\\" #'mistty-send-last-key
   "C-c C-g" #'mistty-send-last-key
-  ;;   when adding a new entry above, update mistty-fullscreen-map, too.
+  ;;   when adding a new entry above, update mistty-term-mode-map and
+  ;;   mistty-alacritty-mode-map, too.
 
   ;; Bind history search backward, previous history and next history
   ;; to meta keys, like comint does.
@@ -481,9 +482,9 @@ possible.
 Consider adding key bindings into `mistty-mode-map' instead so
 they're always available; this is more straightforward.
 
-If you add key bindings into this map, you might also want to
-have access to the same bindings on fullscreen mode, so consider
-adding bindings to `mistty-fullscreen-map' as well.
+If you add key bindings into this map, you might also want to have
+access to the same bindings on fullscreen mode, so consider adding
+bindings to `mistty-fullscreen-mode-map' as well.
 
 It is used to send most key strokes and some keys directly to the
 terminal."
@@ -527,7 +528,7 @@ are sent directly to the terminal."
 (defvar-keymap mistty-fullscreen-mode-map
   :doc "Additional keymap active on the terminal buffer while fullscreen.
 
-This is in addition to the mode's keymap, `mistty-fullscreen-map' for
+This is in addition to the mode's keymap, `mistty-term-mode-map' for
 eterm terminals and `mistty-alacritty-mode-map' for alacritty terminals."
   "C-c C-j" #'mistty-toggle-buffers)
 
