@@ -112,17 +112,18 @@ OSC Sequences
 -------------
 
 OSC are “operating system command” control sequences. MisTTY supports
-some of these sequences and ignores the others.
-
-By default, the supported sequences are OSC 2 (set window title), 7
-(directory tracking, already mentioned in :ref:`dirtrack`) and 8
-(hyperlinks), thanks to :file:`ansi-osc.el`.
+some of these sequences and ignores the others, as document on
+:ref:`osc`.
 
 .. index:: pair: variable; mistty-osc-handlers
 
-To add more, register handlers to :code:`mistty-osc-handlers`. The
-format is the same as the handlers supported for
-:code:`ansi-osc-handlers` and can usually be used interchangeably.
+When using the `eterm` terminal type, you can add more handlers for
+OSC by registering them to :code:`mistty-osc-handlers`. The format is
+the same as the handlers supported for :code:`ansi-osc-handlers` and
+can usually be used interchangeably.
+
+This doesn't work when using the `alacritty` terminal type. There, the
+set of supported OSC sequences is hardcoded.
 
 When working on OSC handlers for MisTTY, it's important to keep the
 following in mind: MisTTY separate buffers for the terminal (a

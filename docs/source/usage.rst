@@ -754,18 +754,28 @@ Supported OSC Control Sequences
 -------------------------------
 
 OSC are optional “operating system command” control sequences that
-programs can use to communicate with the terminal and Emacs. MisTTY
-supports the following OSC control sequences:
+programs can use to communicate with the terminal and Emacs.
+
+Support for OSC sequences varies by terminal types. `alacritty` and
+`eterm` don't support exactly the same set and their support might
+differ. `alacritty` supports `additional OSC sequences
+<https://alacritty.org/misc-alacritty-escapes.html>`_.
+
+MisTTY supports the following OSC control sequences:
 
 - *OSC 0; <title> ST* and *OSC 2; <title> ST* changes the window
   title. This sets the variable ``ansi-osc-window-title`` in the
   MisTTY buffer, which can then be referred to in
-  ``frame-title-format`` to set the frame title dynamically.
+  ``frame-title-format`` to set the frame title dynamically. (on both
+  `alacritty` and `eterm`)
 
 - *OSC 7;file://<hostname>/<path> ST* reports the shell's current
-  directory to Emacs. See :ref:`dirtrack`
+  directory to Emacs. (on both
+  `alacritty` and `eterm`) See :ref:`dirtrack`
 
-- *OSC 8;;<url> ST <text> OSC 8;; ST* makes text clickable.
+- *OSC 8;;<url> ST <text> OSC 8;; ST* makes text clickable. (on both
+  `alacritty` and `eterm`) with a button of category
+  `ansi-osc-hyperlink`
 
   Example:
 
@@ -774,7 +784,8 @@ supports the following OSC control sequences:
     printf '\e]8;;http://example.com\e\\This is a link\e]8;;\e\\\n'
 
 - *OSC 10;? ST* and *OSC 11;? ST* query the foreground or background
-  color. The response is an hexadecimal 16 bit RGB value.
+  color. The response is an hexadecimal 16 bit RGB value. (`eterm` supports
+  only querying while `alacritty` supports the full set of options)
 
   Example: Querying the background color in Bash:
 
@@ -809,12 +820,49 @@ supports the following OSC control sequences:
         return 1
     }
 
+.. _osc52:
+
+
+.. index::
+  pair: variable; mistty-alacritty-osc52
+
+
+- *OSC 52 ; c ; <base64-encoded-text> ST*
+
+  This escape sequence allows an application running on the terminal
+  to share (copy)the content of its clipboard with Emacs and the rest of the
+  system. (This is available only on `alacritty` terminals.)
+
+  When MisTTY receives such a call, it puts the given text to the
+  front of the kill ring.
+
+  Only the clipboard type (c) is supported. Any other type supported by
+  the spec (p q s 0-7) is ignored.
+
+  Support for OSC52 can be configured with :kbd:`M-x customize-option
+  mistty-alacritty-osc52`
+
+- *OSC 52 ; c ; ? ST*
+
+  This escape sequences allows an application running on the terminal
+  to query the content of the clipboard (paste). The returned value is
+  the same on as would be displayed by a :kbd:`C-y` `yank` command.
+  (This is available only on `alacritty` terminals.)
+
+  This is disabled by default since it can too easily be abused. It
+  can be enabled with :kbd:`M-x customize-option
+  mistty-alacritty-osc52`
+
 .. _osc133:
 
 - *OSC 133; A-D ; <options> ST*
 
 Escape sequences that help terminals identify shell commands and their
-output, originally defined by FinalTerm. Several terminals support OSC
+output, originally defined by FinalTerm. (on both `alacritty` and
+`eterm`)
+
+
+Several terminals support OSC
 133, such as `wezterm <https://wezterm.org/shell-integration.html>`_,
 `kitty
 <https://sw.kovidgoyal.net/kitty/shell-integration/#notes-for-shell-developers>`_

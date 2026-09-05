@@ -1094,8 +1094,13 @@ special characters), or delete text before the cursor, such as
 
 
 OSC are optional “operating system command” control sequences that
-programs can use to communicate with the terminal and Emacs. MisTTY
-supports the following OSC control sequences:
+programs can use to communicate with the terminal and Emacs.
+
+Support for OSC sequences varies by terminal types. @cite{alacritty} and
+@cite{eterm} don’t support exactly the same set and their support might
+differ. @cite{alacritty} supports additional OSC sequences@footnote{https://alacritty.org/misc-alacritty-escapes.html}.
+
+MisTTY supports the following OSC control sequences:
 
 
 @itemize -
@@ -1104,14 +1109,18 @@ supports the following OSC control sequences:
 `OSC 0; <title> ST' and `OSC 2; <title> ST' changes the window
 title. This sets the variable @code{ansi-osc-window-title} in the
 MisTTY buffer, which can then be referred to in
-@code{frame-title-format} to set the frame title dynamically.
+@code{frame-title-format} to set the frame title dynamically. (on both
+@cite{alacritty} and @cite{eterm})
 
 @item 
 `OSC 7;file://<hostname>/<path> ST' reports the shell’s current
-directory to Emacs. See @ref{b,,Directory Tracking}
+directory to Emacs. (on both
+@cite{alacritty} and @cite{eterm}) See @ref{b,,Directory Tracking}
 
 @item 
-`OSC 8;;<url> ST <text> OSC 8;; ST' makes text clickable.
+`OSC 8;;<url> ST <text> OSC 8;; ST' makes text clickable. (on both
+@cite{alacritty} and @cite{eterm}) with a button of category
+@cite{ansi-osc-hyperlink}
 
 Example:
 
@@ -1121,7 +1130,8 @@ printf '\e]8;;http://example.com\e\\This is a link\e]8;;\e\\\n'
 
 @item 
 `OSC 10;? ST' and `OSC 11;? ST' query the foreground or background
-color. The response is an hexadecimal 16 bit RGB value.
+color. The response is an hexadecimal 16 bit RGB value. (@cite{eterm} supports
+only querying while @cite{alacritty} supports the full set of options)
 
 Example: Querying the background color in Bash:
 
@@ -1156,7 +1166,41 @@ function bg_brightness @{
 @}
 @end example
 @end itemize
-@anchor{usage osc133}@anchor{2b}
+
+@geindex variable; mistty-alacritty-osc52
+@anchor{usage osc52}@anchor{2b}
+
+@itemize -
+
+@item 
+`OSC 52 ; c ; <base64-encoded-text> ST'
+
+This escape sequence allows an application running on the terminal
+to share (copy)the content of its clipboard with Emacs and the rest of the
+system. (This is available only on @cite{alacritty} terminals.)
+
+When MisTTY receives such a call, it puts the given text to the
+front of the kill ring.
+
+Only the clipboard type (c) is supported. Any other type supported by
+the spec (p q s 0-7) is ignored.
+
+Support for OSC52 can be configured with @code{M-x customize-option
+mistty-alacritty-osc52}
+
+@item 
+`OSC 52 ; c ; ? ST'
+
+This escape sequences allows an application running on the terminal
+to query the content of the clipboard (paste). The returned value is
+the same on as would be displayed by a @code{C-y} @cite{yank} command.
+(This is available only on @cite{alacritty} terminals.)
+
+This is disabled by default since it can too easily be abused. It
+can be enabled with @code{M-x customize-option
+mistty-alacritty-osc52}
+@end itemize
+@anchor{usage osc133}@anchor{2c}
 
 @itemize -
 
@@ -1165,7 +1209,10 @@ function bg_brightness @{
 @end itemize
 
 Escape sequences that help terminals identify shell commands and their
-output, originally defined by FinalTerm. Several terminals support OSC
+output, originally defined by FinalTerm. (on both @cite{alacritty} and
+@cite{eterm})
+
+Several terminals support OSC
 133, such as wezterm@footnote{https://wezterm.org/shell-integration.html},
 kitty@footnote{https://sw.kovidgoyal.net/kitty/shell-integration/#notes-for-shell-developers}
 and iTerm@footnote{https://iterm2.com/documentation-shell-integration.html}, so you
@@ -1250,10 +1297,10 @@ prompt sections and ignores any extra fields.
 @end quotation
 @end cartouche
 
-To extend the set of OSC codes supported by MisTTY, see @ref{2c,,OSC Sequences}.
+To extend the set of OSC codes supported by MisTTY, see @ref{2d,,OSC Sequences}.
 
 @node Shells,Extending MisTTY,Usage,Contents
-@anchor{shells doc}@anchor{2d}@anchor{shells id1}@anchor{2e}@anchor{shells shells}@anchor{13}
+@anchor{shells doc}@anchor{2e}@anchor{shells id1}@anchor{2f}@anchor{shells shells}@anchor{13}
 @section Shells
 
 
@@ -1266,7 +1313,7 @@ To extend the set of OSC codes supported by MisTTY, see @ref{2c,,OSC Sequences}.
 @end menu
 
 @node Bash,Fish,,Shells
-@anchor{shells bash}@anchor{2f}@anchor{shells id2}@anchor{30}
+@anchor{shells bash}@anchor{30}@anchor{shells id2}@anchor{31}
 @subsection Bash
 
 
@@ -1298,7 +1345,7 @@ enable directory tracking, as documented in @ref{28,,Directory tracking in Bash}
 @end menu
 
 @node Multi-line prompts in Bash,Directory tracking in Bash,,Bash
-@anchor{shells multi-line-prompts-in-bash}@anchor{31}
+@anchor{shells multi-line-prompts-in-bash}@anchor{32}
 @subsubsection Multi-line prompts in Bash
 
 
@@ -1321,7 +1368,7 @@ where these are significant, you will need to remove trailing spaces
 using @code{C-d} or @code{DEL}.
 
 @node Directory tracking in Bash,VI mode in Bash,Multi-line prompts in Bash,Bash
-@anchor{shells bash-dirtrack}@anchor{28}@anchor{shells directory-tracking-in-bash}@anchor{32}
+@anchor{shells bash-dirtrack}@anchor{28}@anchor{shells directory-tracking-in-bash}@anchor{33}
 @subsubsection Directory tracking in Bash
 
 
@@ -1372,7 +1419,7 @@ For example:
 @end example
 
 @node VI mode in Bash,Fancy prompts in Bash,Directory tracking in Bash,Bash
-@anchor{shells vi-mode-in-bash}@anchor{33}
+@anchor{shells vi-mode-in-bash}@anchor{34}
 @subsubsection VI mode in Bash
 
 
@@ -1401,7 +1448,7 @@ fi
 @end example
 
 @node Fancy prompts in Bash,,VI mode in Bash,Bash
-@anchor{shells fancy-prompts-in-bash}@anchor{34}
+@anchor{shells fancy-prompts-in-bash}@anchor{35}
 @subsubsection Fancy prompts in Bash
 
 
@@ -1411,7 +1458,7 @@ given the numerous variations in how these prompts are created, issues
 may arise.
 
 If you suspect that your shell prompt may be causing problems, try
-configuring your shell to send out @ref{2b,,OSC 133} codes to
+configuring your shell to send out @ref{2c,,OSC 133} codes to
 help MisTTY correctly identify your prompt. Assuming you have a
 working PS1 already, OSC 133 support can be added with:
 
@@ -1424,7 +1471,7 @@ might be confused by the OSC sequences and you might have strange
 issues when exiting reverse-i-search.
 
 @node Fish,Zsh,Bash,Shells
-@anchor{shells fish}@anchor{35}@anchor{shells id3}@anchor{36}
+@anchor{shells fish}@anchor{36}@anchor{shells id3}@anchor{37}
 @subsection Fish
 
 
@@ -1442,7 +1489,7 @@ paste mode, on by default, so it should not be turned off.
 @end menu
 
 @node Autosuggestions in Fish,Command History in Fish,,Fish
-@anchor{shells autosuggestions-in-fish}@anchor{37}
+@anchor{shells autosuggestions-in-fish}@anchor{38}
 @subsubsection Autosuggestions in Fish
 
 
@@ -1454,7 +1501,7 @@ The recommended way of accepting an autosuggestion in MisTTY is to
 type @code{C-e}. This works in normal terminals as well.
 
 @node Command History in Fish,Directory tracking in Fish,Autosuggestions in Fish,Fish
-@anchor{shells command-history-in-fish}@anchor{38}
+@anchor{shells command-history-in-fish}@anchor{39}
 @subsubsection Command History in Fish
 
 
@@ -1489,7 +1536,7 @@ use @code{C-q <up>} @code{C-q <down>} @code{C-q <left>} @code{C-q <right>}, or e
 @end itemize
 
 @node Directory tracking in Fish,Multi-line prompts in Fish,Command History in Fish,Fish
-@anchor{shells directory-tracking-in-fish}@anchor{39}@anchor{shells fish-dirtrack}@anchor{23}
+@anchor{shells directory-tracking-in-fish}@anchor{3a}@anchor{shells fish-dirtrack}@anchor{23}
 @subsubsection Directory tracking in Fish
 
 
@@ -1513,7 +1560,7 @@ such sequence are either ignored or understood by most terminals. You
 might already have it set up.
 
 @node Multi-line prompts in Fish,VI mode in Fish,Directory tracking in Fish,Fish
-@anchor{shells multi-line-prompts-in-fish}@anchor{3a}
+@anchor{shells multi-line-prompts-in-fish}@anchor{3b}
 @subsubsection Multi-line prompts in Fish
 
 
@@ -1529,7 +1576,7 @@ mistty-skip-empty-spaces} allows you to turn that on or off in a
 MisTTY buffer.
 
 @node VI mode in Fish,Fancy prompts in Fish,Multi-line prompts in Fish,Fish
-@anchor{shells vi-mode-in-fish}@anchor{3b}
+@anchor{shells vi-mode-in-fish}@anchor{3c}
 @subsubsection VI mode in Fish
 
 
@@ -1548,18 +1595,18 @@ end
 @end example
 
 @node Fancy prompts in Fish,,VI mode in Fish,Fish
-@anchor{shells fancy-prompts-in-fish}@anchor{3c}
+@anchor{shells fancy-prompts-in-fish}@anchor{3d}
 @subsubsection Fancy prompts in Fish
 
 
 MisTTY is known to work with powerline-shell prompts or Tide@comma{} on Fish@footnote{https://github.com/IlanCosman/tide}, including right prompts.
 
 If you suspect that your shell prompt may be causing problems, try
-configuring your shell to send out @ref{2b,,OSC 133} codes to
+configuring your shell to send out @ref{2c,,OSC 133} codes to
 help MisTTY correctly identify your prompt.
 
 @node Zsh,IPython,Fish,Shells
-@anchor{shells id4}@anchor{3d}@anchor{shells zsh}@anchor{3e}
+@anchor{shells id4}@anchor{3e}@anchor{shells zsh}@anchor{3f}
 @subsection Zsh
 
 
@@ -1579,7 +1626,7 @@ unexpected results if you yank text containing special characters.
 @end menu
 
 @node Autosuggestions in Zsh,Directory tracking in Zsh,,Zsh
-@anchor{shells autosuggestions-in-zsh}@anchor{3f}
+@anchor{shells autosuggestions-in-zsh}@anchor{40}
 @subsubsection Autosuggestions in Zsh
 
 
@@ -1592,7 +1639,7 @@ The recommended way of accepting an autosuggestion in MisTTY is to
 type @code{C-e}. This works in normal terminals as well.
 
 @node Directory tracking in Zsh,Multi-line prompts in Zsh,Autosuggestions in Zsh,Zsh
-@anchor{shells directory-tracking-in-zsh}@anchor{40}@anchor{shells zsh-dirtrack}@anchor{24}
+@anchor{shells directory-tracking-in-zsh}@anchor{41}@anchor{shells zsh-dirtrack}@anchor{24}
 @subsubsection Directory tracking in Zsh
 
 
@@ -1611,7 +1658,7 @@ Such sequence are either ignored or understood by any well-behaved
 terminals, so you shouldn’t need to check the terminal.
 
 @node Multi-line prompts in Zsh,VI mode in Zsh,Directory tracking in Zsh,Zsh
-@anchor{shells multi-line-prompts-in-zsh}@anchor{41}
+@anchor{shells multi-line-prompts-in-zsh}@anchor{42}
 @subsubsection Multi-line prompts in Zsh
 
 
@@ -1634,7 +1681,7 @@ where these are significant, you will need to remove trailing spaces
 using @code{C-d} or @code{DEL}.
 
 @node VI mode in Zsh,Fancy prompts in Zsh,Multi-line prompts in Zsh,Zsh
-@anchor{shells vi-mode-in-zsh}@anchor{42}
+@anchor{shells vi-mode-in-zsh}@anchor{43}
 @subsubsection VI mode in Zsh
 
 
@@ -1653,7 +1700,7 @@ fi
 @end example
 
 @node Fancy prompts in Zsh,,VI mode in Zsh,Zsh
-@anchor{shells fancy-prompts-in-zsh}@anchor{43}
+@anchor{shells fancy-prompts-in-zsh}@anchor{44}
 @subsubsection Fancy prompts in Zsh
 
 
@@ -1670,7 +1717,7 @@ are important to you, disable transient prompts when @cite{TERM} is set to
 When using a multi-line prompt, to ensure proper functionality,
 configure your shell to send OSC 133 (Final Term) codes, at least A
 and C, so MisTTY correctly recognizes the beginning and end of the
-prompt. See @ref{2b,,OSC 133}
+prompt. See @ref{2c,,OSC 133}
 
 The minimum configuration that would help MisTTY might look like this:
 
@@ -1687,11 +1734,11 @@ preexec_functions+=(osc133_preexec)
 @end example
 
 If you suspect that your shell prompt may be causing problems, try
-configuring your shell to send out @ref{2b,,OSC 133 codes} to
+configuring your shell to send out @ref{2c,,OSC 133 codes} to
 help MisTTY correctly identify your prompt.
 
 @node IPython,,Zsh,Shells
-@anchor{shells id5}@anchor{44}@anchor{shells ipython}@anchor{45}
+@anchor{shells id5}@anchor{45}@anchor{shells ipython}@anchor{46}
 @subsection IPython
 
 
@@ -1720,7 +1767,7 @@ shouldn’t match any other prompts. You don’t need to do anything here
 if you configured IPython to not output any continue prompt.
 
 @node Extending MisTTY,FAQ,Shells,Contents
-@anchor{extensions doc}@anchor{46}@anchor{extensions extending-mistty}@anchor{47}
+@anchor{extensions doc}@anchor{47}@anchor{extensions extending-mistty}@anchor{48}
 @section Extending MisTTY
 
 
@@ -1735,7 +1782,7 @@ if you configured IPython to not output any continue prompt.
 @end menu
 
 @node Hooks,OSC Sequences,,Extending MisTTY
-@anchor{extensions hooks}@anchor{48}@anchor{extensions id1}@anchor{49}
+@anchor{extensions hooks}@anchor{49}@anchor{extensions id1}@anchor{4a}
 @subsection Hooks
 
 
@@ -1750,7 +1797,7 @@ if you configured IPython to not output any continue prompt.
 @end menu
 
 @node mistty-mode-hook,mistty-interactive-insert-hook,,Hooks
-@anchor{extensions mistty-mode-hook}@anchor{4a}
+@anchor{extensions mistty-mode-hook}@anchor{4b}
 @subsubsection mistty-mode-hook
 
 
@@ -1782,7 +1829,7 @@ you could do:
 @geindex hook; mistty-interactive-interactive
 
 @node mistty-interactive-insert-hook,mistty-after-process-start-hook,mistty-mode-hook,Hooks
-@anchor{extensions mistty-interactive-insert-hook}@anchor{4b}
+@anchor{extensions mistty-interactive-insert-hook}@anchor{4c}
 @subsubsection mistty-interactive-insert-hook
 
 
@@ -1806,7 +1853,7 @@ prefer to trigger the auto-completion UI yourself by adding your own
 function to this hook and turning the above option off.
 
 @node mistty-after-process-start-hook,mistty-after-process-end-hook,mistty-interactive-insert-hook,Hooks
-@anchor{extensions mistty-after-process-start-hook}@anchor{4c}
+@anchor{extensions mistty-after-process-start-hook}@anchor{4d}
 @subsubsection mistty-after-process-start-hook
 
 
@@ -1817,7 +1864,7 @@ usually a shell. The process itself is available as
 typically empty, as no output from the process has been processed.
 
 @node mistty-after-process-end-hook,mistty-entered-fullscreen-hook,mistty-after-process-start-hook,Hooks
-@anchor{extensions mistty-after-process-end-hook}@anchor{4d}
+@anchor{extensions mistty-after-process-end-hook}@anchor{4e}
 @subsubsection mistty-after-process-end-hook
 
 
@@ -1836,7 +1883,7 @@ the shell exits successfully, with @code{mistty-kill-buffer} or
 @end example
 
 @node mistty-entered-fullscreen-hook,mistty-left-fullscreen-hook,mistty-after-process-end-hook,Hooks
-@anchor{extensions mistty-entered-fullscreen-hook}@anchor{4e}
+@anchor{extensions mistty-entered-fullscreen-hook}@anchor{4f}
 @subsubsection mistty-entered-fullscreen-hook
 
 
@@ -1849,7 +1896,7 @@ run within the terminal buffer, available as
 buried until @code{mistty-toggle-buffers} is called.
 
 @node mistty-left-fullscreen-hook,,mistty-entered-fullscreen-hook,Hooks
-@anchor{extensions mistty-left-fullscreen-hook}@anchor{4f}
+@anchor{extensions mistty-left-fullscreen-hook}@anchor{50}
 @subsubsection mistty-left-fullscreen-hook
 
 
@@ -1860,22 +1907,23 @@ In this mode, @code{mistty-fullscreen} is nil and user commands run
 in the work buffer.
 
 @node OSC Sequences,Writing Your Own Commands,Hooks,Extending MisTTY
-@anchor{extensions ext-osc}@anchor{2c}@anchor{extensions osc-sequences}@anchor{50}
+@anchor{extensions ext-osc}@anchor{2d}@anchor{extensions osc-sequences}@anchor{51}
 @subsection OSC Sequences
 
 
 OSC are “operating system command” control sequences. MisTTY supports
-some of these sequences and ignores the others.
-
-By default, the supported sequences are OSC 2 (set window title), 7
-(directory tracking, already mentioned in @ref{b,,Directory Tracking}) and 8
-(hyperlinks), thanks to @code{ansi-osc.el}.
+some of these sequences and ignores the others, as document on
+@ref{18,,Supported OSC Control Sequences}.
 
 @geindex variable; mistty-osc-handlers
 
-To add more, register handlers to @code{mistty-osc-handlers}. The
-format is the same as the handlers supported for
-@code{ansi-osc-handlers} and can usually be used interchangeably.
+When using the @cite{eterm} terminal type, you can add more handlers for
+OSC by registering them to @code{mistty-osc-handlers}. The format is
+the same as the handlers supported for @code{ansi-osc-handlers} and
+can usually be used interchangeably.
+
+This doesn’t work when using the @cite{alacritty} terminal type. There, the
+set of supported OSC sequences is hardcoded.
 
 When working on OSC handlers for MisTTY, it’s important to keep the
 following in mind: MisTTY separate buffers for the terminal (a
@@ -1905,7 +1953,7 @@ same argument.
 @end itemize
 
 @node Writing Your Own Commands,Terminal Keymap,OSC Sequences,Extending MisTTY
-@anchor{extensions custom-commands}@anchor{51}@anchor{extensions writing-your-own-commands}@anchor{52}
+@anchor{extensions custom-commands}@anchor{52}@anchor{extensions writing-your-own-commands}@anchor{53}
 @subsection Writing Your Own Commands
 
 
@@ -2012,7 +2060,7 @@ position.
 @end table
 
 @node Terminal Keymap,Auto-complete,Writing Your Own Commands,Extending MisTTY
-@anchor{extensions term-keymap}@anchor{53}@anchor{extensions terminal-keymap}@anchor{54}
+@anchor{extensions term-keymap}@anchor{54}@anchor{extensions terminal-keymap}@anchor{55}
 @subsection Terminal Keymap
 
 
@@ -2071,7 +2119,7 @@ that simulates rxvt, you might do:
 distribution; it’s only available on github@footnote{https://github.com/szermatt/mistty/tree/master/extras}.
 
 @node Auto-complete,Long-running commands,Terminal Keymap,Extending MisTTY
-@anchor{extensions auto-complete}@anchor{55}@anchor{extensions autocomplete}@anchor{1e}
+@anchor{extensions auto-complete}@anchor{56}@anchor{extensions autocomplete}@anchor{1e}
 @subsection Auto-complete
 
 
@@ -2081,7 +2129,7 @@ Auto-complete is a completion UI that shows up automatically after
 some delay, without having to call @cite{completion-at-point}. This used
 not to work in MisTTY terminal region. The hook
 @code{mistty-simulates-self-insert-command} was introduced to fix
-that. See @code{mistty-interactive-insert-hook} in @ref{48,,Hooks}.
+that. See @code{mistty-interactive-insert-hook} in @ref{49,,Hooks}.
 
 By default this hook calls the buffer @code{pre-command-hook} and
 @code{post-command-hook} with @code{this-command} set to
@@ -2095,7 +2143,7 @@ should be possible to build a custom bridge between this hook and the
 auto-completion package.
 
 @node Long-running commands,,Auto-complete,Extending MisTTY
-@anchor{extensions long-running-commands}@anchor{56}@anchor{extensions lrc}@anchor{21}
+@anchor{extensions long-running-commands}@anchor{57}@anchor{extensions lrc}@anchor{21}
 @subsection Long-running commands
 
 
@@ -2182,7 +2230,7 @@ Here’s an example of code that would detect
 @end example
 
 @node FAQ,Contributing,Extending MisTTY,Contents
-@anchor{faq doc}@anchor{57}@anchor{faq faq}@anchor{58}
+@anchor{faq doc}@anchor{58}@anchor{faq faq}@anchor{59}
 @section FAQ
 
 
@@ -2421,7 +2469,7 @@ when the shell ends. If you don’t like that, change the option at
 @end quotation
 
 @node Contributing,,FAQ,Contents
-@anchor{contrib doc}@anchor{59}@anchor{contrib contributing}@anchor{5a}
+@anchor{contrib doc}@anchor{5a}@anchor{contrib contributing}@anchor{5b}
 @section Contributing
 
 
@@ -2435,7 +2483,7 @@ when the shell ends. If you don’t like that, change the option at
 @end menu
 
 @node Reporting issues,Suggesting features,,Contributing
-@anchor{contrib reporting}@anchor{3}@anchor{contrib reporting-issues}@anchor{5b}
+@anchor{contrib reporting}@anchor{3}@anchor{contrib reporting-issues}@anchor{5c}
 @subsection Reporting issues
 
 
@@ -2519,7 +2567,7 @@ anything private, and include it into the issue.
 @end itemize
 
 @node Suggesting features,Asking questions,Reporting issues,Contributing
-@anchor{contrib discussion}@anchor{5c}@anchor{contrib suggesting-features}@anchor{5d}
+@anchor{contrib discussion}@anchor{5d}@anchor{contrib suggesting-features}@anchor{5e}
 @subsection Suggesting features
 
 
@@ -2527,14 +2575,14 @@ Please create a new discussion@footnote{https://github.com/szermatt/mistty/discu
 feature suggestions to the Issue Tracker@footnote{https://github.com/szermatt/mistty/issues}.
 
 @node Asking questions,Code contributions,Suggesting features,Contributing
-@anchor{contrib asking-questions}@anchor{5e}
+@anchor{contrib asking-questions}@anchor{5f}
 @subsection Asking questions
 
 
 Start a new discussion@footnote{https://github.com/szermatt/mistty/discussions} with your question in the General category.
 
 @node Code contributions,Documentation contributions,Asking questions,Contributing
-@anchor{contrib code-contributions}@anchor{5f}
+@anchor{contrib code-contributions}@anchor{60}
 @subsection Code contributions
 
 
@@ -2557,7 +2605,7 @@ fixes with “fix: “, refactorings with “refactor: ” and tests with
 “test: “.
 
 @node Documentation contributions,,Code contributions,Contributing
-@anchor{contrib documentation-contributions}@anchor{60}@anchor{contrib eldev}@anchor{61}
+@anchor{contrib documentation-contributions}@anchor{61}@anchor{contrib eldev}@anchor{62}
 @subsection Documentation contributions
 
 
