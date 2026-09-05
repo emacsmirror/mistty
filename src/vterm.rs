@@ -5,7 +5,7 @@ use alacritty_terminal::{
     grid::{Dimensions, Row},
     index::{Column, Line, Point},
     term::{
-        Config,
+        ClipboardType, Config, Osc52,
         cell::{Cell, Flags},
     },
     vte::ansi::{self, Attr, Color, Handler, Processor},
@@ -15,6 +15,8 @@ use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 
 emacs::use_functions! {
     nreverse_func => "nreverse"
+    current_kill
+    kill_new
 }
 emacs::use_symbols! {
     pty_write_sym => "pty-write"
@@ -36,13 +38,15 @@ pub struct VTerm {
 
 impl VTerm {
     /// Create a new terminal with the given dimensions
-    pub fn new(width: usize, height: usize) -> Self {
+    pub fn new(width: usize, height: usize, osc52: Osc52) -> Self {
         let events = Rc::new(RefCell::new(VecDeque::new()));
         let acc = EventAccumulator {
             events: Rc::clone(&events),
         };
         let mut config = Config::default();
         config.scrolling_history = 0; // call enable_scrollback to re-enable
+        config.osc52 = osc52;
+
         let mut inner = Term::new(config, &VTermDimensions::new(width, height, 0), acc);
         let processor = Processor::new();
 
@@ -215,6 +219,25 @@ impl VTerm {
                 Event::Title(title) => {
                     result = env.cons(env.list((title_sym, title))?, result)?;
                 }
+                Event::ClipboardStore(clipboard, data) => match clipboard {
+                    ClipboardType::Clipboard => {
+                        env.call(kill_new, (data,))?;
+                    }
+                    ClipboardType::Selection => {}
+                },
+                Event::ClipboardLoad(clipboard, formatter) => match clipboard {
+                    ClipboardType::Clipboard => {
+                        let data: Option<String> = env
+                            .call(current_kill, (0,))
+                            .and_then(|v| v.into_rust())
+                            .unwrap_or(None);
+                        if let Some(data) = data {
+                            result = pty_write(env, result, formatter(&data))?;
+                        }
+                    }
+                    ClipboardType::Selection => {}
+                },
+
                 _ => {}
             };
         }

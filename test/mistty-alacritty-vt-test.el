@@ -1298,3 +1298,104 @@
     (ert-with-test-buffer ()
        (mistty-alacritty-vt-render term cursor)
        (should (equal "foobar" (mistty-test-content))))))
+
+(ert-deftest mistty-alacritty-vt-osc52-update-kill-ring ()
+  (let* ((mistty-alacritty-osc52 'only-copy)
+         (term (mistty-alacritty-vt-make-vterm 80 10))
+         (cursor (make-marker)))
+    (kill-new "initial")
+    (mistty-alacritty-vt-process-bytes
+     term (vconcat (format "\e]52;c;%s\a" (base64-encode-string "baa1"))))
+    (mistty-alacritty-vt-process-bytes
+     term (vconcat (format "\e]52;c;%s\a" (base64-encode-string "baa2"))))
+
+    (should (equal "baa2" (nth 0 kill-ring)))
+    (should (equal "baa1" (nth 1 kill-ring)))
+    (should (equal "initial" (nth 2 kill-ring)))))
+
+(ert-deftest mistty-alacritty-vt-osc52-clear ()
+  (let* ((mistty-alacritty-osc52 'only-copy)
+         (term (mistty-alacritty-vt-make-vterm 80 10))
+         (cursor (make-marker)))
+    (kill-new "initial")
+    (mistty-alacritty-vt-process-bytes
+     term (vconcat (format "\e]52;c;%s\a" (base64-encode-string "baa1"))))
+    (should (equal "baa1" (nth 0 kill-ring)))
+
+    ;; TODO: This is a "clear" operation. It doesn't fit well into
+    ;; Emacs kill-ring concept. Should clear actually remove the
+    ;; value? should it be ignored?
+    (mistty-alacritty-vt-process-bytes term (vconcat "\e]52;c;\a"))
+    (should (equal "" (nth 0 kill-ring)))
+    (should (equal "baa1" (nth 1 kill-ring)))))
+
+(ert-deftest mistty-alacritty-vt-osc52-disabled ()
+  (let* ((mistty-alacritty-osc52 nil)
+         (term (mistty-alacritty-vt-make-vterm 80 10)))
+    (kill-new "initial")
+    (should
+     (equal nil
+            (mistty-alacritty-vt-process-bytes
+             term
+             (vconcat (format "\e]52;c;%s\a"
+                              (base64-encode-string "foo, bar"))))))
+
+    ;; copy did not work
+    (should (equal "initial" (current-kill 0)))
+
+    ;; paste did not work
+    (should (equal nil (mistty-alacritty-vt-process-bytes
+                        term (vconcat "\e]52;c;?\a"))))))
+
+(ert-deftest mistty-alacritty-vt-osc52-only-copy ()
+  (let* ((mistty-alacritty-osc52 'only-copy)
+         (term (mistty-alacritty-vt-make-vterm 80 10)))
+    (kill-new "initial")
+    (should
+     (equal nil
+            (mistty-alacritty-vt-process-bytes
+             term
+             (vconcat (format "\e]52;c;%s\a"
+                              (base64-encode-string "foo, bar"))))))
+
+    (should (equal "foo, bar" (current-kill 0)))
+
+    ;; paste did not work
+    (should (equal nil (mistty-alacritty-vt-process-bytes
+                        term (vconcat "\e]52;c;?\a"))))))
+
+(ert-deftest mistty-alacritty-vt-osc52-only-paste ()
+  (let* ((mistty-alacritty-osc52 'only-paste)
+         (term (mistty-alacritty-vt-make-vterm 80 10)))
+    (kill-new "initial")
+    (should
+     (equal nil
+            (mistty-alacritty-vt-process-bytes
+             term (vconcat (format "value\e]52;c;%s\a : "
+                                   (base64-encode-string "foo, bar"))))))
+    ;; copying didn't work
+    (should (equal "initial" (current-kill 0)))
+
+    (should (equal `((pty-write
+                     ,(format "\e]52;c;%s\a"
+                              (base64-encode-string "initial"))))
+                   (mistty-alacritty-vt-process-bytes
+                    term (vconcat "\e]52;c;?\a."))))))
+
+(ert-deftest mistty-alacritty-vt-osc52-copy-paste ()
+  (let* ((mistty-alacritty-osc52 'copy-paste)
+         (term (mistty-alacritty-vt-make-vterm 80 10)))
+    (kill-new "initial")
+    (should
+     (equal nil
+            (mistty-alacritty-vt-process-bytes
+             term (vconcat (format "value\e]52;c;%s\a : "
+                                   (base64-encode-string "foo, bar"))))))
+    (should (equal "foo, bar" (current-kill 0)))
+
+    (kill-new "new value")
+    (should (equal `((pty-write
+                     ,(format "\e]52;c;%s\a"
+                              (base64-encode-string "new value"))))
+                   (mistty-alacritty-vt-process-bytes
+                    term (vconcat "\e]52;c;?\a."))))))

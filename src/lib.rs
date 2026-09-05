@@ -7,7 +7,7 @@ use alacritty_terminal::{
     grid::{Dimensions, Row},
     index::{Column, Line, Point},
     term::{
-        TermMode,
+        Osc52, TermMode,
         cell::{Cell, Flags},
     },
 };
@@ -16,7 +16,17 @@ use std::{fmt::Debug, ops::RangeBounds};
 
 emacs::plugin_is_GPL_compatible!();
 
-emacs::use_symbols! {args_out_of_range}
+emacs::use_functions! {
+    symbol_value
+}
+emacs::use_symbols! {
+    args_out_of_range
+    nil
+    only_copy
+    only_paste
+    copy_paste
+    mistty_alacritty_osc52
+}
 
 #[emacs::module(
     name = "mistty-alacritty-vt",
@@ -33,8 +43,25 @@ fn init(env: &Env) -> Result<Value<'_>> {
 /// If scrollback is enabled (not nil), the terminal will move when
 /// scrolling down, leaving scrollback lines behind it.
 #[defun(user_ptr)]
-fn make_vterm(_env: &Env, width: usize, height: usize) -> Result<VTerm> {
-    Ok(VTerm::new(width, height))
+fn make_vterm(env: &Env, width: usize, height: usize) -> Result<VTerm> {
+    let osc52_symbol = env.call(symbol_value, (mistty_alacritty_osc52,))?;
+    let osc52 = if osc52_symbol == *only_copy {
+        Osc52::OnlyCopy
+    } else if osc52_symbol == *only_paste {
+        Osc52::OnlyPaste
+    } else if osc52_symbol == *copy_paste {
+        Osc52::CopyPaste
+    } else if osc52_symbol == *nil {
+        Osc52::Disabled
+    } else {
+        env.call(
+            "mistty-log",
+            ("OSC52 disabled; unknown value: '%s'", osc52_symbol),
+        )?;
+
+        Osc52::Disabled
+    };
+    Ok(VTerm::new(width, height, osc52))
 }
 
 /// Tell the virtual terminal to track scrollback.

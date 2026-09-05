@@ -59,6 +59,41 @@
   (declare-function mistty-alacritty-vt-resize nil (term w h))
   (declare-function mistty-alacritty-vt-write-scrollback nil (term)))
 
+(defcustom mistty-alacritty-osc52 'only-copy
+  "Allow sharing data through clipboard.
+
+This option controls the ability of applications running on the terminal
+to clipboard to share text (copy) or to request text (paste).
+
+This is mapped to the kill ring. Text sent by terminals using
+OSC52 (copy) is added to the kill ring and made available to `yank' and
+`yank-pop'. Text requested by terminal using OSC52 (paste) is the same
+as what a `yank' operation would return, that is, usually, text form
+either the Emacs kill ring or the system clipboard.
+
+By default the terminal can share text (copy) to be added to the Emacs
+kill ring, but requesting text (paste) is disabled.
+
+Valid values for this option are:
+- \\='only-copy only allows copying text (the default)
+- \\='only-paste allows pasting text, but not copying
+- \\='copy-paste allows both copying and pasting text
+- nil or anything else turns off osc52 support entirely
+
+Note that only OSC 52 clipboard (c) sharing is supported; requests for
+the any other target (p, q, s, 0-7) are ignored.
+
+Setting this option doesn't affect running terminals. It only changes
+terminals created after the option was changed.
+
+This option only works on alacritty terminals. It has no effect on eterm
+terminals."
+  :group 'mistty
+  :type '(choice (const :tag "Only Copy" only-copy)
+                 (const :tag "Only Paste" only-paste)
+                 (const :tag "Copy and Paste" copy-paste)
+                 (const :tag "Disabled" nil)))
+
 (defcustom mistty-alacritty-term-name nil
   "Value for the TERM env variable for alacritty virtual terminals.
 
@@ -72,7 +107,13 @@ don't have alacritty installed, you may want set it to xterm-256color or
 even xterm.
 
 If this is nil, MisTTY checks whether the alacritty terminfo is present
-on the system and automatically falls back to xterm-256color."
+on the system and automatically falls back to xterm-256color.
+
+Setting this option doesn't affect running terminals. It only changes
+terminals created after the option was changed.
+
+This option only works on alacritty terminals. It has no effect on eterm
+terminals."
   :group 'mistty
   :type 'string)
 

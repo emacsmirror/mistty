@@ -32,9 +32,8 @@
 (require 'mistty-queue)
 
 (mistty-deftest mistty-test-simple-command (:shell (bash zsh fish) :type all)
-  (mistty-with-test-buffer ()
-    (mistty-send-text "echo hello")
-    (should (equal "hello" (mistty-send-and-capture-command-output)))))
+  (mistty-send-text "echo hello")
+  (should (equal "hello" (mistty-send-and-capture-command-output))))
 
 (mistty-deftest mistty-test-keystrokes (:selected t :type all)
   (execute-kbd-macro (kbd "e c h o SPC o k"))
@@ -7035,4 +7034,17 @@ precmd_functions+=(prompt_header)
      mistty-proc "printf \"\\e]0;new window title\\afoob\141r\\n\"\n")
     (mistty-wait-for-output :start (point-min) :str "foobar")
     (should (equal "new window title" ansi-osc-window-title))))
+
+(ert-deftest mistty-test-osc-52 ()
+  (let ((mistty-alacritty-osc52 'copy-paste))
+    (mistty-with-test-buffer (:type alacritty)
+      (mistty-send-text "printf '\\e]52;c;Zm9vYmFy\\a\\157k\\n'")
+      (mistty-send-command)
+      (mistty-wait-for-output :str "ok")
+      (should (equal "foobar" (current-kill 0)))
+
+      (kill-new "barfoo")
+      (mistty-send-text "printf '\\e]52;c;?\\a'; echo")
+      (mistty-send-command)
+      (mistty-wait-for-output :str "YmFyZm9v"))))
 
