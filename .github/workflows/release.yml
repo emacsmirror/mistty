@@ -1,6 +1,9 @@
 name: Release
 
-on: push # TODO: restrict tag once out of testing phase
+on:
+  push:
+    tags:
+      - '*' # TODO: restrict tag once out of testing phase
 
 jobs:
   release:
@@ -8,7 +11,7 @@ jobs:
     strategy:
       matrix:
         rust: [stable]
-        os: [ubuntu-latest, macOS-latest, windows-latest, macos-26-intel]
+        os: [ubuntu-latest, macOS-latest, windows-latest, macos-15-intel]
         include:
           - os: macOS-latest
             rust: stable
@@ -40,7 +43,7 @@ jobs:
       - name: Build module for release
         run: cargo build --release --target ${{ matrix.target }} 
       - name: Rename library
-        run: cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} ${{ matrix.release_name }}
+        run: cp target/release/${{ matrix.artifact_name }} ${{ matrix.release_name }} || ls -R target
       - name: Upload to GitHub release
         uses: softprops/action-gh-release@v3
         if: github.ref_type == 'tag'
