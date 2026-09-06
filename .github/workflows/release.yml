@@ -20,7 +20,7 @@ jobs:
             target: "aarch64-apple-darwin"
           - os: windows-latest
             rust: stable
-            artifact_name: libmistty_alacritty_vt.dll
+            artifact_name: mistty_alacritty_vt.dll
             release_name: mistty-alacritty-vt-${{ github.ref_name }}-x86_64.dll
             target: "x86_64-pc-windows-msvc"
           - os: ubuntu-latest
@@ -42,9 +42,7 @@ jobs:
           target: ${{ matrix.target  }}
       - name: Build module for release
         run: cargo build --verbose --release --target ${{ matrix.target }}
-      - name: find module
-        run: ls -R target 
-      - name: Rename library
+      - name: Rename module
         run: cp target/${{ matrix.target}}/release/${{ matrix.artifact_name }} ${{ matrix.release_name }}
       - name: Upload to GitHub release
         uses: softprops/action-gh-release@v3
