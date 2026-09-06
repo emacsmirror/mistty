@@ -227,8 +227,9 @@ short backtrace."
       `(with-demoted-errors ,msg
          (handler-bind
              ((error (lambda (err)
-                       (let ((context ,context))
-                         (mistty-log-error context err)))))
+                       (ignore-error error
+                           (let ((context ,context))
+                             (mistty-log-error context err))))))
            ,@body)))))
 
 (defun mistty-log-error (context err)
