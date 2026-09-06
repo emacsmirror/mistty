@@ -2259,11 +2259,12 @@ SCROLLINE is the scrolline at BEG.
 
 It removes the fake newlines which are not useful anymore and
 just tend to cause issues."
-  (let ((inhibit-modification-hooks t)
-        (inhibit-read-only t))
-    (mistty--mark-scrollines beg scrolline end)
-    (when (not mistty--inhibit-fake-nl-cleanup)
-      (mistty--cleanup-scrollback beg end))))
+  (when (> end beg)
+    (let ((inhibit-modification-hooks t)
+          (inhibit-read-only t))
+      (mistty--mark-scrollines beg scrolline end)
+      (when (not mistty--inhibit-fake-nl-cleanup)
+        (mistty--cleanup-scrollback beg end)))))
 
 (defun mistty--mark-scrollines (beg scrolline end)
   "Add text property \\='mistty-scrolline to scrollines from BEG to END.
