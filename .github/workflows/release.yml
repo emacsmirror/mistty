@@ -1,0 +1,49 @@
+name: Release
+
+on: push # TODO: restrict tag once out of testing phase
+
+jobs:
+  release:
+    runs-on: ${{matrix.os}}
+    strategy:
+      matrix:
+        rust: [stable]
+        os: [ubuntu-latest, macOS-latest, windows-latest, macos-26-intel]
+        include:
+          - os: macOS-latest
+            rust: stable
+            artifact_name: libmistty_alacritty_vt.dylib
+            release_name: mistty-alacritty-vt-${{ github.ref_name }}-aarch64.dylib
+            target: "aarch64-apple-darwin"
+          - os: windows-latest
+            rust: stable
+            artifact_name: libmistty_alacritty_vt.dll
+            release_name: mistty-alacritty-vt-${{ github.ref_name }}-x86_64.dll
+            target: "x86_64-pc-windows-msvc"
+          - os: ubuntu-latest
+            rust: stable
+            artifact_name: libmistty_alacritty_vt.so
+            release_name: mistty-alacritty-vt-${{ github.ref_name }}-x86_64.so
+            target: "x86_64-unknown-linux-gnu"
+          - os: macos-26-intel
+            rust: stable
+            artifact_name: libmistty_alacritty_vt.dylib
+            release_name: mistty-alacritty-vt-${{ github.ref_name }}-x86_64.dylib
+            target: "x86_64-apple-darwin"
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v6
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: ${{ matrix.target  }}
+      - name: Build module for release
+        run: cargo build --release --target ${{ matrix.target }} 
+      - name: Rename library
+        run: cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} ${{ matrix.release_name }}
+      - name: Upload to GitHub release
+        uses: softprops/action-gh-release@v3
+        if: github.ref_type == 'tag'
+        with:
+          draft: true
+          files: ${{ matrix.release_name }}
