@@ -41,9 +41,11 @@ jobs:
         with:
           target: ${{ matrix.target  }}
       - name: Build module for release
-        run: cargo build --release --target ${{ matrix.target }} 
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: List targets
+        run: ls target/release/
       - name: Rename library
-        run: cp target/release/${{ matrix.artifact_name }} ${{ matrix.release_name }} || ls -R target
+        run: cp target/release/${{ matrix.target}}/${{ matrix.artifact_name }} ${{ matrix.release_name }}
       - name: Upload to GitHub release
         uses: softprops/action-gh-release@v3
         if: github.ref_type == 'tag'
