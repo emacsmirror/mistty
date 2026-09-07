@@ -3465,6 +3465,10 @@ post-command hook."
            (let ((cs (mistty--active-changeset))
                  (replay nil))
              (when cs
+               (mistty-log "PICK UP CHANGESET #%s [%s,%s)"
+                           (mistty--changeset-id cs)
+                           (mistty--changeset-beg cs)
+                           (mistty--changeset-end cs))
                (if (setq replay (mistty--should-replay cs))
                    ;; Give changeset over to the interaction to replay.
                    (let ((last-interaction (mistty--queue-last-interact mistty--queue)))

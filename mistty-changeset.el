@@ -49,10 +49,15 @@
 The first change is the most recent one, which might be active.
 Use `mistty--active-changeset' to access it.")
 
+(defvar-local mistty--last-changeset-id 0)
+
 (cl-defstruct (mistty--changeset
-               (:constructor mistty--make-changeset)
+               (:constructor mistty--make-changeset
+                             (&aux (id (cl-incf mistty--last-changeset-id))))
                (:conc-name mistty--changeset-)
                (:copier nil))
+  ;; changeset identifier, for debugging
+  id
   ;; beginning of the changed region in the work buffer.
   beg
   ;; end of the changed region in the work buffer.
@@ -78,6 +83,7 @@ Returns the changeset."
   (let ((changeset (mistty--active-changeset)))
     (unless changeset
       (setq changeset (mistty--make-changeset))
+      (mistty-log "NEW CHANGESET #%s" (mistty--changeset-id changeset))
       (push changeset mistty--changesets))
     changeset))
 
@@ -86,6 +92,7 @@ Returns the changeset."
 
 This function also cleans up any change information left in the
  work buffer."
+  (mistty-log "RELEASE CHANGESET #%s" (mistty--changeset-id changeset))
   (when (and (mistty--changeset-beg changeset)
              (not (mistty--changeset-collected changeset))
              (< (mistty--changeset-beg changeset) (point-max)))
