@@ -5669,32 +5669,40 @@ function prompt {
 (ert-deftest mistty-command-create-then-cycle/eterm ()
   (let ((mistty-terminal-type 'eterm))
     (mistty-command-create-then-cycle)))
-  
+
 (defun mistty-command-create-then-cycle ()
   (mistty-test-with-isolated-buffers
-   (let ((mistty-buffer-name '("mistty")))
+   (let ((mistty-buffer-name '("mistty"))
+         (buflist (lambda ()
+                    (seq-filter
+                     (lambda (name)
+                       ;; ignore the likes of *Async-native-log*
+                       ;; *Native-compile-log*
+                       (not (string-suffix-p "-log*" name 'ignore-case)))
+                     (mapcar #'buffer-name (buffer-list))))))
+
      (should (equal nil (mistty-list-live-buffers)))
 
      ;; First call create a new buffer.
      (mistty-test-run-in-selected-window #'mistty)
      (should (equal "*mistty*" (buffer-name (window-buffer (selected-window)))))
      (should (mistty-live-buffer-p (window-buffer (selected-window))))
-     (should (equal '("*mistty*") (mapcar #'buffer-name (buffer-list))))
+     (should (equal '("*mistty*") (funcall buflist)))
 
      ;; Second call create another buffer.
      (mistty-test-run-in-selected-window #'mistty)
      (should (equal "*mistty*<2>" (buffer-name (window-buffer (selected-window)))))
      (should (mistty-live-buffer-p (window-buffer (selected-window))))
-     (should (equal '("*mistty*<2>" "*mistty*") (mapcar #'buffer-name (buffer-list))))
+     (should (equal '("*mistty*<2>" "*mistty*") (funcall buflist)))
 
      ;; Third and 4th call cycle through the two buffers.
      (mistty-test-run-in-selected-window #'mistty)
      (should (equal "*mistty*" (buffer-name (window-buffer (selected-window)))))
-     (should (equal '("*mistty*" "*mistty*<2>") (mapcar #'buffer-name (buffer-list))))
+     (should (equal '("*mistty*" "*mistty*<2>") (funcall buflist)))
 
      (mistty-test-run-in-selected-window #'mistty)
      (should (equal "*mistty*<2>" (buffer-name (window-buffer (selected-window)))))
-     (should (equal '("*mistty*<2>" "*mistty*") (mapcar #'buffer-name (buffer-list)))))))
+     (should (equal '("*mistty*<2>" "*mistty*") (funcall buflist))))))
 
 (ert-deftest mistty-test-mistty-command-reuse-buffer-names/alacritty ()
   (let ((mistty-terminal-type 'alacritty))
