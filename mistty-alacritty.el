@@ -266,7 +266,7 @@ Set ENABLED to non-nil to enable automatic resize to nil to disable it."
     (if enabled
         (progn
           (process-put proc 'adjust-window-size-function #'mistty-alacritty--resize-from-window)
-          (when-let ((wins (get-buffer-window-list)))
+          (when-let* ((wins (get-buffer-window-list)))
             (mistty-alacritty--resize-from-window proc wins)))
       (process-put proc 'adjust-window-size-function #'ignore))))
 
@@ -349,7 +349,7 @@ The current buffer must have a virtual terminal associated."
       (set-marker mistty-alacritty--home (point))
       (mistty-alacritty-vt-render-damaged vterm mistty-alacritty--cursor)
       (mistty-log "RENDER @%s" mistty--scrolline-home-num)
-      (when-let ((proc (get-buffer-process (current-buffer))))
+      (when-let* ((proc (get-buffer-process (current-buffer))))
         (when (process-live-p proc)
           (set-marker (process-mark proc) mistty-alacritty--cursor))))
     (goto-char mistty-alacritty--cursor)))

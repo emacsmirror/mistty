@@ -1035,7 +1035,7 @@ window."
 
       ;; attempt to recover the previous sync position, if that fails,
       ;; continue from screen top.
-      (if-let ((sync-pos (mistty--find-scrolline sync-scrolline)))
+      (if-let* ((sync-pos (mistty--find-scrolline sync-scrolline)))
           (move-marker mistty-sync-marker sync-pos)
         (move-marker mistty-sync-marker (mistty--term-screen-top-pos term))
         (setq mistty--scrolline-home-num sync-scrolline))
